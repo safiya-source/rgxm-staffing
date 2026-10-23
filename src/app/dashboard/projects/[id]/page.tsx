@@ -45,7 +45,7 @@ export default async function ProjectOverviewPage({ params }: PageProps<"/dashbo
     { done: setup.locations.length > 0, label: "Add activation locations", href: "setup" },
     { done: setup.requirements.length > 0, label: "Define staffing requirements", href: "setup" },
     { done: positions > 0, label: "Create shifts", href: "shifts" },
-    { done: confirmed > 0, label: "Send offers and confirm staff (coming in M3)", href: null },
+    { done: confirmed > 0, label: "Send offers and confirm staff", href: "staffing" },
   ];
 
   return (
@@ -60,7 +60,7 @@ export default async function ProjectOverviewPage({ params }: PageProps<"/dashbo
               <div key={s.label} className="flex items-center gap-2 text-sm">
                 {s.done ? <CheckCircle2Icon className="size-4 text-success" /> : <CircleIcon className="size-4 text-muted-foreground" />}
                 {s.href && !s.done ? (
-                  <Link href={`/dashboard/projects/${id}/${s.href}`} className="font-medium hover:underline">
+                  <Link href={s.href === "staffing" ? `/dashboard/staffing/${id}` : `/dashboard/projects/${id}/${s.href}`} className="font-medium hover:underline">
                     {s.label}
                   </Link>
                 ) : (

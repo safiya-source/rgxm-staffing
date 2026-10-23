@@ -13,6 +13,9 @@ const schema = z.object({
   STORAGE_LOCAL_DIR: z.string().default("./storage"),
   SUPABASE_URL: z.string().url().optional(),
   SUPABASE_SERVICE_ROLE_KEY: z.string().optional(),
+  SUPABASE_STORAGE_BUCKET: z.string().default("rgxm-private"),
+  // Shared secret for the scheduled outbox runner (/api/cron/outbox).
+  CRON_SECRET: z.string().min(24).optional(),
   SENTRY_DSN: z.string().optional(),
   // Auth endpoint rate limiting. May only be turned off outside production (e.g. for E2E runs).
   AUTH_RATE_LIMIT: z.enum(["on", "off"]).default("on"),

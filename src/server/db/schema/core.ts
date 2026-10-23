@@ -678,16 +678,26 @@ export const announcements = pgTable(
   (t) => [index("announcements_project_idx").on(t.projectId, t.createdAt)],
 );
 
-export const messageThreads = pgTable("message_threads", {
-  id: id(),
-  projectId: uuid().references(() => projects.id),
-  staffId: uuid()
-    .notNull()
-    .references(() => staffProfiles.id),
-  subject: text(),
-  createdAt: createdAt(),
-  lastMessageAt: tstz(),
-});
+// One conversation per staff member per project (or a general one when project is null).
+export const messageThreads = pgTable(
+  "message_threads",
+  {
+    id: id(),
+    projectId: uuid().references(() => projects.id),
+    staffId: uuid()
+      .notNull()
+      .references(() => staffProfiles.id),
+    subject: text(),
+    createdAt: createdAt(),
+    lastMessageAt: tstz(),
+    staffLastReadAt: tstz(),
+    rgxmLastReadAt: tstz(),
+  },
+  (t) => [
+    uniqueIndex("message_threads_staff_project_uq").on(t.staffId, sql`coalesce(${t.projectId}, '00000000-0000-0000-0000-000000000000'::uuid)`),
+    index("message_threads_last_idx").on(t.lastMessageAt),
+  ],
+);
 
 export const messages = pgTable(
   "messages",
@@ -757,6 +767,7 @@ export const outboxEvents = pgTable(
     availableAt: tstz().notNull().defaultNow(),
     lastError: text(),
     createdAt: createdAt(),
+    claimedAt: tstz(),
     processedAt: tstz(),
   },
   (t) => [index("outbox_pending_idx").on(t.status, t.availableAt)],

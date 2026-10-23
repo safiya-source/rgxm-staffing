@@ -1,5 +1,5 @@
 "use server";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
@@ -9,8 +9,11 @@ import { FIELD_ROLES } from "@/lib/roles";
 import { recordAudit } from "@/server/audit";
 import { runAction } from "@/server/actions";
 import { db } from "@/server/db";
+import { messageThreads, notifications, staffProfiles, staffRoles, users } from "@/server/db/schema";
 import * as availability from "@/server/domain/availability";
-import { staffProfiles, staffRoles, users } from "@/server/db/schema";
+import * as bookingsDomain from "@/server/domain/bookings";
+import * as comms from "@/server/domain/comms";
+import { kickOutbox } from "@/server/notify/run";
 import { ForbiddenError, getViewer } from "@/server/session";
 
 const optional = (max: number) =>
@@ -138,4 +141,124 @@ export async function removeAvailabilityExceptionAction(id: string): Promise<Act
     revalidatePath("/portal/availability");
     return { ok: true, message: "Removed." };
   });
+}
+
+// ─── Offers, bookings, briefs, messages ─────────────────────────────────────
+
+
+function friendly<T = unknown>(err: unknown): ActionResult<T> | null {
+  if (err instanceof bookingsDomain.BookingError || err instanceof comms.CommsError) return { ok: false, error: err.message };
+  return null;
+}
+
+export async function respondToOfferAction(bookingId: string, response: "interested" | "unavailable" | "more_info", message?: string): Promise<ActionResult> {
+  return runAction(async () => {
+    const me = await requireStaffViewer();
+    const r = z.enum(["interested", "unavailable", "more_info"]).parse(response);
+    try {
+      await bookingsDomain.respondToOffer(me, z.string().uuid().parse(bookingId), r, message?.trim() || null);
+    } catch (err) {
+      const f = friendly(err);
+      if (f) return f;
+      throw err;
+    }
+    kickOutbox();
+    revalidatePath("/portal", "layout");
+    const done = {
+      interested: "Thanks! RGXM will confirm with you. You're not booked yet.",
+      unavailable: "Got it. Thanks for letting us know.",
+      more_info: "Your question was sent to the RGXM team.",
+    };
+    return { ok: true, message: done[r] };
+  });
+}
+
+export async function respondToAllAction(bookingIds: string[], response: "interested" | "unavailable"): Promise<ActionResult> {
+  return runAction(async () => {
+    const me = await requireStaffViewer();
+    const ids = z.array(z.string().uuid()).min(1).max(60).parse(bookingIds);
+    const r = z.enum(["interested", "unavailable"]).parse(response);
+    let failed = 0;
+    for (const id of ids) {
+      try {
+        await bookingsDomain.respondToOffer(me, id, r, null);
+      } catch (err) {
+        if (friendly(err)) failed++;
+        else throw err;
+      }
+    }
+    kickOutbox();
+    revalidatePath("/portal", "layout");
+    const ok = ids.length - failed;
+    return { ok: true, message: `${r === "interested" ? "Interested in" : "Declined"} ${ok} shift${ok === 1 ? "" : "s"}.${failed ? ` ${failed} had already closed.` : ""}` };
+  });
+}
+
+export async function withdrawFromBookingAction(bookingId: string, reason: string): Promise<ActionResult> {
+  return runAction(async () => {
+    const me = await requireStaffViewer();
+    try {
+      await bookingsDomain.staffWithdraw(me, z.string().uuid().parse(bookingId), reason);
+    } catch (err) {
+      const f = friendly(err);
+      if (f) return f;
+      throw err;
+    }
+    kickOutbox();
+    revalidatePath("/portal", "layout");
+    return { ok: true, message: "RGXM has been told you can't make it." };
+  });
+}
+
+export async function acknowledgeDocumentAction(documentId: string): Promise<ActionResult> {
+  return runAction(async () => {
+    const me = await requireStaffViewer();
+    try {
+      await comms.acknowledgeDocument(me, z.string().uuid().parse(documentId));
+    } catch (err) {
+      const f = friendly(err);
+      if (f) return f;
+      throw err;
+    }
+    revalidatePath("/portal", "layout");
+    return { ok: true, message: "Thanks for confirming you've reviewed it." };
+  });
+}
+
+/** Sends a message to RGXM, about a project the person has work on, or in general. */
+export async function sendMessageToRgxmAction(input: { threadId?: string; projectId?: string | null; body: string }): Promise<ActionResult<{ threadId: string }>> {
+  return runAction(async () => {
+    const me = await requireStaffViewer();
+    let threadId = input.threadId;
+    if (threadId) {
+      const [t] = await db
+        .select({ id: messageThreads.id })
+        .from(messageThreads)
+        .where(and(eq(messageThreads.id, z.string().uuid().parse(threadId)), eq(messageThreads.staffId, me.staffId)));
+      if (!t) throw new ForbiddenError("Conversation not found.");
+    } else {
+      const projectId = input.projectId ? z.string().uuid().parse(input.projectId) : null;
+      threadId = (await comms.getOrCreateThread(db, me.staffId, projectId)).id;
+    }
+    try {
+      await comms.postMessage(db, { threadId, authorUserId: me.userId, body: input.body, side: "staff" });
+    } catch (err) {
+      const f = friendly<{ threadId: string }>(err);
+      if (f) return f;
+      throw err;
+    }
+    kickOutbox();
+    revalidatePath("/portal/messages", "layout");
+    return { ok: true, message: "Message sent.", data: { threadId } };
+  });
+}
+
+export async function markStaffNotificationsReadAction(): Promise<void> {
+  const viewer = await getViewer();
+  if (!viewer || viewer.kind !== "staff") return;
+  await db
+    .update(notifications)
+    .set({ readAt: new Date() })
+    .where(and(eq(notifications.userId, viewer.userId), isNull(notifications.readAt)));
+  revalidatePath("/portal", "layout");
 }

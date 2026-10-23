@@ -7,10 +7,12 @@ Staffing, scheduling, attendance and payments for RGXM's experiential activation
 
 See [`docs/PLAN.md`](docs/PLAN.md) for the product plan, architecture, data model and milestones.
 
-> **Status: Milestones 1–2.** Authentication, roles and permissions, the database with integrity rules,
+> **Status: Milestones 1–3.** Authentication, roles and permissions, the database with integrity rules,
 > staff registration and availability, the talent database (search, profiles, rates history, lists,
 > CSV import/export), projects (locations, requirements, team) and scheduling (bulk shifts, calendar,
-> drag-and-drop) all work. Offers/booking (M3) onward are labelled as planned in the UI. **Not production-ready.**
+> drag-and-drop), offers and booking (eligibility, responses, confirmation with conflict checks, waitlist),
+> briefs with acknowledgement tracking, announcements, messaging and email/in-app notifications all work.
+> Attendance (M4) onward is labelled as planned in the UI. **Not production-ready.**
 > See "Before production" below.
 
 ## Stack
@@ -73,6 +75,12 @@ scripts/                 migrate, seed, reset, icon generation
 tests/                   Vitest: unit + database integrity
 e2e/                     Playwright
 ```
+
+## Notifications
+
+Domain changes queue events in `outbox_events` in the same transaction. They're processed right after
+each request and by `GET /api/cron/outbox` (send `Authorization: Bearer $CRON_SECRET`; schedule it every
+minute in production, e.g. Vercel Cron). Failed deliveries retry with backoff and show in the Mail log.
 
 ## Security model (summary)
 

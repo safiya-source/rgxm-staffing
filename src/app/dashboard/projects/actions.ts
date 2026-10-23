@@ -6,7 +6,9 @@ import { z } from "zod";
 import type { ActionResult } from "@/lib/action-result";
 import { runAction, UserFacingError } from "@/server/actions";
 import { db } from "@/server/db";
-import { shifts } from "@/server/db/schema";
+import { documents, shifts } from "@/server/db/schema";
+import * as comms from "@/server/domain/comms";
+import { kickOutbox } from "@/server/notify/run";
 import * as projects from "@/server/domain/projects";
 import * as shiftsDomain from "@/server/domain/shifts";
 import { authorizeInternal, authorizeProject, ForbiddenError } from "@/server/session";
@@ -17,7 +19,7 @@ async function guard<T>(fn: () => Promise<T>): Promise<T> {
   try {
     return await fn();
   } catch (err) {
-    if (err instanceof projects.ProjectError || err instanceof shiftsDomain.ShiftError) throw new UserFacingError(err.message);
+    if (err instanceof projects.ProjectError || err instanceof shiftsDomain.ShiftError || err instanceof comms.CommsError) throw new UserFacingError(err.message);
     throw err;
   }
 }
@@ -158,6 +160,7 @@ async function authorizeShift(shiftId: string) {
 }
 
 function revalidateSchedules(projectId: string) {
+  kickOutbox();
   revalidatePath(`/dashboard/projects/${projectId}`, "layout");
   revalidatePath("/dashboard/schedule");
 }
@@ -233,5 +236,29 @@ export async function deleteTemplateAction(templateId: string): Promise<ActionRe
     await guard(() => shiftsDomain.deleteTemplate(viewer.userId, uuid.parse(templateId)));
     revalidatePath("/dashboard/projects", "layout");
     return { ok: true, message: "Template deleted." };
+  });
+}
+
+// ─── Communications ─────────────────────────────────────────────────────────
+
+export async function postAnnouncementAction(projectId: string, _prev: ActionResult, fd: FormData): Promise<ActionResult> {
+  return runAction(async () => {
+    const viewer = await authorizeProject("comms.manage", uuid.parse(projectId));
+    const input = comms.announcementSchema.parse({ title: fd.get("title"), body: fd.get("body"), important: fd.get("important") === "on" });
+    await guard(() => comms.postAnnouncement(viewer.userId, projectId, input));
+    kickOutbox();
+    revalidatePath(`/dashboard/projects/${projectId}/comms`);
+    return { ok: true, message: "Announcement posted to confirmed staff." };
+  });
+}
+
+export async function archiveDocumentAction(documentId: string): Promise<ActionResult> {
+  return runAction(async () => {
+    const [doc] = await db.select({ projectId: documents.projectId }).from(documents).where(eq(documents.id, uuid.parse(documentId)));
+    if (!doc) throw new ForbiddenError("Document not found.");
+    const viewer = await authorizeProject("comms.manage", doc.projectId);
+    await guard(() => comms.archiveDocument(viewer.userId, documentId));
+    revalidatePath(`/dashboard/projects/${doc.projectId}/comms`);
+    return { ok: true, message: "Document removed. Staff can no longer see it." };
   });
 }

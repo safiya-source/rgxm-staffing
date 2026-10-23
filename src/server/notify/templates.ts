@@ -15,3 +15,27 @@ export function actionEmail(opts: { heading: string; intro: string; actionLabel:
 </table></td></tr></table></body></html>`;
   return { text, html };
 }
+
+/** Email with a short list of details (shift, date, rate…) and one call to action. */
+export function detailEmail(opts: {
+  heading: string;
+  intro: string;
+  details: [string, string][];
+  actionLabel: string;
+  url: string;
+  footer?: string;
+}) {
+  const detailText = opts.details.map(([k, v]) => `${k}: ${v}`).join("\n");
+  const text = `${opts.heading}\n\n${opts.intro}\n\n${detailText}\n\n${opts.actionLabel}: ${opts.url}\n\n${opts.footer ?? ""}`.trim();
+  const rows = opts.details
+    .map(
+      ([k, v]) =>
+        `<tr><td style="padding:6px 12px 6px 0;color:#71717a;font-size:13px;vertical-align:top;white-space:nowrap">${escape(k)}</td><td style="padding:6px 0;font-size:14px;color:#18181b">${escape(v)}</td></tr>`,
+    )
+    .join("");
+  const html = actionEmail({ heading: opts.heading, intro: opts.intro, actionLabel: opts.actionLabel, url: opts.url, footer: opts.footer }).html.replace(
+    '<tr><td style="padding-top:24px"><a',
+    `<tr><td style="padding-top:16px"><table role="presentation" cellpadding="0" cellspacing="0">${rows}</table></td></tr><tr><td style="padding-top:24px"><a`,
+  );
+  return { text, html };
+}

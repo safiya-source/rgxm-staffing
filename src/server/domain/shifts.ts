@@ -1,5 +1,6 @@
 // Shift scheduling. Local wall-clock times are converted to UTC using the location's time zone.
 import { and, asc, count, eq, gte, inArray, lt, ne, sql } from "drizzle-orm";
+import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { FIELD_ROLES } from "@/lib/roles";
 import { expandShiftPattern, isIsoDate, isLocalTime, shiftInstants, utcToZoned } from "@/lib/time";
@@ -15,6 +16,7 @@ import {
   shiftTemplates,
   staffingRequirements,
 } from "@/server/db/schema";
+import { enqueue } from "@/server/notify/outbox";
 import { moneyToCents } from "./projects";
 
 export class ShiftError extends Error {}
@@ -170,6 +172,7 @@ export async function updateShift(actorId: string, shiftId: string, input: Shift
         instructions: input.instructions ?? null,
         startsAt,
         endsAt,
+        ...(before.status === "open" || before.status === "filled" ? { status: confirmed >= input.headcount ? ("filled" as const) : ("open" as const) } : {}),
       };
       if (values.role !== before.role) {
         const [active] = await tx
@@ -180,6 +183,17 @@ export async function updateShift(actorId: string, shiftId: string, input: Shift
       }
       await tx.update(shifts).set(values).where(eq(shifts.id, shiftId));
       await recordAudit({ actorId, action: "shift.update", entityType: "shift", entityId: shiftId, projectId: before.projectId, before, after: values }, tx);
+      // Tell people with a live offer or booking when what they'd see has changed.
+      const visibleChange =
+        before.startsAt.getTime() !== startsAt.getTime() ||
+        before.endsAt.getTime() !== endsAt.getTime() ||
+        before.reportingLocation !== values.reportingLocation ||
+        before.uniform !== values.uniform ||
+        before.instructions !== values.instructions ||
+        before.onsiteContact !== values.onsiteContact;
+      if (visibleChange) {
+        await enqueue(tx, { type: "shift.changed", payload: { shiftId, changeId: randomUUID() } });
+      }
     });
   } catch (err) {
     if (isExclusionViolation(err)) throw new ShiftError("That time would double-book someone already confirmed on this shift.");
@@ -292,6 +306,9 @@ export async function cancelShift(actorId: string, shiftId: string, reason: stri
       { actorId, action: "shift.cancel", entityType: "shift", entityId: shiftId, projectId: s.projectId, reason, after: { bookingsCancelled: affected.length } },
       tx,
     );
+    if (affected.length) {
+      await enqueue(tx, { type: "shift.cancelled", payload: { shiftId, bookingIds: affected.map((b) => b.id) }, dedupeKey: `shift.cancelled:${shiftId}` });
+    }
     return affected.length;
   });
 }

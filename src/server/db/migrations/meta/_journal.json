@@ -15,6 +15,13 @@
       "when": 1792791317360,
       "tag": "0001_integrity",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792796990670,
+      "tag": "0002_messaging_outbox",
+      "breakpoints": true
     }
   ]
 }

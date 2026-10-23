@@ -1,6 +1,6 @@
 # RGXM Staffing Platform — Discovery & Implementation Plan
 
-Status: **Approved 2026-10-23** · M1 and M2 delivered (see §14)
+Status: **Approved 2026-10-23** · M1–M3 delivered (see §14)
 
 ---
 
@@ -321,5 +321,20 @@ Classification defaults to *unset*; payable rounding to the minute; no automatic
 - A shift with no rate means "use each person's default rate"; M3's rate resolution must implement shift → project override → staff default, snapshotting the result at confirmation.
 - Drag-and-drop exists in week view only; day/month are read-only.
 
-### Next: M3 — Offers & Booking
-Eligibility suggestions, offers with deadlines, staff responses, live response board, confirm/override/cancel, waitlist, staff portal Opportunities and Schedule, basic briefs and acknowledgements, email notifications through the outbox.
+### M3 — Offers & Booking: delivered
+- **Booking state machine** (pure, unit-tested): only RGXM can confirm; interest ≠ booking; declined/cancelled rows are final and a re-offer creates a new row so history is kept. "Awaiting confirmation" is used as RGXM's shortlist.
+- **Rate resolution** (rule 3): person-specific project override → shift rate → project role override → staff default. The offered rate is stored on the offer and becomes the agreed-rate snapshot at confirmation. Project rate overrides are managed on the project Setup tab (`rates.project_override`).
+- **Offer builder**: qualified, active staff for a role with per-shift availability, conflicts, existing offers and resolved rate; filters; response deadline in the location's time zone; sends exactly the person × shift pairs shown.
+- **Response board** (people × shift dates): offered / interested / question / shortlisted / confirmed / waitlist / declined, per-cell actions, bulk confirm, waitlist positions, release, withdraw, cancel with reason. Confirmation checks capacity under a row lock and double-booking; an overlap needs `booking.override_conflict` plus a reason (recorded on the booking and in the audit log); the DB exclusion constraint remains the backstop.
+- **Staff portal**: Opportunities (interested / can't make it / ask a question, "interested in all"), My schedule (confirmed, briefs to review, recent cancellations, past), shift detail (where/when/report-to/uniform/instructions/agreed rate, briefs, announcements, message RGXM, "can't make this shift"), Messages (threads + announcements), Notifications with header badge.
+- **Briefs & updates** project tab: private document uploads (20 MB, type + signature checked) through API routes with same-origin checks; authenticated downloads; required acknowledgement tracked per document version with who's still pending; new versions reset acknowledgements; announcements (important ones emailed).
+- **Notifications**: transactional outbox → in-app notifications and email, each with a dedupe key so retries never double-send; SKIP LOCKED claiming, exponential backoff, failed after 5 attempts, stuck-event release. Processed right after the response via `after()`, plus `GET /api/cron/outbox` (Bearer `CRON_SECRET`) as the scheduled safety net. Shift edits/cancellations notify affected staff.
+- Tests: 105 Vitest (state machine, rates, offers, responses, capacity, waitlist, conflict override, outbox idempotency/retry, document access and versioned acknowledgements) and 23 Playwright E2E incl. the offer → question → reply → confirm → brief → acknowledge flow across three personas.
+
+### Deviations / notes
+- **pg-boss was not needed**: the outbox processor above covers idempotent jobs with retry. Revisit if job volume grows.
+- **Supabase Storage adapter** is written against Supabase's documented REST API but has not been exercised against a live project. Local disk storage is used in development and tests.
+- Shift reminders and SMS remain Phase 2.
+
+### Next: M4 — Attendance & Timesheets
+Check-in/out (optional location at check-in, offline queue), timesheets with staff corrections, Team Lead / AM verification, final approval with separation of duties, full adjustment history.
