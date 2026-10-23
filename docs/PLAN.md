@@ -1,6 +1,6 @@
 # RGXM Staffing Platform — Discovery & Implementation Plan
 
-Status: **Draft for approval** · Prepared 2026-10-23
+Status: **Approved 2026-10-23** · M1 in progress (see §14)
 
 ---
 
@@ -73,7 +73,7 @@ Enforced **server-side** in a single permission module (`can(user, action, resou
 | UI | **Tailwind CSS + shadcn/ui (Radix)** | Accessible primitives and a fully owned design system. Accent colour set via CSS variable tokens. |
 | Database | **PostgreSQL (Supabase, Canada region `ca-central-1`)** | Relational integrity, exclusion constraints for double-booking, RLS, Canadian data residency for PIPEDA. |
 | Data access / migrations | **Drizzle ORM + drizzle-kit SQL migrations** | Typed queries, plain SQL migrations under version control, runs against any Postgres (local, CI, Supabase). |
-| Auth | **Supabase Auth** | Magic link / email OTP for staff. Email + password + TOTP MFA for internal users. Password reset and rate limiting included. |
+| Auth | **Better Auth** (changed from Supabase Auth; see §14) | Magic link for staff. Email + password + TOTP MFA for internal users. Password reset and DB-backed rate limiting. Runs on the same Postgres, so local, CI and Supabase all behave identically. |
 | Authorization | App permission layer + **Postgres RLS deny-by-default** | The browser never queries the DB directly. All reads and writes go through server code that checks permissions. RLS is a second line of defence. |
 | File storage | **Supabase Storage, private buckets, short-lived signed URLs** | Briefs, resumes and photos are never public. |
 | Background jobs | **pg-boss** (Postgres-backed queue) + **transactional outbox** | Jobs are idempotent (dedupe keys), retried with backoff and fail visibly. No extra infrastructure. |
@@ -283,3 +283,29 @@ None of these block M1. Defaults shown in **bold** are what I'll build with unle
 - The working directory was empty. This is a new project, created in `/home/user/rgxm`.
 - **This cloud container is temporary.** Work must be pushed to a GitHub repository to persist. Please create (or tell me) a repo, e.g. `rgxm/staffing-platform`, that I can push to.
 - Local Postgres 16 and Docker are available, so I can build and test the full workflow here without external accounts. Supabase, Resend and Sentry keys are only needed for staging and production.
+
+---
+
+## 14. Implementation log
+
+### Changes from the approved plan
+- **Auth: Better Auth instead of Supabase Auth.** Better Auth stores identities in our own Postgres (Drizzle adapter), so local dev, CI and production share one code path with no auth "shim". It includes magic links, TOTP, backup codes and rate limiting. It still runs on Supabase Postgres, and Supabase remains the recommended database and storage host.
+- **Next.js 16** (current stable) instead of 15. Cache Components / PPR are off because almost every page is per-user.
+- **shadcn/ui components were written directly on Radix** (the shadcn registry was unreachable from the build environment). Same structure and conventions as shadcn output.
+- **Bookings and offers are one table** (`bookings`). Each (shift, staff) row moves through the brief's booking statuses, with `offer_responses` and `booking_status_history` holding the trail. This keeps one row per person per shift and lets the database enforce no double-booking.
+
+### Decisions adopted (defaults from §12, pending RGXM confirmation)
+Classification defaults to *unset*; payable rounding to the minute; no automatic break deductions; semi-monthly pay periods; Supabase `ca-central-1` + Vercel; generic + QBO-style CSV; placeholder branding (`#E4572E` accent, editable in Settings); check-in location off by default with a 300 m radius.
+
+### M1 — Foundation: delivered
+- Full core schema (58 tables) and migrations, including `0001_integrity.sql` with DB-level business rules.
+- Auth: staff magic link (self-registration), internal password + optional TOTP MFA, password reset, invitation by admin, deactivation with session revocation.
+- Multi-role permission matrix with project scoping and separation-of-duties helpers; server-side guards for pages and actions.
+- Dashboard shell: navigation by permission, global search (staff + projects), notification centre, user menu; Overview KPIs from live data.
+- Settings: organisation branding and check-in defaults, team & roles, my security (MFA), audit log, mail log.
+- Staff portal shell (PWA, installable, offline page): onboarding, home (next shift, to-dos, latest payment, all live queries), profile.
+- Demo seed (Cadbury Eaton Centre scenario, Taco Bell two-location project, 60 GTA staff, saved lists).
+- Tests: 39 unit + DB integrity tests (Vitest); 11 E2E tests across five personas on desktop and mobile (Playwright); GitHub Actions CI.
+
+### Next: M2 — Talent & Projects
+Talent directory with filters, profile editing, rates history, availability, saved lists, CSV import/export; project CRUD, locations, requirements; shift creation (bulk, templates, overnight) and calendar views.

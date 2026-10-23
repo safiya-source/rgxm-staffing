@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: rgxm
+          POSTGRES_PASSWORD: rgxm
+          POSTGRES_DB: rgxm_dev
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U rgxm" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgres://rgxm:rgxm@localhost:5432/rgxm_dev
+      TEST_DATABASE_URL: postgres://rgxm:rgxm@localhost:5432/rgxm_test
+      APP_URL: http://localhost:3000
+      BETTER_AUTH_SECRET: ci-only-secret-ci-only-secret-ci-only-secret
+      MAIL_TRANSPORT: log
+      AUTH_RATE_LIMIT: "on"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Create test database
+        run: PGPASSWORD=rgxm psql -h localhost -U rgxm -d rgxm_dev -c "CREATE DATABASE rgxm_test"
+      - run: npm run typecheck
+      - run: npm run lint
+      - name: Unit + database integration tests
+        run: npm test
+      - name: Migrate and seed
+        run: npm run db:migrate && npm run db:seed
+      - run: npm run build
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+      - name: End-to-end tests
+        run: npm run test:e2e
+        env:
+          CI: "true"
+          # The E2E suite signs in many times from one IP (dev server only; refused in production).
+          AUTH_RATE_LIMIT: "off"
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: playwright-report
+          retention-days: 7
