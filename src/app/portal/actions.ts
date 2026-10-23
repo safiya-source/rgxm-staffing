@@ -9,6 +9,7 @@ import { FIELD_ROLES } from "@/lib/roles";
 import { recordAudit } from "@/server/audit";
 import { runAction } from "@/server/actions";
 import { db } from "@/server/db";
+import * as availability from "@/server/domain/availability";
 import { staffProfiles, staffRoles, users } from "@/server/db/schema";
 import { ForbiddenError, getViewer } from "@/server/session";
 
@@ -86,4 +87,55 @@ export async function saveStaffProfile(_prev: ActionResult, formData: FormData):
   });
   if (result.ok && mode === "onboarding") redirect("/portal");
   return result;
+}
+
+// ─── Availability ───────────────────────────────────────────────────────────
+
+async function requireStaffViewer() {
+  const viewer = await getViewer();
+  if (!viewer || viewer.kind !== "staff" || !viewer.staff) throw new ForbiddenError("Please sign in.");
+  return { userId: viewer.userId, staffId: viewer.staff.id };
+}
+
+export async function saveWeeklyAvailabilityAction(rules: { weekday: number; startTime: string; endTime: string }[]): Promise<ActionResult> {
+  return runAction(async () => {
+    const me = await requireStaffViewer();
+    const parsed = availability.weeklySchema.safeParse(rules);
+    if (!parsed.success) return { ok: false, error: "Each day needs an end time after its start time." };
+    await availability.saveWeeklyAvailability(me.userId, me.staffId, parsed.data);
+    revalidatePath("/portal/availability");
+    return { ok: true, message: "Weekly availability saved." };
+  });
+}
+
+export async function addAvailabilityExceptionAction(_prev: ActionResult, formData: FormData): Promise<ActionResult> {
+  return runAction(async () => {
+    const me = await requireStaffViewer();
+    const allDay = formData.get("allDay") === "on";
+    const text = (k: string) => String(formData.get(k) ?? "").trim() || null;
+    const parsed = availability.exceptionSchema.safeParse({
+      date: formData.get("date"),
+      kind: formData.get("kind"),
+      startTime: allDay ? null : text("startTime"),
+      endTime: allDay ? null : text("endTime"),
+      note: text("note"),
+    });
+    if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Check the date and times." };
+    try {
+      await availability.addAvailabilityException(me.userId, me.staffId, parsed.data);
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : "Couldn't save that date." };
+    }
+    revalidatePath("/portal/availability");
+    return { ok: true, message: "Saved." };
+  });
+}
+
+export async function removeAvailabilityExceptionAction(id: string): Promise<ActionResult> {
+  return runAction(async () => {
+    const me = await requireStaffViewer();
+    await availability.removeAvailabilityException(me.userId, me.staffId, z.string().uuid().parse(id));
+    revalidatePath("/portal/availability");
+    return { ok: true, message: "Removed." };
+  });
 }

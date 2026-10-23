@@ -77,6 +77,11 @@ export default async function PortalHome() {
           <TaskRow href="/portal/opportunities" icon={InboxIcon} label="New shift offers" count={home.openOffers} />
           <TaskRow href="/portal/schedule" icon={FileCheckIcon} label="Briefs to review" count={home.outstandingAcks} />
           <TaskRow href="/portal/schedule" icon={ClockIcon} label="Timesheets to submit" count={home.pendingTimesheets} />
+          <Link href="/portal/availability" className="flex items-center gap-3 px-4 py-3.5 hover:bg-accent">
+            <CalendarIcon className="size-5 text-muted-foreground" />
+            <span className="flex-1 text-[15px]">Update my availability</span>
+            <ChevronRightIcon className="size-4 text-muted-foreground" />
+          </Link>
         </Card>
       </section>
 

@@ -3,7 +3,8 @@ import "dotenv/config";
 import { Pool } from "pg";
 
 export const DEMO_PASSWORD = process.env.DEMO_PASSWORD ?? "rgxm-demo-password";
-export const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 2 });
+// Shared by every spec in the worker; allowExitOnIdle lets the worker exit without an explicit end().
+export const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 2, allowExitOnIdle: true });
 
 export async function signInAsTeam(page: Page, who: string) {
   await page.goto("/sign-in?tab=team");

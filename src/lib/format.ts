@@ -31,3 +31,11 @@ export function formatMinutes(minutes: number) {
   const m = minutes % 60;
   return m === 0 ? `${h}h` : `${h}h ${m.toString().padStart(2, "0")}m`;
 }
+
+/** Short zone label for an instant, e.g. "EST" / "EDT". */
+export function zoneAbbreviation(instant: Date | string, timeZone: string) {
+  const part = new Intl.DateTimeFormat("en-US", { timeZone, timeZoneName: "short" })
+    .formatToParts(new Date(instant))
+    .find((p) => p.type === "timeZoneName");
+  return part?.value ?? timeZone;
+}

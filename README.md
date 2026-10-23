@@ -7,9 +7,10 @@ Staffing, scheduling, attendance and payments for RGXM's experiential activation
 
 See [`docs/PLAN.md`](docs/PLAN.md) for the product plan, architecture, data model and milestones.
 
-> **Status: Milestone 1 (Foundation).** Authentication, roles and permissions, the full database schema
-> with integrity rules, the app shells, staff registration/onboarding and team administration all work.
-> Sections for later milestones are clearly labelled as planned in the UI. **Not production-ready.**
+> **Status: Milestones 1–2.** Authentication, roles and permissions, the database with integrity rules,
+> staff registration and availability, the talent database (search, profiles, rates history, lists,
+> CSV import/export), projects (locations, requirements, team) and scheduling (bulk shifts, calendar,
+> drag-and-drop) all work. Offers/booking (M3) onward are labelled as planned in the UI. **Not production-ready.**
 > See "Before production" below.
 
 ## Stack

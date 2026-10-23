@@ -1,6 +1,6 @@
 # RGXM Staffing Platform — Discovery & Implementation Plan
 
-Status: **Approved 2026-10-23** · M1 in progress (see §14)
+Status: **Approved 2026-10-23** · M1 and M2 delivered (see §14)
 
 ---
 
@@ -307,5 +307,19 @@ Classification defaults to *unset*; payable rounding to the minute; no automatic
 - Demo seed (Cadbury Eaton Centre scenario, Taco Bell two-location project, 60 GTA staff, saved lists).
 - Tests: 39 unit + DB integrity tests (Vitest); 11 E2E tests across five personas on desktop and mobile (Playwright); GitHub Actions CI.
 
-### Next: M2 — Talent & Projects
-Talent directory with filters, profile editing, rates history, availability, saved lists, CSV import/export; project CRUD, locations, requirements; shift creation (bulk, templates, overnight) and calendar views.
+### M2 — Talent & Projects: delivered
+- **Talent directory**: filter by role, city, skills, languages, unexpired certifications, saved list, project history, status, experience, vehicle, rate range (rate filters only for users who can see rates), availability on a date, and "no booking conflicts that day". URL-driven filters, pagination, bulk add-to-list, bulk/filtered CSV export (formula-injection safe, audited, rates only for `rates.view`).
+- **Staff profiles**: create/edit; status changes with reasons; roles; skills/languages; certifications with expiry; default rates with full history (new rate closes the old one; confirmed bookings keep their snapshot); pay setup (classification, GST/HST registration with format check, legal/business name; tax details only for `rates.edit`); emergency contact (restricted; project managers only for people booked on their projects); internal notes; lists; upcoming/past shifts and reliability counts.
+- **CSV import**: validate-then-commit with per-row errors, match by email, never erases data with blanks, adds roles/skills/languages, reuses lookups case-insensitively, rate columns ignored without `rates.edit`, 2,000-row cap.
+- **Staff availability (portal)**: weekly pattern + date-specific available/unavailable entries.
+- **Projects**: create/edit (inline new client), status transitions with reasons, locations (time zone locked once shifts exist; check-in location verification requires coordinates), staffing requirements, project team; overview with coverage by role × location, unfilled positions, pending offers, estimated cost vs budget.
+- **Shifts**: bulk creation from a date range + weekdays (live preview incl. overnight "+1 day" and DST-length warnings, cost estimate), templates, edit (headcount can't drop below confirmed; reschedules that would double-book are rejected), duplicate to dates, publish drafts, cancel with reason (cancels active bookings, keeps history).
+- **Schedule**: day/week/month across projects with project/role filters, coverage colours, unfilled-in-next-7-days list, drag-and-drop to move a shift in week view (permission-checked).
+- Tests: 82 Vitest (incl. DST gap/fold, overnight, search filters, import rules, scheduling rules) and 21 Playwright E2E.
+
+### Notes carried into M3
+- A shift with no rate means "use each person's default rate"; M3's rate resolution must implement shift → project override → staff default, snapshotting the result at confirmation.
+- Drag-and-drop exists in week view only; day/month are read-only.
+
+### Next: M3 — Offers & Booking
+Eligibility suggestions, offers with deadlines, staff responses, live response board, confirm/override/cancel, waitlist, staff portal Opportunities and Schedule, basic briefs and acknowledgements, email notifications through the outbox.

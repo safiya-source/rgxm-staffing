@@ -18,7 +18,7 @@ export function Field({
 }) {
   const message = Array.isArray(error) ? error[0] : error;
   return (
-    <div className={cn("grid gap-2", className)}>
+    <div className={cn("grid content-start gap-2", className)}>
       <Label htmlFor={htmlFor}>{label}</Label>
       {children}
       {message ? (

@@ -1,7 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { pool, signInWithMagicLink } from "./helpers";
 
-test.afterAll(async () => pool.end());
 
 test("existing staff member signs in with a magic link", async ({ page }) => {
   await signInWithMagicLink(page, "ba.demo@rgxm-demo.test");
@@ -40,4 +39,17 @@ test("a new Brand Ambassador registers and completes onboarding", async ({ page 
 
   const { rows } = await pool.query("select p.city, array_agg(r.role::text) roles from staff_profiles p join staff_roles r on r.staff_id = p.id where p.email = $1 group by p.city", [email]);
   expect(rows[0]).toMatchObject({ city: "Toronto", roles: ["BA"] });
+});
+
+test("staff set weekly availability and a day off", async ({ page }) => {
+  await signInWithMagicLink(page, "tl.demo@rgxm-demo.test");
+  await page.getByRole("link", { name: "Update my availability" }).click();
+  await expect(page.getByRole("heading", { name: "My availability" })).toBeVisible();
+  await page.getByRole("checkbox", { name: "Wednesday" }).click();
+  await page.getByRole("button", { name: "Save weekly availability" }).click();
+  await expect(page.getByText("Weekly availability saved.")).toBeVisible();
+
+  await page.getByLabel("Date", { exact: true }).fill("2026-12-24");
+  await page.getByRole("button", { name: "Add date" }).click();
+  await expect(page.getByText("Thursday, Dec 24")).toBeVisible();
 });

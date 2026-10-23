@@ -20,16 +20,38 @@ const STAFF: Record<string, [string, Tone]> = {
   archived: ["Archived", "outline"],
 };
 
-const MAPS = { project: PROJECT, staff: STAFF } as const;
+const BOOKING: Record<string, [string, Tone]> = {
+  draft: ["Draft", "outline"],
+  offered: ["Offered", "info"],
+  interested: ["Interested", "brand"],
+  declined: ["Declined", "neutral"],
+  awaiting_confirmation: ["Awaiting confirmation", "warning"],
+  confirmed: ["Confirmed", "success"],
+  waitlisted: ["Waitlisted", "neutral"],
+  cancelled: ["Cancelled", "danger"],
+  completed: ["Completed", "neutral"],
+  no_show: ["No-show", "danger"],
+};
+
+const SHIFT: Record<string, [string, Tone]> = {
+  draft: ["Draft", "outline"],
+  open: ["Open", "info"],
+  filled: ["Filled", "success"],
+  live: ["Live", "brand"],
+  completed: ["Completed", "neutral"],
+  cancelled: ["Cancelled", "danger"],
+};
+
+const MAPS = { project: PROJECT, staff: STAFF, booking: BOOKING, shift: SHIFT } as const;
 
 export function StatusBadge({ kind, status }: { kind: keyof typeof MAPS; status: string }) {
   const [label, tone] = MAPS[kind][status] ?? [status, "neutral" as Tone];
   return <Badge tone={tone}>{label}</Badge>;
 }
 
-export function DemoBadge() {
+export function DemoBadge({ className }: { className?: string }) {
   return (
-    <Badge tone="warning" title="Demo data: no real messages or payments are ever generated from it">
+    <Badge tone="warning" className={className} title="Demo data: no real messages or payments are ever generated from it">
       Demo
     </Badge>
   );

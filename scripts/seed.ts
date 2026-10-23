@@ -7,9 +7,13 @@
 import "dotenv/config";
 import { hashPassword } from "better-auth/crypto";
 import { eq } from "drizzle-orm";
+import { expandShiftPattern } from "../src/lib/time";
 import { db } from "../src/server/db";
 import {
   accounts,
+  availabilityExceptions,
+  availabilityRules,
+  shifts,
   certifications,
   clients,
   languages,
@@ -173,6 +177,14 @@ async function main() {
       }
     }
 
+    // ─── Availability (weekly patterns; most people free on weekends/evenings) ───
+    for (const [i, person] of staff.entries()) {
+      if (i % 5 === 4) continue; // some people haven't set availability
+      const days = i % 3 === 0 ? [0, 4, 5, 6] : i % 3 === 1 ? [1, 2, 3, 4, 5] : [0, 1, 2, 3, 4, 5, 6];
+      await tx.insert(availabilityRules).values(days.map((weekday) => ({ staffId: person.id, weekday, startTime: "08:00", endTime: "22:00" })));
+    }
+    await tx.insert(availabilityExceptions).values({ staffId: staff[2]!.id, date: "2026-11-13", kind: "unavailable", note: "Exam" });
+
     // ─── Saved lists ───
     const lists: [string, string, (s: (typeof staff)[number]) => boolean][] = [
       ["Toronto Preferred BAs", "Reliable Toronto brand ambassadors", (s) => s.city === "Toronto" && s.roles.includes("BA")],
@@ -241,6 +253,35 @@ async function main() {
         endDate: "2026-11-15",
       })),
     );
+
+    // Cadbury shifts: one shift per role per day, Nov 12–15 (Toronto time).
+    const cadShifts: [FieldRole, number, string, string][] = [
+      ["BA", 10, "10:00", "18:00"],
+      ["TL", 2, "09:30", "18:30"],
+      ["PA", 2, "08:00", "17:00"],
+      ["AM", 1, "09:00", "19:00"],
+    ];
+    for (const [role, headcount, startTime, endTime] of cadShifts) {
+      const windows = expandShiftPattern({ startDate: "2026-11-12", endDate: "2026-11-15", weekdays: [], startTime, endTime, timeZone: "America/Toronto" });
+      await tx.insert(shifts).values(
+        windows.map((w) => ({
+          projectId: cad!.id,
+          locationId: eaton!.id,
+          role,
+          startsAt: w.startsAt,
+          endsAt: w.endsAt,
+          timezone: "America/Toronto",
+          headcount,
+          rateCents: BASE_RATES[role],
+          reportingLocation: "Staff entrance off Queen St, Level 1",
+          onsiteContact: "Sam Rivera",
+          uniform: "Black pants, black closed-toe shoes. Branded purple shirt provided on site.",
+          instructions: "Check in with the Team Lead 15 minutes before your shift.",
+          status: "open" as const,
+          createdBy: internalIds.pm,
+        })),
+      );
+    }
 
     const [tb] = await tx
       .insert(projects)

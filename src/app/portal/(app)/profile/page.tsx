@@ -18,6 +18,9 @@ export default async function ProfilePage() {
       </div>
       <ProfileForm mode="profile" defaults={defaults} />
       <div className="grid gap-3 border-t pt-6 text-sm">
+        <Link href="/portal/availability" className="font-medium hover:underline">
+          Set my availability →
+        </Link>
         <Link href="/privacy" className="text-muted-foreground hover:text-foreground">
           Privacy notice
         </Link>

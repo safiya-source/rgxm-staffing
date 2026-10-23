@@ -1,7 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { DEMO_PASSWORD, latestLinkFor, pool, signInAsTeam } from "./helpers";
 
-test.afterAll(async () => pool.end());
 
 test("unauthenticated visitors are sent to sign-in", async ({ page }) => {
   await page.goto("/dashboard");

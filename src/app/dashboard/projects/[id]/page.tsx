@@ -1,125 +1,193 @@
-import { eq } from "drizzle-orm";
-import { ArrowLeftIcon } from "lucide-react";
+import { CheckCircle2Icon, CircleIcon } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
-import { PlannedSection } from "@/components/app/empty-state";
-import { DemoBadge, StatusBadge } from "@/components/app/status-badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { StatCard } from "@/components/app/stat-card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { formatDateRange, formatMoney, formatRate } from "@/lib/format";
-import { FIELD_ROLE_NAMES } from "@/lib/roles";
-import { canAny } from "@/server/authz/permissions";
-import { db } from "@/server/db";
-import { clients, projectLocations, projects, staffingRequirements } from "@/server/db/schema";
-import { requireInternal, toActor } from "@/server/session";
+import { formatMoney } from "@/lib/format";
+import { FIELD_ROLE_NAMES, FIELD_ROLES } from "@/lib/roles";
+import { canOnProject } from "@/server/authz/permissions";
+import { getProjectCoverage, getProjectHeader, getProjectSetup } from "@/server/queries/projects";
+import { loadProjectScopes, requireInternal, toActor } from "@/server/session";
 
-export const metadata: Metadata = { title: "Project" };
+export const metadata: Metadata = { title: "Project overview" };
 
-
-export default async function ProjectPage({ params }: PageProps<"/dashboard/projects/[id]">) {
+export default async function ProjectOverviewPage({ params }: PageProps<"/dashboard/projects/[id]">) {
   const viewer = await requireInternal("project.view");
   const { id } = await params;
-  if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
-
-  const [p] = await db
-    .select({ project: projects, client: clients.name })
-    .from(projects)
-    .leftJoin(clients, eq(clients.id, projects.clientId))
-    .where(eq(projects.id, id));
-  if (!p) notFound();
-  const locations = await db.select().from(projectLocations).where(eq(projectLocations.projectId, id));
-  const reqs = await db.select().from(staffingRequirements).where(eq(staffingRequirements.projectId, id));
+  const [header, coverage, setup, scopes] = await Promise.all([getProjectHeader(id), getProjectCoverage(id), getProjectSetup(id), loadProjectScopes([id])]);
+  const p = header!.project;
   const actor = toActor(viewer);
-  const showRates = canAny(actor, "rates.view");
-  const showBudget = canAny(actor, "budget.view");
-  const project = p.project;
+  const showBudget = canOnProject(actor, "budget.view", scopes.get(id)!);
+
+  const positions = coverage.byRole.reduce((n, r) => n + r.positions, 0);
+  const confirmed = coverage.byRole.reduce((n, r) => n + r.confirmed, 0);
+  const pending = coverage.byRole.reduce((n, r) => n + r.pending, 0);
+  const estimated = coverage.byRole.reduce((n, r) => n + r.estimatedCents, 0);
+  const unpriced = coverage.byRole.reduce((n, r) => n + r.unpricedShifts, 0);
+  const budget = p.budgetCents;
+  const budgetPct = budget ? Math.round((estimated / budget) * 100) : null;
+
+  const locationName = (lid: string | null) => setup.locations.find((l) => l.id === lid)?.name ?? "All locations";
+  // Combine requirements and scheduled shifts into one row per role + location.
+  const keys = new Map<string, { role: (typeof FIELD_ROLES)[number]; locationId: string | null }>();
+  for (const r of coverage.requirements) keys.set(`${r.role}|${r.locationId ?? ""}`, { role: r.role, locationId: r.locationId });
+  for (const r of coverage.byRole) keys.set(`${r.role}|${r.locationId}`, { role: r.role, locationId: r.locationId });
+  const rows = [...keys.values()]
+    .sort((a, b) => FIELD_ROLES.indexOf(a.role) - FIELD_ROLES.indexOf(b.role) || locationName(a.locationId).localeCompare(locationName(b.locationId)))
+    .map((k) => {
+      const req = coverage.requirements.filter((r) => r.role === k.role && (r.locationId ?? null) === k.locationId).reduce((n, r) => n + r.quantity, 0);
+      const sched = coverage.byRole.find((r) => r.role === k.role && r.locationId === k.locationId);
+      return { ...k, required: req, shifts: sched?.shifts ?? 0, positions: sched?.positions ?? 0, confirmed: sched?.confirmed ?? 0, pending: sched?.pending ?? 0 };
+    });
+
+  const steps = [
+    { done: setup.locations.length > 0, label: "Add activation locations", href: "setup" },
+    { done: setup.requirements.length > 0, label: "Define staffing requirements", href: "setup" },
+    { done: positions > 0, label: "Create shifts", href: "shifts" },
+    { done: confirmed > 0, label: "Send offers and confirm staff (coming in M3)", href: null },
+  ];
 
   return (
-    <>
-      <Link href="/dashboard/projects" className="mb-6 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
-        <ArrowLeftIcon className="size-4" /> Projects
-      </Link>
-      <div className="mb-8">
-        <p className="text-sm text-muted-foreground">{[p.client, project.code].filter(Boolean).join(" · ")}</p>
-        <h1 className="mt-1 flex flex-wrap items-center gap-2 text-2xl font-semibold">
-          {project.name} <StatusBadge kind="project" status={project.status} /> {project.isDemo ? <DemoBadge /> : null}
-        </h1>
-        <p className="mt-1 text-sm text-muted-foreground">{formatDateRange(project.startDate, project.endDate)}</p>
-      </div>
-      <div className="grid gap-6 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
+    <div className="grid gap-6">
+      {steps.some((s) => !s.done) ? (
+        <Card>
           <CardHeader>
-            <CardTitle>Staffing requirements</CardTitle>
+            <CardTitle>Setup checklist</CardTitle>
           </CardHeader>
-          <CardContent className="pt-2">
-            {reqs.length === 0 ? (
-              <p className="text-sm text-muted-foreground">None defined yet.</p>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow className="hover:bg-transparent">
-                    <TableHead>Role</TableHead>
-                    <TableHead>Location</TableHead>
-                    <TableHead className="text-right">Needed</TableHead>
-                    {showRates ? <TableHead className="text-right">Rate</TableHead> : null}
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {reqs.map((r) => (
-                    <TableRow key={r.id}>
-                      <TableCell>{FIELD_ROLE_NAMES[r.role]}</TableCell>
-                      <TableCell className="text-muted-foreground">{locations.find((l) => l.id === r.locationId)?.name ?? "All"}</TableCell>
-                      <TableCell className="text-right tabular-nums">{r.quantity}</TableCell>
-                      {showRates ? (
-                        <TableCell className="text-right tabular-nums">{r.defaultRateCents != null ? formatRate(r.defaultRateCents) : "—"}</TableCell>
-                      ) : null}
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
+          <CardContent className="grid gap-2 pt-2 sm:grid-cols-2">
+            {steps.map((s) => (
+              <div key={s.label} className="flex items-center gap-2 text-sm">
+                {s.done ? <CheckCircle2Icon className="size-4 text-success" /> : <CircleIcon className="size-4 text-muted-foreground" />}
+                {s.href && !s.done ? (
+                  <Link href={`/dashboard/projects/${id}/${s.href}`} className="font-medium hover:underline">
+                    {s.label}
+                  </Link>
+                ) : (
+                  <span className={s.done ? "text-muted-foreground line-through" : undefined}>{s.label}</span>
+                )}
+              </div>
+            ))}
           </CardContent>
         </Card>
-        <div className="grid content-start gap-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Locations</CardTitle>
-            </CardHeader>
-            <CardContent className="grid gap-3 text-sm">
-              {locations.length === 0 ? (
-                <p className="text-muted-foreground">None yet.</p>
-              ) : (
-                locations.map((l) => (
-                  <div key={l.id}>
-                    <p className="font-medium">{l.name}</p>
-                    <p className="text-muted-foreground">{[l.address, l.timezone].filter(Boolean).join(" · ")}</p>
-                  </div>
-                ))
-              )}
-            </CardContent>
-          </Card>
-          {showBudget ? (
-            <Card>
-              <CardHeader>
-                <CardTitle>Staffing budget</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-2xl font-semibold tabular-nums">
-                  {project.budgetCents != null ? formatMoney(project.budgetCents, project.currency) : "Not set"}
-                </p>
-              </CardContent>
-            </Card>
-          ) : null}
-        </div>
+      ) : null}
+
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+        <StatCard label="Scheduled positions" value={positions} hint={`${coverage.totals.upcoming} upcoming shifts`} href={`/dashboard/projects/${id}/shifts`} />
+        <StatCard label="Confirmed" value={confirmed} hint={positions ? `${Math.round((confirmed / positions) * 100)}% filled` : undefined} />
+        <StatCard label="Unfilled" value={Math.max(positions - confirmed, 0)} tone={positions - confirmed > 0 ? "warning" : "default"} />
+        <StatCard label="Pending offers" value={pending} />
+        {showBudget ? (
+          <StatCard
+            label="Estimated cost"
+            value={formatMoney(estimated, p.currency)}
+            tone={budgetPct !== null && budgetPct > 100 ? "danger" : budgetPct !== null && budgetPct >= 90 ? "warning" : "default"}
+            hint={budget ? `${budgetPct}% of ${formatMoney(budget, p.currency)} budget` : "No budget set"}
+          />
+        ) : (
+          <StatCard label="Draft shifts" value={coverage.totals.drafts} />
+        )}
       </div>
-      <div className="mt-6">
-        <PlannedSection
-          milestone="M2–M5"
-          title="Project workspace"
-          items={["Shifts and calendar", "Offers, bookings and waitlist", "Attendance and timesheets", "Estimated vs actual cost against budget"]}
-        />
+      {showBudget && unpriced > 0 ? (
+        <p className="-mt-3 text-sm text-warning">
+          {unpriced} shift{unpriced === 1 ? " has" : "s have"} no rate, so {unpriced === 1 ? "it isn't" : "they aren't"} included in the estimate.
+        </p>
+      ) : null}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Staffing by role</CardTitle>
+          <CardDescription>
+            &ldquo;Required&rdquo; is the number of people in the staffing plan; positions are headcount summed across scheduled shifts.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="pt-2">
+          {rows.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Add staffing requirements or shifts to see coverage.</p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead>Role</TableHead>
+                  <TableHead>Location</TableHead>
+                  <TableHead className="text-right">Required</TableHead>
+                  <TableHead className="text-right">Shifts</TableHead>
+                  <TableHead className="text-right">Positions</TableHead>
+                  <TableHead className="text-right">Confirmed</TableHead>
+                  <TableHead className="text-right">Pending</TableHead>
+                  <TableHead className="w-40">Fill</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {rows.map((r) => {
+                  const pct = r.positions ? Math.round((r.confirmed / r.positions) * 100) : 0;
+                  return (
+                    <TableRow key={`${r.role}-${r.locationId}`}>
+                      <TableCell className="font-medium">{FIELD_ROLE_NAMES[r.role]}</TableCell>
+                      <TableCell className="text-muted-foreground">{locationName(r.locationId)}</TableCell>
+                      <TableCell className="text-right tabular-nums">{r.required || "—"}</TableCell>
+                      <TableCell className="text-right tabular-nums">{r.shifts}</TableCell>
+                      <TableCell className="text-right tabular-nums">{r.positions}</TableCell>
+                      <TableCell className="text-right tabular-nums">{r.confirmed}</TableCell>
+                      <TableCell className="text-right tabular-nums">{r.pending}</TableCell>
+                      <TableCell>
+                        {r.positions ? (
+                          <div className="flex items-center gap-2">
+                            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted" aria-hidden>
+                              <div className="h-full rounded-full bg-success" style={{ width: `${pct}%` }} />
+                            </div>
+                            <span className="w-9 text-right text-xs tabular-nums text-muted-foreground">{pct}%</span>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">No shifts</span>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>Locations</CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-3 pt-2 text-sm">
+            {setup.locations.length === 0 ? <p className="text-muted-foreground">None yet.</p> : null}
+            {setup.locations.map((l) => (
+              <div key={l.id}>
+                <p className="font-medium">{l.name}</p>
+                <p className="text-muted-foreground">{[l.address, l.timezone, l.onsiteContactName && `On-site: ${l.onsiteContactName}`].filter(Boolean).join(" · ")}</p>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Project notes</CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-3 pt-2 text-sm">
+            {p.description ? <p className="whitespace-pre-wrap">{p.description}</p> : null}
+            {p.internalNotes ? (
+              <div>
+                <p className="text-xs font-medium text-muted-foreground">Internal</p>
+                <p className="whitespace-pre-wrap">{p.internalNotes}</p>
+              </div>
+            ) : null}
+            {p.clientNotes ? (
+              <div>
+                <p className="text-xs font-medium text-muted-foreground">Client-facing</p>
+                <p className="whitespace-pre-wrap">{p.clientNotes}</p>
+              </div>
+            ) : null}
+            {!p.description && !p.internalNotes && !p.clientNotes ? <p className="text-muted-foreground">No notes.</p> : null}
+          </CardContent>
+        </Card>
       </div>
-    </>
+    </div>
   );
 }
