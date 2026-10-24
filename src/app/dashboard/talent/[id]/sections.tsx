@@ -1,5 +1,6 @@
 "use client";
-import { format, formatDistanceToNow } from "date-fns";
+import { TimeAgo } from "@/components/app/time-ago";
+import { format } from "date-fns";
 import { PencilIcon, TrashIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
@@ -537,7 +538,7 @@ export function NotesCard({ staffId, notes }: { staffId: string; notes: { id: st
           <li key={n.id} className="rounded-lg bg-muted/60 p-3 text-sm">
             <p className="whitespace-pre-wrap">{n.body}</p>
             <p className="mt-1.5 text-xs text-muted-foreground">
-              {n.author ?? "Unknown"} · {formatDistanceToNow(new Date(n.createdAt), { addSuffix: true })}
+              {n.author ?? "Unknown"} · <TimeAgo date={n.createdAt} />
             </p>
           </li>
         ))}

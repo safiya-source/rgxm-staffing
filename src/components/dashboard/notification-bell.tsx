@@ -1,5 +1,5 @@
 "use client";
-import { formatDistanceToNow } from "date-fns";
+import { TimeAgo } from "@/components/app/time-ago";
 import { BellIcon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -49,7 +49,7 @@ export function NotificationBell({ items, unread }: { items: BellItem[]; unread:
                   <p className={cn("text-sm", !n.read && "font-medium")}>{n.title}</p>
                   {n.body ? <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{n.body}</p> : null}
                   <p className="mt-1 text-[11px] text-muted-foreground">
-                    {formatDistanceToNow(new Date(n.createdAt), { addSuffix: true })}
+                    <TimeAgo date={n.createdAt} />
                   </p>
                 </>
               );

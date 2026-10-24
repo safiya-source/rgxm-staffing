@@ -1,5 +1,5 @@
 "use client";
-import { formatDistanceToNow } from "date-fns";
+import { TimeAgo } from "@/components/app/time-ago";
 import { ArrowLeftIcon, MessageSquareIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -63,7 +63,7 @@ export function ThreadsPanel({
               <li key={m.id} className={cn("max-w-[85%] rounded-lg px-3 py-2 text-sm", m.authorKind === "staff" ? "bg-muted" : "ml-auto bg-foreground text-background")}>
                 <p className="whitespace-pre-wrap">{m.body}</p>
                 <p className={cn("mt-1 text-[11px]", m.authorKind === "staff" ? "text-muted-foreground" : "text-background/70")}>
-                  {m.authorName} · {formatDistanceToNow(new Date(m.createdAt), { addSuffix: true })}
+                  {m.authorName} · <TimeAgo date={m.createdAt} />
                 </p>
               </li>
             ))}
@@ -100,7 +100,7 @@ export function ThreadsPanel({
                 {t.unread ? <span className="size-2 rounded-full bg-brand" aria-label="Unread" /> : null}
               </p>
               <p className="truncate text-xs text-muted-foreground">{t.preview}</p>
-              {t.lastMessageAt ? <p className="text-[11px] text-muted-foreground">{formatDistanceToNow(new Date(t.lastMessageAt), { addSuffix: true })}</p> : null}
+              {t.lastMessageAt ? <p className="text-[11px] text-muted-foreground"><TimeAgo date={t.lastMessageAt} /></p> : null}
             </Link>
           ))}
         </Card>

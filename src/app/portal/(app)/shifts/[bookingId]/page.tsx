@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { StatusBadge } from "@/components/app/status-badge";
+import { MyHoursSection } from "@/components/portal/my-hours-section";
 import { ShiftSummary } from "@/components/portal/shift-summary";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -89,6 +90,8 @@ export default async function ShiftPage({ params }: PageProps<"/portal/shifts/[b
           ) : null}
         </dl>
       </Card>
+
+      <MyHoursSection bookingId={b.id} status={b.status} startsAt={b.startsAt} timezone={s.timezone} />
 
       <section aria-labelledby="docs">
         <h2 id="docs" className="mb-2 text-sm font-medium text-muted-foreground">

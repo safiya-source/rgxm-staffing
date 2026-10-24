@@ -1,5 +1,5 @@
 "use client";
-import { formatDistanceToNow } from "date-fns";
+import { TimeAgo } from "@/components/app/time-ago";
 import { MoreHorizontalIcon, PlusIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
@@ -259,7 +259,7 @@ export function UsersTable({ members, currentUserId }: { members: TeamMember[]; 
                 </TableCell>
                 <TableCell>{m.twoFactorEnabled ? <Badge tone="success">On</Badge> : <Badge tone="outline">Off</Badge>}</TableCell>
                 <TableCell className="text-sm text-muted-foreground">
-                  {m.lastSignInAt ? formatDistanceToNow(new Date(m.lastSignInAt), { addSuffix: true }) : "Never"}
+                  {m.lastSignInAt ? <TimeAgo date={m.lastSignInAt} /> : "Never"}
                 </TableCell>
                 <TableCell>
                   <RowActions member={m} isSelf={m.id === currentUserId} />

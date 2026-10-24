@@ -1,5 +1,5 @@
 "use client";
-import { formatDistanceToNow } from "date-fns";
+import { TimeAgo } from "@/components/app/time-ago";
 import { FileTextIcon, MegaphoneIcon, MoreHorizontalIcon, UploadIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useRef, useState, useTransition } from "react";
@@ -132,7 +132,7 @@ export function DocumentList({ docs, canManage }: { docs: Doc[]; canManage: bool
             </a>
             <p className="text-xs text-muted-foreground">
               {d.category} · {d.fileName}
-              {d.version > 1 ? ` · v${d.version}` : ""} · {d.uploader ?? "Unknown"} · {formatDistanceToNow(new Date(d.createdAt), { addSuffix: true })}
+              {d.version > 1 ? ` · v${d.version}` : ""} · {d.uploader ?? "Unknown"} · <TimeAgo date={d.createdAt} />
             </p>
             {d.requiresAck ? (
               <div className="mt-2">
@@ -229,7 +229,7 @@ export function AnnouncementList({ items }: { items: { id: string; title: string
           </p>
           <p className="mt-1 text-sm whitespace-pre-wrap text-muted-foreground">{a.body}</p>
           <p className="mt-2 text-xs text-muted-foreground">
-            {a.author ?? "Unknown"} · {formatDistanceToNow(new Date(a.createdAt), { addSuffix: true })}
+            {a.author ?? "Unknown"} · <TimeAgo date={a.createdAt} />
           </p>
         </li>
       ))}

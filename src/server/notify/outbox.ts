@@ -15,7 +15,12 @@ export type OutboxEvent =
   | { type: "shift.cancelled"; payload: { shiftId: string; bookingIds: string[] } }
   | { type: "announcement.posted"; payload: { announcementId: string } }
   | { type: "document.published"; payload: { documentId: string; version: number } }
-  | { type: "message.posted"; payload: { messageId: string } };
+  | { type: "message.posted"; payload: { messageId: string } }
+  | { type: "shift.reminder"; payload: { bookingId: string } }
+  | { type: "timesheet.reminder"; payload: { bookingId: string } }
+  | { type: "timesheet.submitted"; payload: { timesheetId: string } }
+  | { type: "timesheet.needs_review"; payload: { timesheetId: string } }
+  | { type: "timesheet.approved"; payload: { timesheetId: string; corrected?: boolean } };
 
 export async function enqueue(tx: Tx | typeof db, event: OutboxEvent & { dedupeKey?: string }) {
   await tx

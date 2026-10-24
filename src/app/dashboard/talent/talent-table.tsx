@@ -1,5 +1,5 @@
 "use client";
-import { formatDistanceToNow } from "date-fns";
+import { TimeAgo } from "@/components/app/time-ago";
 import { DownloadIcon, ListPlusIcon, UsersIcon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -158,7 +158,7 @@ export function TalentTable({
                 ) : null}
                 <TableCell className="text-right tabular-nums">{r.completedShifts}</TableCell>
                 <TableCell className="text-sm whitespace-nowrap text-muted-foreground">
-                  {r.lastShiftAt ? formatDistanceToNow(new Date(r.lastShiftAt), { addSuffix: true }) : "—"}
+                  {r.lastShiftAt ? <TimeAgo date={r.lastShiftAt} /> : "—"}
                 </TableCell>
                 <TableCell>
                   <StatusBadge kind="staff" status={r.status} />

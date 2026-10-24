@@ -1,10 +1,13 @@
-import { CalendarIcon, ChevronRightIcon, ClockIcon, FileCheckIcon, InboxIcon, MapPinIcon, WalletIcon } from "lucide-react";
+import { CalendarIcon, ChevronRightIcon, ClockIcon, FileCheckIcon, InboxIcon, MapPinIcon, UsersIcon, WalletIcon } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
+import { CheckInPanel } from "@/components/portal/check-in-panel";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { formatInZone, formatMoney } from "@/lib/format";
 import { FIELD_ROLE_NAMES } from "@/lib/roles";
+import { getSupervisedTeam } from "@/server/domain/attendance";
+import { getAttendanceStates, getHoursToReview } from "@/server/queries/portal";
 import { getPortalHome } from "@/server/queries/portal-home";
 import { requireStaff } from "@/server/session";
 
@@ -32,7 +35,15 @@ function TaskRow({ href, icon: Icon, label, count }: { href: string; icon: typeo
 
 export default async function PortalHome() {
   const viewer = await requireStaff();
-  const home = await getPortalHome(viewer.staff!.id);
+  const staffId = viewer.staff!.id;
+  const now = new Date();
+  const [home, hours, team] = await Promise.all([
+    getPortalHome(staffId, now),
+    getHoursToReview(staffId, now),
+    getSupervisedTeam(staffId, { from: new Date(now.getTime() - 12 * 3_600_000), to: new Date(now.getTime() + 18 * 3_600_000) }),
+  ]);
+  const attendance = home.next ? (await getAttendanceStates([home.next.bookingId], now)).get(home.next.bookingId) : undefined;
+  const teamIn = team.filter((m) => m.actual_start).length;
   const name = viewer.staff!.preferredName ?? viewer.staff!.firstName;
 
   return (
@@ -57,7 +68,24 @@ export default async function PortalHome() {
                 <MapPinIcon className="size-4 text-muted-foreground" />
                 {home.next.locationName}
               </p>
-              <Badge className="mt-3">{FIELD_ROLE_NAMES[home.next.role]}</Badge>
+              <div className="mt-3 flex items-center justify-between gap-2">
+                <Badge>{FIELD_ROLE_NAMES[home.next.role]}</Badge>
+                <Link href={`/portal/shifts/${home.next.bookingId}`} className="text-sm font-medium underline-offset-4 hover:underline">
+                  Shift details
+                </Link>
+              </div>
+              {attendance ? (
+                <div className="mt-4 border-t pt-4">
+                  <CheckInPanel
+                    bookingId={home.next.bookingId}
+                    state={attendance.state}
+                    opensAt={attendance.opensAt}
+                    checkedInAt={attendance.checkedInAt}
+                    timezone={home.next.timezone}
+                    requireLocation={attendance.requireLocation}
+                  />
+                </div>
+              ) : null}
             </div>
           </Card>
         ) : (
@@ -69,6 +97,21 @@ export default async function PortalHome() {
         )}
       </section>
 
+      {team.length ? (
+        <Link href="/portal/team">
+          <Card className="flex items-center gap-3 p-4 hover:bg-accent">
+            <UsersIcon className="size-5 text-muted-foreground" />
+            <div className="flex-1">
+              <p className="font-medium">My team</p>
+              <p className="text-sm text-muted-foreground">
+                {teamIn} of {team.length} checked in
+              </p>
+            </div>
+            <ChevronRightIcon className="size-4 text-muted-foreground" />
+          </Card>
+        </Link>
+      ) : null}
+
       <section aria-labelledby="to-do">
         <h2 id="to-do" className="mb-2 text-sm font-medium text-muted-foreground">
           To do
@@ -76,7 +119,7 @@ export default async function PortalHome() {
         <Card className="divide-y overflow-hidden">
           <TaskRow href="/portal/opportunities" icon={InboxIcon} label="New shift offers" count={home.openOffers} />
           <TaskRow href="/portal/schedule" icon={FileCheckIcon} label="Briefs to review" count={home.outstandingAcks} />
-          <TaskRow href="/portal/schedule" icon={ClockIcon} label="Timesheets to submit" count={home.pendingTimesheets} />
+          <TaskRow href="/portal/hours" icon={ClockIcon} label="Hours to submit" count={hours.length} />
           <Link href="/portal/availability" className="flex items-center gap-3 px-4 py-3.5 hover:bg-accent">
             <CalendarIcon className="size-5 text-muted-foreground" />
             <span className="flex-1 text-[15px]">Update my availability</span>

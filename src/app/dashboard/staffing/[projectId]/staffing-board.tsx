@@ -1,5 +1,5 @@
 "use client";
-import { formatDistanceToNow } from "date-fns";
+import { TimeAgo } from "@/components/app/time-ago";
 import { AlertTriangleIcon, MessageCircleQuestionIcon, SendIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
@@ -291,7 +291,7 @@ export function StaffingBoard({
                               {can.rates && (r.agreedRateCents ?? r.offeredRateCents) != null
                                 ? `${r.agreedRateCents != null ? "Agreed" : "Offered"} ${formatMoney((r.agreedRateCents ?? r.offeredRateCents)!)}/h`
                                 : cell.label}
-                              {r.respondedAt ? ` · replied ${formatDistanceToNow(new Date(r.respondedAt), { addSuffix: true })}` : ""}
+                              {r.respondedAt ? ` · replied $<TimeAgo date={r.respondedAt} />` : ""}
                               {r.lastQuestion ? <span className="mt-1 block text-foreground">“{r.lastQuestion}”</span> : null}
                               {r.overrideReason ? <span className="mt-1 block text-warning">Override: {r.overrideReason}</span> : null}
                               {r.cancelReason ? <span className="mt-1 block">{r.cancelledByStaff ? "They cancelled" : "Reason"}: {r.cancelReason}</span> : null}

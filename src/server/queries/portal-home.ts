@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, gt, inArray, isNull, notExists, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, gt, isNull, notExists, sql } from "drizzle-orm";
 import { db } from "@/server/db";
 import {
   bookings,
@@ -8,7 +8,6 @@ import {
   projectLocations,
   projects,
   shifts,
-  timesheets,
 } from "@/server/db/schema";
 
 // Everything the staff Home screen shows, scoped to one staff member.
@@ -32,15 +31,11 @@ export async function getPortalHome(staffId: string, now = new Date()) {
     .orderBy(asc(bookings.startsAt))
     .limit(4);
 
-  const [[offers], [pendingTimesheets], [outstandingAcks], [lastPayment]] = await Promise.all([
+  const [[offers], [outstandingAcks], [lastPayment]] = await Promise.all([
     db
       .select({ n: count() })
       .from(bookings)
       .where(and(eq(bookings.staffId, staffId), eq(bookings.status, "offered"))),
-    db
-      .select({ n: count() })
-      .from(timesheets)
-      .where(and(eq(timesheets.staffId, staffId), inArray(timesheets.status, ["not_started", "in_progress", "needs_review"]))),
     // Required documents on projects where I have a confirmed booking that I haven't acknowledged (current version).
     db
       .select({ n: sql<number>`count(distinct ${documents.id})::int` })
@@ -79,7 +74,6 @@ export async function getPortalHome(staffId: string, now = new Date()) {
     next: upcoming[0] ?? null,
     upcoming: upcoming.slice(1),
     openOffers: offers?.n ?? 0,
-    pendingTimesheets: pendingTimesheets?.n ?? 0,
     outstandingAcks: outstandingAcks?.n ?? 0,
     lastPayment: lastPayment ?? null,
   };

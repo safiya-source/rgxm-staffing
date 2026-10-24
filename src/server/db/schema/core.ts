@@ -817,13 +817,21 @@ export const timesheets = pgTable(
       .notNull()
       .references(() => shifts.id),
     status: timesheetStatus().notNull().default("not_started"),
-    // Actual = what was recorded; payable = what was authorised. Stored separately.
+    // Three layers, never collapsed into one (rule 19):
+    //  actual_*  — derived from attendance events; never edited by people
+    //  worked_*  — the times under review (staff corrections, supervisor and RGXM adjustments)
+    //  payable_minutes — what RGXM authorised for payment
     actualStart: tstz(),
     actualEnd: tstz(),
     actualMinutes: integer(),
+    workedStart: tstz(),
+    workedEnd: tstz(),
     breakMinutes: integer().notNull().default(0),
     payableMinutes: integer(),
+    flags: text().array().notNull().default(sql`'{}'::text[]`),
     staffNote: text(),
+    supervisorNote: text(),
+    reviewNote: text(),
     submittedAt: tstz(),
     verifiedBy: userRef(),
     verifiedAt: tstz(),

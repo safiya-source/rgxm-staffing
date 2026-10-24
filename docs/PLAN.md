@@ -334,7 +334,23 @@ Classification defaults to *unset*; payable rounding to the minute; no automatic
 ### Deviations / notes
 - **pg-boss was not needed**: the outbox processor above covers idempotent jobs with retry. Revisit if job volume grows.
 - **Supabase Storage adapter** is written against Supabase's documented REST API but has not been exercised against a live project. Local disk storage is used in development and tests.
-- Shift reminders and SMS remain Phase 2.
+- SMS remains Phase 2 (shift reminders by email/in-app arrived in M4).
 
-### Next: M4 — Attendance & Timesheets
-Check-in/out (optional location at check-in, offline queue), timesheets with staff corrections, Team Lead / AM verification, final approval with separation of duties, full adjustment history.
+### M4 — Attendance & Timesheets: delivered
+- **Check-in/out** from the staff Home screen and shift page. The window opens 60 minutes before the start (org setting) and closes at the scheduled end; check-out is allowed up to 12 hours after the end. Events are append-only, idempotent on a client event id, and stamped with server time when online.
+- **Location** is requested only at the moment of tapping, and only where the venue has "require location at check-in" turned on. A position outside the geofence (or no position) is flagged for review, never blocked. Nothing is tracked in the background.
+- **Offline**: a tap without a connection is kept on the phone (localStorage) with the device time, shown as "waiting to sync", and sent when the browser comes back online. Device times more than 2 minutes old are recorded as `offline_sync` and flagged. Future times and times older than 24 hours are rejected.
+- **Timesheets** keep three layers separately (rule 9): actual (from check-in/out), worked (what the person or a reviewer says they worked) and payable (approved). Every change to worked times or breaks writes a `timesheet_adjustments` row with old value, new value, reason, stage and who made it. Changing a time needs a reason; times are compared to the minute.
+- **Objective flags** for reviewers: late, left early, no check-in/out, recorded offline, outside venue radius, recorded by supervisor, times corrected, much longer than scheduled. Flags inform review; they never change pay on their own.
+- **Workflow**: staff review and submit their hours (Hours to submit list and shift page). Team Leads verify BAs/PAs and AMs verify everyone except other AMs on the same project, location and local date (My team page), with an optional recommended adjustment, or send hours back with a note. Supervisors can record a check-in/out with a required note when someone couldn't. RGXM reviews in Dashboard → Timesheets (views: to approve, not submitted, approved, all; bulk approve), can adjust before approval, record attendance, send back, mark a no-show (only for started shifts without attendance) and approve.
+- **Approval** (rule 7 + 8): nobody approves or verifies their own hours; approval needs the shift to have ended and worked times. Payable defaults to worked minus break (rounding from org settings); a different payable amount needs a reason. Approval completes the booking.
+- **After approval** (rule 10): the database rejects changes to approved hours unless they come through the correction workflow (transaction-local `rgxm.hours_correction` flag), which bumps the version and records a `post_approval_correction` adjustment and audit entry. Locked, exported and paid timesheets cannot be changed at all.
+- **Reminders** (`runSweeps`, run by the cron route before the outbox): a shift reminder for confirmed shifts starting within 24 hours, and a "submit your hours" reminder 30 minutes after a shift ends, each sent once (dedupe keys). Notifications for submitted, sent back and approved hours.
+- Tests: 136 Vitest (incl. attendance rules, window/order, idempotent offline sync, geofence, adjustments, SoD, approval, correction guard, no-shows, sweeps) and 26 Playwright E2E incl. check-in with geofence flag → staff correction → Team Lead verification → PM approval, and an offline check-in that syncs.
+
+### Notes carried into M5
+- Approval does **not** yet create payable items; that happens in M5 (payables from approved timesheets with the agreed-rate snapshot, contractor vs employee flows, payment batches that lock timesheets).
+- SMS reminders remain Phase 2. Service worker background sync is not used; the queue flushes when the app is open and online.
+- Supervisor check-in is per person (no "check in whole team" bulk action yet).
+
+### Next: M5 — Payments & Budget

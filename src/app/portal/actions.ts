@@ -9,7 +9,10 @@ import { FIELD_ROLES } from "@/lib/roles";
 import { recordAudit } from "@/server/audit";
 import { runAction } from "@/server/actions";
 import { db } from "@/server/db";
-import { messageThreads, notifications, staffProfiles, staffRoles, users } from "@/server/db/schema";
+import { bookings as bookingsTable, messageThreads, notifications, shifts as shiftsTable, staffProfiles, staffRoles, users } from "@/server/db/schema";
+import * as attendance from "@/server/domain/attendance";
+import { SeparationOfDutiesError } from "@/server/authz/permissions";
+import { isIsoDate, isLocalTime, shiftInstants, zonedToUtc } from "@/lib/time";
 import * as availability from "@/server/domain/availability";
 import * as bookingsDomain from "@/server/domain/bookings";
 import * as comms from "@/server/domain/comms";
@@ -261,4 +264,148 @@ export async function markStaffNotificationsReadAction(): Promise<void> {
     .set({ readAt: new Date() })
     .where(and(eq(notifications.userId, viewer.userId), isNull(notifications.readAt)));
   revalidatePath("/portal", "layout");
+}
+
+// ─── Attendance & timesheets ────────────────────────────────────────────────
+
+const attendanceSchema = z.object({
+  type: z.enum(["check_in", "check_out"]),
+  clientEventId: z.string().min(8).max(80),
+  occurredAt: z.string().datetime().optional(),
+  location: z.object({ lat: z.number().min(-90).max(90), lng: z.number().min(-180).max(180), accuracy: z.number().nonnegative().nullable() }).nullable().optional(),
+});
+
+function attendanceError<T>(err: unknown): ActionResult<T> | null {
+  if (err instanceof attendance.AttendanceError || err instanceof SeparationOfDutiesError) return { ok: false, error: err.message };
+  return null;
+}
+
+/** Check in/out. Online taps use server time; queued offline taps carry their original device time. */
+export async function recordMyAttendanceAction(bookingId: string, input: z.infer<typeof attendanceSchema>): Promise<ActionResult<{ duplicate: boolean; withinGeofence: boolean | null }>> {
+  return runAction(async () => {
+    const me = await requireStaffViewer();
+    const parsed = attendanceSchema.parse(input);
+    try {
+      const res = await attendance.recordAttendance({ kind: "staff", ...me }, z.string().uuid().parse(bookingId), {
+        type: parsed.type,
+        clientEventId: parsed.clientEventId,
+        occurredAt: parsed.occurredAt ? new Date(parsed.occurredAt) : undefined,
+        location: parsed.location ?? null,
+      });
+      revalidatePath("/portal", "layout");
+      return {
+        ok: true,
+        message: parsed.type === "check_in" ? "You're checked in. Have a great shift!" : "Checked out. Please review your hours.",
+        data: { duplicate: res.duplicate, withinGeofence: res.duplicate ? null : res.withinGeofence },
+      };
+    } catch (err) {
+      const f = attendanceError<{ duplicate: boolean; withinGeofence: boolean | null }>(err);
+      if (f) return f;
+      throw err;
+    }
+  });
+}
+
+const timeEdit = z.object({
+  date: z.string(),
+  start: z.string(),
+  end: z.string(),
+  breakMinutes: z.coerce.number().int().min(0).max(600),
+  note: z.string().max(1000).optional(),
+  reason: z.string().max(500).default(""),
+});
+
+async function myTimesheet(bookingId: string, staffId: string) {
+  const [b] = await db
+    .select({ staffId: bookingsTable.staffId, timezone: shiftsTable.timezone })
+    .from(bookingsTable)
+    .innerJoin(shiftsTable, eq(shiftsTable.id, bookingsTable.shiftId))
+    .where(eq(bookingsTable.id, z.string().uuid().parse(bookingId)));
+  if (!b || b.staffId !== staffId) throw new ForbiddenError("Shift not found.");
+  return { timesheet: await attendance.ensureTimesheet(db, bookingId), timezone: b.timezone };
+}
+
+export async function saveMyHoursAction(bookingId: string, input: z.infer<typeof timeEdit>, submit: boolean): Promise<ActionResult> {
+  return runAction(async () => {
+    const me = await requireStaffViewer();
+    const v = timeEdit.parse(input);
+    try {
+      const { timesheet, timezone } = await myTimesheet(bookingId, me.staffId);
+      if (!isIsoDate(v.date) || !isLocalTime(v.start) || !isLocalTime(v.end)) return { ok: false, error: "Check your start and finish times." };
+      if (v.start === v.end) return { ok: false, error: "Your finish time must be after your start time." };
+      const { startsAt, endsAt } = shiftInstants(v.date, v.start, v.end, timezone);
+      await attendance.staffEditTimesheet(me, timesheet.id, { workedStart: startsAt, workedEnd: endsAt, breakMinutes: v.breakMinutes, note: v.note ?? null }, v.reason);
+      if (submit) await attendance.submitTimesheet(me, timesheet.id);
+    } catch (err) {
+      const f = attendanceError(err);
+      if (f) return f;
+      throw err;
+    }
+    kickOutbox();
+    revalidatePath("/portal", "layout");
+    return { ok: true, message: submit ? "Hours submitted. Thanks!" : "Saved." };
+  });
+}
+
+// Supervisors (Team Leads / Activation Managers) ─────────────────────────────
+
+export async function supervisorRecordAction(bookingId: string, input: { type: "check_in" | "check_out"; date: string; time: string; note: string }): Promise<ActionResult> {
+  return runAction(async () => {
+    const me = await requireStaffViewer();
+    const [b] = await db.select({ timezone: shiftsTable.timezone }).from(bookingsTable).innerJoin(shiftsTable, eq(shiftsTable.id, bookingsTable.shiftId)).where(eq(bookingsTable.id, z.string().uuid().parse(bookingId)));
+    if (!b || !isIsoDate(input.date) || !isLocalTime(input.time)) return { ok: false, error: "Check the date and time." };
+    try {
+      await attendance.recordAttendance({ kind: "supervisor", ...me }, bookingId, { type: z.enum(["check_in", "check_out"]).parse(input.type), occurredAt: zonedToUtc(input.date, input.time, b.timezone), note: input.note });
+    } catch (err) {
+      const f = attendanceError(err);
+      if (f) return f;
+      throw err;
+    }
+    revalidatePath("/portal/team");
+    return { ok: true, message: "Recorded." };
+  });
+}
+
+export async function supervisorVerifyAction(bookingId: string, input: { date: string; start: string; end: string; breakMinutes: number; reason: string; note: string; changed: boolean }): Promise<ActionResult> {
+  return runAction(async () => {
+    const me = await requireStaffViewer();
+    const [b] = await db.select({ timezone: shiftsTable.timezone }).from(bookingsTable).innerJoin(shiftsTable, eq(shiftsTable.id, bookingsTable.shiftId)).where(eq(bookingsTable.id, z.string().uuid().parse(bookingId)));
+    if (!b || !(await attendance.isSupervisorOf(db, me.staffId, bookingId))) return { ok: false, error: "You don't supervise this person on this shift." };
+    try {
+      const t = await attendance.ensureTimesheet(db, bookingId);
+      let changes;
+      if (input.changed) {
+        if (!isIsoDate(input.date) || !isLocalTime(input.start) || !isLocalTime(input.end)) return { ok: false, error: "Check the times." };
+        if (input.start === input.end) return { ok: false, error: "The finish time must be after the start time." };
+        const { startsAt, endsAt } = shiftInstants(input.date, input.start, input.end, b.timezone);
+        changes = { workedStart: startsAt, workedEnd: endsAt, breakMinutes: Number(input.breakMinutes) };
+      }
+      await attendance.supervisorVerify(me, t.id, { changes, reason: input.reason, note: input.note });
+    } catch (err) {
+      const f = attendanceError(err);
+      if (f) return f;
+      throw err;
+    }
+    kickOutbox();
+    revalidatePath("/portal/team");
+    return { ok: true, message: "Verified and sent to RGXM for approval." };
+  });
+}
+
+export async function supervisorSendBackAction(bookingId: string, reason: string): Promise<ActionResult> {
+  return runAction(async () => {
+    const me = await requireStaffViewer();
+    if (!(await attendance.isSupervisorOf(db, me.staffId, z.string().uuid().parse(bookingId)))) return { ok: false, error: "You don't supervise this person on this shift." };
+    try {
+      const t = await attendance.ensureTimesheet(db, bookingId);
+      await attendance.sendBack({ kind: "supervisor", ...me }, t.id, reason);
+    } catch (err) {
+      const f = attendanceError(err);
+      if (f) return f;
+      throw err;
+    }
+    kickOutbox();
+    revalidatePath("/portal/team");
+    return { ok: true, message: "Sent back with your note." };
+  });
 }

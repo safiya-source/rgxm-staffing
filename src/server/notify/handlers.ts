@@ -1,6 +1,6 @@
 // Outbox event → notifications. Handlers re-read current data, so a retried event reflects the
 // latest state, and every notification uses a dedupe key derived from the event id.
-import { and, count, eq, gte, inArray } from "drizzle-orm";
+import { and, count, eq, gte, inArray, sql } from "drizzle-orm";
 import { formatInZone, formatMoney } from "@/lib/format";
 import { FIELD_ROLE_NAMES, type FieldRole } from "@/lib/roles";
 import { db } from "@/server/db";
@@ -15,6 +15,7 @@ import {
   projects,
   shifts,
   staffProfiles,
+  timesheets,
   userRoles,
   users,
 } from "@/server/db/schema";
@@ -85,7 +86,169 @@ const when = (b: Pick<LoadedBooking, "startsAt" | "endsAt" | "timezone">) =>
   `${formatInZone(b.startsAt, b.timezone, "EEE MMM d, h:mm a")} – ${formatInZone(b.endsAt, b.timezone, "h:mm a")}`;
 const roleName = (r: string) => FIELD_ROLE_NAMES[r as FieldRole] ?? r;
 
+/** Users of TL/AM staff who supervise this booking on site. */
+async function supervisorUserIds(bookingId: string) {
+  const r = await db.execute<{ user_id: string }>(sql`
+    select distinct sp.user_id from bookings b
+    join shifts s on s.id = b.shift_id
+    join bookings sb on sb.project_id = b.project_id and sb.status in ('confirmed', 'completed') and sb.staff_id <> b.staff_id
+      and ((sb.role = 'AM' and b.role <> 'AM') or (sb.role = 'TL' and b.role in ('BA', 'PA')))
+    join shifts ss on ss.id = sb.shift_id and ss.location_id = s.location_id
+      and (ss.starts_at at time zone ss.timezone)::date = (s.starts_at at time zone s.timezone)::date
+    join staff_profiles sp on sp.id = sb.staff_id
+    where b.id = ${bookingId} and sp.user_id is not null`);
+  return r.rows.map((x) => x.user_id);
+}
+
+async function timesheetContext(timesheetId: string) {
+  const [t] = await db
+    .select({ id: timesheets.id, bookingId: timesheets.bookingId, payableMinutes: timesheets.payableMinutes, reviewNote: timesheets.reviewNote })
+    .from(timesheets)
+    .where(eq(timesheets.id, timesheetId));
+  if (!t) return null;
+  const [b] = await loadBookings([t.bookingId]);
+  return b ? { t, b } : null;
+}
+
+const hours = (m: number) => `${Math.floor(m / 60)}h${m % 60 ? ` ${String(m % 60).padStart(2, "0")}m` : ""}`;
+
 export const handlers: Record<string, Handler> = {
+  "shift.reminder": async (payload, eventId) => {
+    const [b] = await loadBookings([payload.bookingId as string]);
+    if (!b || b.status !== "confirmed" || b.startsAt < new Date()) return;
+    const person = await staffRecipient(b.staffId);
+    const [{ pending }] = (await db.execute<{ pending: number }>(sql`
+      select count(*)::int as pending from documents d
+      where d.project_id = ${b.projectId} and d.requires_ack and d.archived_at is null
+        and (d.shift_id is null or d.shift_id = ${b.shiftId})
+        and not exists (select 1 from document_acknowledgements a where a.document_id = d.id and a.document_version = d.version and a.staff_id = ${b.staffId})`)).rows as [{ pending: number }];
+    await notify({
+      dedupeKey: `n:${eventId}`,
+      userId: person.userId,
+      type: "shift.reminder",
+      title: `Reminder: ${b.projectName}, ${formatInZone(b.startsAt, b.timezone, "EEE h:mm a")}`,
+      body: pending ? `${pending} brief${pending === 1 ? "" : "s"} still to review.` : b.locationName,
+      href: `/portal/shifts/${b.id}`,
+      email: {
+        to: person.email,
+        subject: `Reminder: your shift ${formatInZone(b.startsAt, b.timezone, "EEEE 'at' h:mm a")}`,
+        ...detailEmail({
+          heading: `See you soon, ${person.name}`,
+          intro: pending
+            ? `Please review ${pending} briefing document${pending === 1 ? "" : "s"} before your shift.`
+            : "Here are your shift details. Check in from the staff portal when you arrive.",
+          details: [
+            ["Project", b.projectName],
+            ["When", when(b)],
+            ["Where", [b.locationName, b.address].filter(Boolean).join(", ")],
+            ...(b.reportingLocation ? ([["Report to", b.reportingLocation]] as [string, string][]) : []),
+            ...(b.uniform ? ([["Uniform", b.uniform]] as [string, string][]) : []),
+          ],
+          actionLabel: "Open shift",
+          url: url(`/portal/shifts/${b.id}`),
+        }),
+      },
+    });
+  },
+
+  "timesheet.reminder": async (payload, eventId) => {
+    const [b] = await loadBookings([payload.bookingId as string]);
+    if (!b) return;
+    const [t] = await db.select({ status: timesheets.status }).from(timesheets).where(eq(timesheets.bookingId, b.id));
+    if (t && !["not_started", "in_progress", "needs_review"].includes(t.status)) return;
+    const person = await staffRecipient(b.staffId);
+    await notify({
+      dedupeKey: `n:${eventId}`,
+      userId: person.userId,
+      type: "timesheet.reminder",
+      title: `Please confirm your hours: ${b.projectName}`,
+      body: when(b),
+      href: `/portal/shifts/${b.id}`,
+      email: {
+        to: person.email,
+        subject: `Confirm your hours for ${b.projectName}, ${formatInZone(b.startsAt, b.timezone, "MMM d")}`,
+        ...detailEmail({
+          heading: `Thanks for working, ${person.name}`,
+          intro: "Please review your start and finish times, add any unpaid break, and submit. It only takes a moment.",
+          details: [
+            ["Project", b.projectName],
+            ["Shift", when(b)],
+          ],
+          actionLabel: "Review my hours",
+          url: url(`/portal/shifts/${b.id}`),
+        }),
+      },
+    });
+  },
+
+  "timesheet.submitted": async (payload, eventId) => {
+    const c = await timesheetContext(payload.timesheetId as string);
+    if (!c) return;
+    const person = await staffRecipient(c.b.staffId);
+    const supervisors = await supervisorUserIds(c.b.id);
+    for (const userId of supervisors) {
+      await notify({
+        dedupeKey: `n:${eventId}:${userId}`,
+        userId,
+        type: "timesheet.submitted",
+        title: `${person.name} submitted hours to verify`,
+        body: `${c.b.projectName} · ${formatInZone(c.b.startsAt, c.b.timezone, "MMM d")}`,
+        href: "/portal/team",
+      });
+    }
+    if (!supervisors.length) {
+      for (const userId of await projectTeam(c.b.projectId)) {
+        await notify({
+          dedupeKey: `n:${eventId}:${userId}`,
+          userId,
+          type: "timesheet.submitted",
+          title: `${person.name} submitted hours`,
+          body: `${c.b.projectName} · ${formatInZone(c.b.startsAt, c.b.timezone, "MMM d")}`,
+          href: `/dashboard/timesheets/${c.t.id}`,
+        });
+      }
+    }
+  },
+
+  "timesheet.needs_review": async (payload, eventId) => {
+    const c = await timesheetContext(payload.timesheetId as string);
+    if (!c) return;
+    const person = await staffRecipient(c.b.staffId);
+    await notify({
+      dedupeKey: `n:${eventId}`,
+      userId: person.userId,
+      type: "timesheet.needs_review",
+      title: `Please check your hours: ${c.b.projectName}`,
+      body: c.t.reviewNote ?? undefined,
+      href: `/portal/shifts/${c.b.id}`,
+      email: {
+        to: person.email,
+        subject: `Please check your hours for ${c.b.projectName}`,
+        ...detailEmail({
+          heading: `Hi ${person.name}, your hours need a quick check`,
+          intro: c.t.reviewNote ?? "Please review your times and resubmit.",
+          details: [["Shift", when(c.b)]],
+          actionLabel: "Review my hours",
+          url: url(`/portal/shifts/${c.b.id}`),
+        }),
+      },
+    });
+  },
+
+  "timesheet.approved": async (payload, eventId) => {
+    const c = await timesheetContext(payload.timesheetId as string);
+    if (!c || c.t.payableMinutes == null) return;
+    const person = await staffRecipient(c.b.staffId);
+    await notify({
+      dedupeKey: `n:${eventId}`,
+      userId: person.userId,
+      type: "timesheet.approved",
+      title: `${payload.corrected ? "Hours corrected" : "Hours approved"}: ${hours(c.t.payableMinutes)}`,
+      body: `${c.b.projectName} · ${formatInZone(c.b.startsAt, c.b.timezone, "MMM d")}`,
+      href: `/portal/shifts/${c.b.id}`,
+    });
+  },
+
   "offer.sent": async (payload, eventId) => {
     const list = await loadBookings(payload.bookingIds as string[]);
     const open = list.filter((b) => b.status === "offered");
