@@ -10,6 +10,9 @@ import {
   documents,
   messages,
   messageThreads,
+  payableItems,
+  paymentBatchItems,
+  paymentBatches,
   projectLocations,
   projectMembers,
   projects,
@@ -246,6 +249,43 @@ export const handlers: Record<string, Handler> = {
       title: `${payload.corrected ? "Hours corrected" : "Hours approved"}: ${hours(c.t.payableMinutes)}`,
       body: `${c.b.projectName} · ${formatInZone(c.b.startsAt, c.b.timezone, "MMM d")}`,
       href: `/portal/shifts/${c.b.id}`,
+    });
+  },
+
+  "payment.paid": async (payload, eventId) => {
+    const rows = await db
+      .select({ totalCents: paymentBatchItems.amountCents, currency: payableItems.currency, paidAt: paymentBatchItems.paidAt, isDemo: paymentBatches.isDemo })
+      .from(paymentBatchItems)
+      .innerJoin(payableItems, eq(payableItems.id, paymentBatchItems.payableItemId))
+      .innerJoin(paymentBatches, eq(paymentBatches.id, paymentBatchItems.batchId))
+      .where(and(eq(paymentBatchItems.batchId, payload.batchId as string), eq(payableItems.staffId, payload.staffId as string), eq(payableItems.status, "paid")));
+    if (!rows.length) return;
+    const total = rows.reduce((n, r) => n + r.totalCents, 0);
+    const amount = formatMoney(total, rows[0]!.currency);
+    const paidOn = rows[0]!.paidAt ? formatInZone(rows[0]!.paidAt, "America/Toronto", "MMMM d, yyyy") : "today";
+    const person = await staffRecipient(payload.staffId as string);
+    await notify({
+      dedupeKey: `n:${eventId}`,
+      userId: person.userId,
+      type: "payment.paid",
+      title: `Payment sent: ${amount}`,
+      body: `${rows.length} shift${rows.length === 1 ? "" : "s"} · paid ${paidOn}`,
+      href: "/portal/payments",
+      email: {
+        to: person.email,
+        subject: `RGXM payment sent: ${amount}`,
+        ...detailEmail({
+          heading: `Your payment is on its way, ${person.name}`,
+          intro: "RGXM has recorded a payment for your approved shifts. Depending on your bank it can take a few business days to arrive.",
+          details: [
+            ["Amount", amount],
+            ["Shifts", String(rows.length)],
+            ["Paid on", paidOn],
+          ],
+          actionLabel: "See payment details",
+          url: url("/portal/payments"),
+        }),
+      },
     });
   },
 

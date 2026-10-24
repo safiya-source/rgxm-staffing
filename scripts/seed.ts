@@ -9,6 +9,7 @@ import { hashPassword } from "better-auth/crypto";
 import { eq } from "drizzle-orm";
 import { expandShiftPattern } from "../src/lib/time";
 import { db } from "../src/server/db";
+import { seedCompletedProject } from "./seed-completed";
 import {
   accounts,
   availabilityExceptions,
@@ -319,7 +320,9 @@ async function main() {
     );
   });
 
-  console.log(`Demo data seeded.
+  const payables = await seedCompletedProject(DEMO_DOMAIN);
+
+  console.log(`Demo data seeded (${payables} approved demo payables on the finished Oreo project).
   Team sign-in (password: ${DEMO_PASSWORD}):
     admin@${DEMO_DOMAIN}        System Administrator
     pm@${DEMO_DOMAIN}           Project Manager

@@ -20,7 +20,8 @@ export type OutboxEvent =
   | { type: "timesheet.reminder"; payload: { bookingId: string } }
   | { type: "timesheet.submitted"; payload: { timesheetId: string } }
   | { type: "timesheet.needs_review"; payload: { timesheetId: string } }
-  | { type: "timesheet.approved"; payload: { timesheetId: string; corrected?: boolean } };
+  | { type: "timesheet.approved"; payload: { timesheetId: string; corrected?: boolean } }
+  | { type: "payment.paid"; payload: { batchId: string; staffId: string } };
 
 export async function enqueue(tx: Tx | typeof db, event: OutboxEvent & { dedupeKey?: string }) {
   await tx

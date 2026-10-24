@@ -16,6 +16,7 @@ import {
   timesheets,
 } from "@/server/db/schema";
 import { enqueue } from "@/server/notify/outbox";
+import { createPayableForTimesheet, replacePayableAfterCorrection } from "./payments";
 import { getOrgSettings } from "@/server/settings";
 import {
   canMoveTimesheet,
@@ -423,6 +424,8 @@ export async function approveTimesheet(actorId: string, timesheetId: string, inp
       await tx.update(bookings).set({ status: "completed" }).where(eq(bookings.id, b.id));
       await tx.insert(bookingStatusHistory).values({ bookingId: b.id, fromStatus: "confirmed", toStatus: "completed", actorId, reason: "Hours approved" });
     }
+    // Approval creates the immutable payable at the agreed-rate snapshot.
+    await createPayableForTimesheet(tx, t.id, actorId);
     await enqueue(tx, { type: "timesheet.approved", payload: { timesheetId }, dedupeKey: `timesheet.approved:${timesheetId}` });
   });
 }
@@ -453,6 +456,7 @@ export async function correctApprovedTimesheet(actorId: string, timesheetId: str
       stage: "post_approval_correction",
       actorId,
     });
+    await replacePayableAfterCorrection(tx, t.id, actorId, input.reason.trim());
     await recordAudit(
       { actorId, action: "timesheet.correct", entityType: "timesheet", entityId: t.id, projectId: t.projectId, before: { payableMinutes: t.payableMinutes }, after: { payableMinutes: input.payableMinutes }, reason: input.reason },
       tx,

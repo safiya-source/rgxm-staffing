@@ -17,6 +17,7 @@ export default async function ProjectLayout({ children, params }: LayoutProps<"/
   if (!header) notFound();
   const scope = (await loadProjectScopes([id])).get(id)!;
   const canEdit = canOnProject(toActor(viewer), "project.edit", scope);
+  const canBudget = canOnProject(toActor(viewer), "budget.view", scope);
   const p = header.project;
 
   return (
@@ -36,7 +37,7 @@ export default async function ProjectLayout({ children, params }: LayoutProps<"/
         </div>
         {canEdit ? <ProjectStatusControl projectId={p.id} status={p.status} /> : null}
       </div>
-      <ProjectTabs projectId={p.id} />
+      <ProjectTabs projectId={p.id} showBudget={canBudget} />
       <div className="pt-6">{children}</div>
     </>
   );

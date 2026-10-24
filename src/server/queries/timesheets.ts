@@ -1,5 +1,5 @@
 import { and, asc, desc, eq, gte, inArray, isNull, lt, ne, or, sql, type SQL } from "drizzle-orm";
-import { resolveGrant, type Actor } from "@/server/authz/permissions";
+import { resolveGrant, type Actor, type Permission } from "@/server/authz/permissions";
 import { db } from "@/server/db";
 import {
   attendanceEvents,
@@ -15,8 +15,13 @@ import {
 } from "@/server/db/schema";
 
 /** Project ids an actor may see timesheets for, or null for all. */
-export async function timesheetProjectScope(actor: Actor): Promise<string[] | null> {
-  const grant = resolveGrant(actor.roles, "timesheet.view");
+export function timesheetProjectScope(actor: Actor) {
+  return projectScope(actor, "timesheet.view");
+}
+
+/** null = every project; otherwise the projects this person is assigned to (empty = none). */
+export async function projectScope(actor: Actor, permission: Permission): Promise<string[] | null> {
+  const grant = resolveGrant(actor.roles, permission);
   if (grant === "all") return null;
   if (grant !== "assigned") return [];
   const rows = await db

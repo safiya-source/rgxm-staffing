@@ -3,13 +3,14 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 
-export function ProjectTabs({ projectId }: { projectId: string }) {
+export function ProjectTabs({ projectId, showBudget }: { projectId: string; showBudget: boolean }) {
   const pathname = usePathname();
   const base = `/dashboard/projects/${projectId}`;
   const tabs = [
     { href: base, label: "Overview" },
     { href: `${base}/shifts`, label: "Shifts" },
     { href: `${base}/comms`, label: "Briefs & updates" },
+    ...(showBudget ? [{ href: `${base}/budget`, label: "Budget" }] : []),
     { href: `${base}/setup`, label: "Setup" },
   ];
   return (

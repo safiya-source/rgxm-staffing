@@ -353,4 +353,21 @@ Classification defaults to *unset*; payable rounding to the minute; no automatic
 - SMS reminders remain Phase 2. Service worker background sync is not used; the queue flushes when the app is open and online.
 - Supervisor check-in is per person (no "check in whole team" bulk action yet).
 
-### Next: M5 — Payments & Budget
+### M5 — Payments & Budget: delivered
+- **Payables on approval** (rule 6): approving hours creates one immutable payable at the booking's agreed-rate snapshot: `round_half_up(payable_minutes × rate / 60)` to the cent, stored with its inputs and a calculation version (`base-v1`). The DB rejects edits to amounts, deletes, and a payable whose minutes don't match the timesheet's approved minutes. A post-approval correction (before batching) voids the old payable and creates a new one.
+- **Contractor vs employee** (rule 15): each payable snapshots the person's classification. Contractors and employees go into separate batches (`contractor` / `payroll`); "unset" can't be batched. If someone is (re)classified after approval, "Refresh classifications" voids and recreates their unbatched payables with the new classification (amounts unchanged, audited).
+- **Batches**: Finance picks ready payables by type (optionally limited to a semi-monthly pay period) → draft batch, which locks the timesheets. A **second person** must approve (domain check + DB check constraint). Items can be removed from a draft with a reason. Demo payables only go into demo batches.
+- **Exports**: generic CSV, QuickBooks-style bills CSV (contractors only; column names follow QBO's bill import, account name to be confirmed by RGXM's accountant) and .xlsx. CSV cells are formula-safe. Each file is stored privately with a SHA-256 fingerprint; there is one live export per batch, so a second file can't be generated until the first is voided with a reason. Re-downloads return the same bytes (fingerprint checked) and are audited. Demo exports say "DEMO - DO NOT PAY" in the file name and on every row.
+- **Mark paid**: records the payment date; items that bounced are marked failed with a reason and can go into a later batch. Payables and timesheets move to paid, and each person gets an in-app + email notification (suppressed for demo/.test addresses). Paid and void batches are final (DB trigger). Unpaid batches can be voided with a reason, returning items to ready-to-pay.
+- **Staff portal → Pay**: each approved shift with hours × rate, amount, status (approved, in a payment run, being paid, paid with date, payment issue), "coming to you" and "paid this year".
+- **Project → Budget tab** (`budget.view`): budget, actual (approved payables), pending approval (ended shifts, estimated from hours under review or the schedule), committed (upcoming confirmed shifts), forecast and variance, by role, location and date.
+- **Employee review hints** (no pay changes): payroll items under 3 hours or in a week over 44 hours are flagged for review against the ESA. Payroll exports carry gross hours and pay only; deductions and vacation pay belong to the payroll provider.
+- Demo seed now includes a finished project (Oreo Cookie Truck, Oct 10–11) whose hours were approved through the real workflow, giving 10 demo payables across contractor, employee and unset.
+- Tests: 154 Vitest (pay rounding, periods incl. leap years, state machines, ESA hints, export files, payable immutability, correction replacement, classification refresh, batch separation, four-eyes, one-live-export, supersede, paid/failed, void, DB guards) and 28 Playwright E2E incl. batch → second-person approval → export → mark paid → staff see "Paid" → budget.
+
+### Notes carried into M6
+- Not built: PDF payment statements, self-billing invoices / GST-HST (Phase 2, needs accountant sign-off), expense claims, disputes workflow, accounting-system API sync, payment-provider integration. Nothing in the platform moves money.
+- The QuickBooks-style CSV and payroll CSV layouts are unverified against RGXM's actual accounting/payroll setup.
+- `npm audit`: `uuid` (via ExcelJS; the advisory affects v3/v5/v6 with a caller-supplied buffer, ExcelJS uses v4) and `esbuild` (dev server, via drizzle-kit) are moderate and not exploitable in how they're used here; revisit in M6.
+
+### Next: M6 — Hardening

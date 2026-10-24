@@ -7,14 +7,16 @@ Staffing, scheduling, attendance and payments for RGXM's experiential activation
 
 See [`docs/PLAN.md`](docs/PLAN.md) for the product plan, architecture, data model and milestones.
 
-> **Status: Milestones 1–4.** Authentication, roles and permissions, the database with integrity rules,
+> **Status: Milestones 1–5.** Authentication, roles and permissions, the database with integrity rules,
 > staff registration and availability, the talent database (search, profiles, rates history, lists,
 > CSV import/export), projects (locations, requirements, team) and scheduling (bulk shifts, calendar,
 > drag-and-drop), offers and booking (eligibility, responses, confirmation with conflict checks, waitlist),
 > briefs with acknowledgement tracking, announcements, messaging and email/in-app notifications,
 > check-in/out (optional location, offline queue) and timesheets (staff corrections, Team Lead/AM
-> verification, approval with separation of duties, post-approval corrections) all work.
-> Payments, budgets and reports (M5 onward) are labelled as planned in the UI. **Not production-ready.**
+> verification, approval with separation of duties, post-approval corrections), payables at the agreed
+> rate, contractor/payroll batches with second-person approval, one-time fingerprinted CSV/XLSX exports,
+> paid status for staff and project budgets all work. The platform never moves money; exports are
+> imported elsewhere. Reports (Phase 2) are labelled as planned in the UI. **Not production-ready.**
 > See "Before production" below.
 
 ## Stack

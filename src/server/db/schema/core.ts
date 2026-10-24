@@ -951,6 +951,8 @@ export const paymentBatches = pgTable(
     type: batchType().notNull(),
     payPeriodId: uuid().references(() => payPeriods.id),
     status: batchStatus().notNull().default("draft"),
+    // Demo payables only go into demo batches; their exports are marked "DEMO - DO NOT PAY".
+    isDemo: boolean().notNull().default(false),
     totalCents: cents().notNull().default(0),
     currency: currency(),
     createdBy: userRef().notNull(),

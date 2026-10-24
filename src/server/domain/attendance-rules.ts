@@ -106,8 +106,9 @@ const T: Record<TimesheetStatus, Partial<Record<TimesheetStatus, TimesheetActor[
   supervisor_verified: { needs_review: ["rgxm"], approved: ["rgxm"] },
   // Approved hours change only via the post-approval correction workflow (no status change).
   approved: { locked: ["system"] },
-  locked: { exported: ["system"] },
-  exported: { paid: ["system"] },
+  // Removed from a draft batch, or the batch was voided: back to approved (hours unchanged).
+  locked: { exported: ["system"], approved: ["system"] },
+  exported: { paid: ["system"], approved: ["system"] },
   paid: {},
 };
 

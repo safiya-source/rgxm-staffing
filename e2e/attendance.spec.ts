@@ -148,6 +148,11 @@ test("check-in/out → submit hours → Team Lead verifies → PM approves", asy
   const adj = await pool.query("select field, stage, reason from timesheet_adjustments a join timesheets t on t.id = a.timesheet_id where t.booking_id = $1", [baBooking]);
   expect(adj.rows).toContainEqual({ field: "worked_start", stage: "staff_correction", reason: "Was on site at the start, forgot to tap in" });
 
+  // Approval created the payable at the agreed rate ($25/h).
+  const payable = (await pool.query("select status, rate_cents, total_cents::int, payable_minutes from payable_items where timesheet_id = (select id from timesheets where booking_id = $1)", [baBooking])).rows[0];
+  expect(payable).toMatchObject({ status: "pending", rate_cents: 2500, payable_minutes: ts.payable_minutes });
+  expect(payable.total_cents).toBe(Math.floor((ts.payable_minutes * 2500 + 30) / 60));
+
   // Every change on the way is in the history: staff edit, supervisor verification, approval.
   const hist = await pool.query(
     "select a.action from audit_log a join timesheets t on t.id::text = a.entity_id::text where t.booking_id = $1 order by a.created_at",
