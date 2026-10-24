@@ -1,4 +1,5 @@
 "use server";
+import { rateLimit } from "@/server/rate-limit";
 import { and, eq, isNull } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -157,6 +158,7 @@ function friendly<T = unknown>(err: unknown): ActionResult<T> | null {
 export async function respondToOfferAction(bookingId: string, response: "interested" | "unavailable" | "more_info", message?: string): Promise<ActionResult> {
   return runAction(async () => {
     const me = await requireStaffViewer();
+    await rateLimit("offer.respond", me.userId);
     const r = z.enum(["interested", "unavailable", "more_info"]).parse(response);
     try {
       await bookingsDomain.respondToOffer(me, z.string().uuid().parse(bookingId), r, message?.trim() || null);
@@ -179,6 +181,7 @@ export async function respondToOfferAction(bookingId: string, response: "interes
 export async function respondToAllAction(bookingIds: string[], response: "interested" | "unavailable"): Promise<ActionResult> {
   return runAction(async () => {
     const me = await requireStaffViewer();
+    await rateLimit("offer.respond", me.userId);
     const ids = z.array(z.string().uuid()).min(1).max(60).parse(bookingIds);
     const r = z.enum(["interested", "unavailable"]).parse(response);
     let failed = 0;
@@ -232,6 +235,7 @@ export async function acknowledgeDocumentAction(documentId: string): Promise<Act
 export async function sendMessageToRgxmAction(input: { threadId?: string; projectId?: string | null; body: string }): Promise<ActionResult<{ threadId: string }>> {
   return runAction(async () => {
     const me = await requireStaffViewer();
+    await rateLimit("message.send", me.userId);
     let threadId = input.threadId;
     if (threadId) {
       const [t] = await db
@@ -241,6 +245,11 @@ export async function sendMessageToRgxmAction(input: { threadId?: string; projec
       if (!t) throw new ForbiddenError("Conversation not found.");
     } else {
       const projectId = input.projectId ? z.string().uuid().parse(input.projectId) : null;
+      if (projectId) {
+        // Only projects the person has been offered or booked on.
+        const [b] = await db.select({ id: bookingsTable.id }).from(bookingsTable).where(and(eq(bookingsTable.projectId, projectId), eq(bookingsTable.staffId, me.staffId))).limit(1);
+        if (!b) throw new ForbiddenError("Project not found.");
+      }
       threadId = (await comms.getOrCreateThread(db, me.staffId, projectId)).id;
     }
     try {
@@ -284,6 +293,7 @@ function attendanceError<T>(err: unknown): ActionResult<T> | null {
 export async function recordMyAttendanceAction(bookingId: string, input: z.infer<typeof attendanceSchema>): Promise<ActionResult<{ duplicate: boolean; withinGeofence: boolean | null }>> {
   return runAction(async () => {
     const me = await requireStaffViewer();
+    await rateLimit("attendance.record", me.userId);
     const parsed = attendanceSchema.parse(input);
     try {
       const res = await attendance.recordAttendance({ kind: "staff", ...me }, z.string().uuid().parse(bookingId), {

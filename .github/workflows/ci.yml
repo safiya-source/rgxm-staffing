@@ -46,6 +46,9 @@ jobs:
       - name: Migrate and seed
         run: npm run db:migrate && npm run db:seed
       - run: npm run build
+        env:
+          # The build runs with NODE_ENV=production; CI has no mail provider.
+          ALLOW_LOG_MAIL_IN_PRODUCTION: "on"
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
       - name: End-to-end tests

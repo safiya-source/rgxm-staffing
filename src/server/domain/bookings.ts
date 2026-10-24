@@ -122,6 +122,8 @@ export async function sendOffers(
     skipConflicts?: boolean;
     /** When given, only these (shift, person) pairs are offered — e.g. skipping days someone marked unavailable. */
     pairs?: { shiftId: string; staffId: string }[];
+    /** The project the caller was authorised on; the shifts must belong to it. */
+    projectId?: string;
   },
 ) {
   if (!input.shiftIds.length) throw new BookingError("Choose at least one shift.");
@@ -134,6 +136,7 @@ export async function sendOffers(
     if (shiftRows.length !== new Set(input.shiftIds).size) throw new BookingError("Some shifts weren't found.");
     const projectIds = new Set(shiftRows.map((s) => s.projectId));
     if (projectIds.size !== 1) throw new BookingError("Offers can only cover shifts from one project at a time.");
+    if (input.projectId && !projectIds.has(input.projectId)) throw new BookingError("Those shifts aren't part of this project.");
     for (const s of shiftRows) {
       // Full shifts can still be offered so people can be waitlisted.
       if (s.status !== "open" && s.status !== "filled") throw new BookingError(`Only published shifts can be offered (one is ${s.status}). Publish drafts first.`);
@@ -249,6 +252,10 @@ export async function respondToOffer(
   return db.transaction(async (tx) => {
     const b = await lockBooking(tx, bookingId);
     if (b.staffId !== staff.staffId) throw new BookingError("Booking not found.");
+    if (response === "interested") {
+      const [p] = await tx.select({ status: staffProfiles.status }).from(staffProfiles).where(eq(staffProfiles.id, staff.staffId));
+      if (p?.status !== "active") throw new BookingError("Your profile isn't active right now. Message RGXM to be considered for work.");
+    }
     if (b.responseDeadline && b.responseDeadline < new Date() && b.status === "offered") {
       throw new BookingError("This offer has closed. Message RGXM if you're still available.");
     }
@@ -361,6 +368,8 @@ export async function confirmBooking(actorId: string, bookingId: string, opts: {
         .where(and(eq(bookings.shiftId, b.shiftId), eq(bookings.status, "confirmed")))) as [{ n: number }];
       if (n >= s.headcount) throw new BookingError(`This shift is full (${n}/${s.headcount}). Raise the headcount or waitlist them.`);
       if (b.offeredRateCents == null) throw new BookingError("No rate was offered, so this booking can't be confirmed.");
+      const [person] = await tx.select({ status: staffProfiles.status }).from(staffProfiles).where(eq(staffProfiles.id, b.staffId));
+      if (person?.status !== "active") throw new BookingError(`This person's profile is ${person?.status ?? "missing"}, so they can't be confirmed.`);
 
       const conflicts = await findConflicts(tx, b.staffId, b, b.id);
       if (conflicts.length && !opts.override) throw new ConflictError(conflicts);

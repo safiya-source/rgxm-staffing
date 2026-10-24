@@ -187,6 +187,8 @@ export async function saveLocation(actorId: string, projectId: string, locationI
 
 export async function deleteLocation(actorId: string, projectId: string, locationId: string) {
   await db.transaction(async (tx) => {
+    const [owned] = await tx.select({ id: projectLocations.id }).from(projectLocations).where(and(eq(projectLocations.id, locationId), eq(projectLocations.projectId, projectId)));
+    if (!owned) throw new ProjectError("Location not found on this project.");
     const [anyShift] = await tx.select({ id: shifts.id }).from(shifts).where(eq(shifts.locationId, locationId)).limit(1);
     if (anyShift) throw new ProjectError("This location has shifts. Cancel or move them first.");
     await tx.delete(staffingRequirements).where(eq(staffingRequirements.locationId, locationId));
@@ -244,8 +246,10 @@ export async function saveRequirement(actorId: string, projectId: string, requir
 
 export async function deleteRequirement(actorId: string, projectId: string, requirementId: string) {
   await db.transaction(async (tx) => {
+    const [owned] = await tx.select({ id: staffingRequirements.id }).from(staffingRequirements).where(and(eq(staffingRequirements.id, requirementId), eq(staffingRequirements.projectId, projectId)));
+    if (!owned) throw new ProjectError("Requirement not found on this project.");
     // Shifts keep their own copy of role/rate, so they're detached rather than blocked.
-    await tx.update(shifts).set({ requirementId: null }).where(eq(shifts.requirementId, requirementId));
+    await tx.update(shifts).set({ requirementId: null }).where(and(eq(shifts.requirementId, requirementId), eq(shifts.projectId, projectId)));
     const [before] = await tx
       .delete(staffingRequirements)
       .where(and(eq(staffingRequirements.id, requirementId), eq(staffingRequirements.projectId, projectId)))

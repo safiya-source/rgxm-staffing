@@ -17,6 +17,7 @@ import {
   shifts,
   certifications,
   clients,
+  orgSettings,
   languages,
   projectLocations,
   projects,
@@ -321,6 +322,9 @@ async function main() {
   });
 
   const payables = await seedCompletedProject(DEMO_DOMAIN);
+  // Demo databases only: let the shared demo admin/finance logins work without an authenticator.
+  // Production databases are never seeded, so the requirement stays on there.
+  await db.insert(orgSettings).values({ id: 1, requireMfaForPrivileged: false }).onConflictDoUpdate({ target: orgSettings.id, set: { requireMfaForPrivileged: false } });
 
   console.log(`Demo data seeded (${payables} approved demo payables on the finished Oreo project).
   Team sign-in (password: ${DEMO_PASSWORD}):

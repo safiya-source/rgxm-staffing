@@ -21,9 +21,20 @@ export default async function ProfilePage() {
         <Link href="/portal/availability" className="font-medium hover:underline">
           Set my availability →
         </Link>
-        <Link href="/privacy" className="text-muted-foreground hover:text-foreground">
-          Privacy notice
-        </Link>
+        <section aria-labelledby="my-data" className="grid gap-2">
+          <h2 id="my-data" className="font-medium">
+            Your data
+          </h2>
+          <a href="/api/me/data" className="text-muted-foreground hover:text-foreground">
+            Download a copy of my data
+          </a>
+          <Link href="/portal/messages?compose=privacy" className="text-muted-foreground hover:text-foreground">
+            Ask RGXM to correct or delete my information
+          </Link>
+          <Link href="/privacy" className="text-muted-foreground hover:text-foreground">
+            Privacy notice
+          </Link>
+        </section>
         <SignOutButton />
       </div>
     </div>

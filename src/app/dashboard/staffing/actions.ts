@@ -1,4 +1,5 @@
 "use server";
+import { rateLimit } from "@/server/rate-limit";
 import { eq, inArray } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
@@ -66,6 +67,7 @@ export async function sendOffersAction(
 ): Promise<ActionResult<{ skipped: string[] }>> {
   return runAction(async () => {
     const viewer = await authorizeProject("booking.offer", uuid.parse(projectId));
+    await rateLimit("offers.send", viewer.userId);
     const shiftIds = z.array(uuid).min(1).max(60).parse(input.shiftIds);
     const staffIds = z.array(uuid).min(1).max(500).parse(input.staffIds);
     const [first] = await db.select({ timezone: shifts.timezone }).from(shifts).where(eq(shifts.id, shiftIds[0]!));
@@ -75,7 +77,7 @@ export async function sendOffersAction(
       deadline = zonedToUtc(input.deadlineDate, input.deadlineTime || "17:00", first?.timezone ?? "America/Toronto");
     }
     const pairs = input.pairs ? z.array(z.object({ shiftId: uuid, staffId: uuid })).max(5000).parse(input.pairs) : undefined;
-    const res = await guard(() => b.sendOffers(viewer.userId, { shiftIds, staffIds, pairs, responseDeadline: deadline, skipConflicts: input.skipConflicts }));
+    const res = await guard(() => b.sendOffers(viewer.userId, { shiftIds, staffIds, pairs, responseDeadline: deadline, skipConflicts: input.skipConflicts, projectId }));
     kickOutbox();
     refresh(projectId);
     const reasons = [...new Set(res.skipped.map((s) => b.SKIP_REASON_LABEL[s.reason]))];
@@ -189,6 +191,7 @@ export async function replyToThreadAction(threadId: string, body: string): Promi
     const [t] = await db.select({ projectId: messageThreads.projectId }).from(messageThreads).where(eq(messageThreads.id, uuid.parse(threadId)));
     if (!t?.projectId) throw new ForbiddenError("Conversation not found.");
     const viewer = await authorizeProject("comms.manage", t.projectId);
+    await rateLimit("message.send", viewer.userId);
     await guard(() => postMessage(db, { threadId, authorUserId: viewer.userId, body, side: "rgxm" }));
     kickOutbox();
     refresh(t.projectId);
@@ -199,7 +202,7 @@ export async function replyToThreadAction(threadId: string, body: string): Promi
 export async function markThreadReadAction(threadId: string): Promise<void> {
   const [t] = await db.select({ projectId: messageThreads.projectId }).from(messageThreads).where(eq(messageThreads.id, uuid.parse(threadId)));
   if (!t?.projectId) return;
-  await authorizeProject("project.view", t.projectId);
+  await authorizeProject("comms.manage", t.projectId);
   await markThreadRead(threadId, "rgxm");
 }
 

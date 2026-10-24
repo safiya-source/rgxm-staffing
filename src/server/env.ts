@@ -16,9 +16,16 @@ const schema = z.object({
   SUPABASE_STORAGE_BUCKET: z.string().default("rgxm-private"),
   // Shared secret for the scheduled outbox runner (/api/cron/outbox).
   CRON_SECRET: z.string().min(24).optional(),
-  SENTRY_DSN: z.string().optional(),
   // Auth endpoint rate limiting. May only be turned off outside production (e.g. for E2E runs).
   AUTH_RATE_LIMIT: z.enum(["on", "off"]).default("on"),
+  // Header(s) carrying the real client IP, set by your host's proxy (comma-separated), e.g.
+  // "x-vercel-forwarded-for" on Vercel or "x-real-ip" behind nginx. Rate limits key on this.
+  AUTH_IP_HEADERS: z.string().default("x-forwarded-for"),
+  // Comma-separated proxy IPs/CIDRs whose forwarded headers are trusted (optional).
+  AUTH_TRUSTED_PROXIES: z.string().optional(),
+  // The mail log keeps working sign-in links only outside production. A staging/demo deployment
+  // that runs with NODE_ENV=production and MAIL_TRANSPORT=log must opt in explicitly.
+  ALLOW_LOG_MAIL_IN_PRODUCTION: z.enum(["on", "off"]).default("off"),
 });
 
 function load() {
@@ -35,6 +42,9 @@ function load() {
   }
   if (value.STORAGE_DRIVER === "supabase" && (!value.SUPABASE_URL || !value.SUPABASE_SERVICE_ROLE_KEY)) {
     throw new Error("STORAGE_DRIVER=supabase requires SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY");
+  }
+  if (value.NODE_ENV === "production" && value.MAIL_TRANSPORT === "log" && value.ALLOW_LOG_MAIL_IN_PRODUCTION !== "on") {
+    throw new Error("MAIL_TRANSPORT=log keeps emails (including sign-in links) in the database instead of sending them. Use resend in production, or set ALLOW_LOG_MAIL_IN_PRODUCTION=on for a demo/staging deployment.");
   }
   if (value.NODE_ENV === "production" && value.AUTH_RATE_LIMIT === "off") {
     throw new Error("AUTH_RATE_LIMIT=off is not allowed in production");

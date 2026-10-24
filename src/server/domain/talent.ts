@@ -21,6 +21,8 @@ import {
   staffRoles,
   staffSensitive,
   staffSkills,
+  sessions,
+  users,
 } from "@/server/db/schema";
 
 export class TalentError extends Error {}
@@ -97,6 +99,14 @@ export async function setStaffStatus(actorId: string, staffId: string, status: "
     if (!before) throw new TalentError("Staff profile not found.");
     if (before.status === status) return;
     await tx.update(staffProfiles).set({ status }).where(eq(staffProfiles.id, staffId));
+    // Suspended or archived people lose portal access immediately; "inactive" just means not
+    // currently taking work, so they can still sign in to see their schedule and pay.
+    const [p] = await tx.select({ userId: staffProfiles.userId }).from(staffProfiles).where(eq(staffProfiles.id, staffId));
+    if (p?.userId) {
+      const blocked = status === "suspended" || status === "archived";
+      await tx.update(users).set({ status: blocked ? status : "active" }).where(eq(users.id, p.userId));
+      if (blocked) await tx.delete(sessions).where(eq(sessions.userId, p.userId));
+    }
     await recordAudit({ actorId, action: "staff.status", entityType: "staff_profile", entityId: staffId, before, after: { status }, reason }, tx);
   });
 }

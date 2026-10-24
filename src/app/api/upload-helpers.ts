@@ -6,7 +6,13 @@ import { MAX_UPLOAD_BYTES, UploadError } from "@/server/storage";
 export async function readUpload(request: Request) {
   const origin = request.headers.get("origin");
   if (origin && origin !== new URL(env.APP_URL).origin) throw new ForbiddenError("Cross-site upload rejected.");
-  const length = Number(request.headers.get("content-length") ?? 0);
+  // Browsers send Sec-Fetch-Site on every request; anything other than our own pages is refused.
+  const site = request.headers.get("sec-fetch-site");
+  if (site && site !== "same-origin") throw new ForbiddenError("Cross-site upload rejected.");
+  // A declared length is required so oversized (or chunked, unsized) bodies are refused before reading.
+  const declared = request.headers.get("content-length");
+  const length = declared === null ? NaN : Number(declared);
+  if (!Number.isFinite(length) || length <= 0) throw new UploadError("Upload size is missing. Please try again.");
   if (length > MAX_UPLOAD_BYTES + 64 * 1024) throw new UploadError("Files must be 20 MB or smaller.");
   const form = await request.formData();
   const file = form.get("file");

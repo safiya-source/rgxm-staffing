@@ -15,6 +15,7 @@ import { getStaffDetail } from "@/server/queries/staff-detail";
 import { requireInternal, toActor } from "@/server/session";
 import { updateStaffAction } from "../actions";
 import { StaffForm } from "../staff-form";
+import { PrivacyCard } from "./privacy-card";
 import { CertificationsEditor, EmergencyContact, NotesCard, PaySetup, RatesCard, RolesEditor, StatusControl, TagsEditor } from "./sections";
 
 export const metadata: Metadata = { title: "Staff profile" };
@@ -31,6 +32,7 @@ export default async function StaffProfilePage({ params }: PageProps<"/dashboard
     rates: canAny(actor, "rates.view"),
     editRates: canAny(actor, "rates.edit"),
     notes: canAny(actor, "talent.notes.view"),
+    privacy: canAny(actor, "privacy.manage"),
   };
   const detail = await getStaffDetail(id, actor, can);
   if (!detail) notFound();
@@ -221,6 +223,7 @@ export default async function StaffProfilePage({ params }: PageProps<"/dashboard
         </div>
 
         <div className="grid content-start gap-6">
+          {can.privacy && !p.isDemo ? <PrivacyCard staffId={p.id} anonymized={Boolean(p.anonymizedAt)} /> : null}
           <Card>
             <CardHeader>
               <CardTitle>Qualified roles</CardTitle>

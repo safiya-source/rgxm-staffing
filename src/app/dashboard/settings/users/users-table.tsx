@@ -18,7 +18,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import type { ActionResult } from "@/lib/action-result";
 import { useFormAction } from "@/lib/use-form-action";
 import { INTERNAL_ROLES, ROLE_LABELS, type InternalRole } from "@/server/authz/permissions";
-import { inviteInternalUser, resendInvite, setUserActive, updateUserRoles } from "../actions";
+import { inviteInternalUser, resendInvite, resetUserTwoFactor, setUserActive, updateUserRoles } from "../actions";
 
 export type TeamMember = {
   id: string;
@@ -168,6 +168,17 @@ function RowActions({ member, isSelf }: { member: TeamMember; isSelf: boolean })
           <DropdownMenuItem onSelect={async () => report(await resendInvite(member.id))}>
             {member.invitePending ? "Resend invitation" : "Send password reset"}
           </DropdownMenuItem>
+          {!isSelf && member.twoFactorEnabled ? (
+            <DropdownMenuItem
+              onSelect={async () => {
+                if (!window.confirm(`Reset two-step verification for ${member.name}? Only do this after confirming who they are (e.g. by phone).`)) return;
+                report(await resetUserTwoFactor(member.id));
+                router.refresh();
+              }}
+            >
+              Reset two-step verification
+            </DropdownMenuItem>
+          ) : null}
           {!isSelf ? (
             <DropdownMenuItem
               className={active ? "text-destructive focus:text-destructive" : undefined}

@@ -1,12 +1,14 @@
 // Private file storage. Files are never publicly reachable: downloads go through an
 // authenticated route that checks access first (see app/files/documents/[id]/route.ts).
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { env } from "@/server/env";
 
 export interface StorageAdapter {
   put(key: string, data: Buffer, contentType: string): Promise<void>;
   get(key: string): Promise<Buffer>;
+  /** Deletes a file. Missing files are not an error. */
+  remove(key: string): Promise<void>;
 }
 
 function assertSafeKey(key: string) {
@@ -26,6 +28,9 @@ class LocalStorage implements StorageAdapter {
   }
   async get(key: string) {
     return readFile(this.resolve(key));
+  }
+  async remove(key: string) {
+    await rm(this.resolve(key), { force: true });
   }
 }
 
@@ -55,6 +60,10 @@ class SupabaseStorage implements StorageAdapter {
     const res = await fetch(this.endpoint(key), { headers: { Authorization: `Bearer ${this.key}` } });
     if (!res.ok) throw new Error(`Storage download failed (${res.status})`);
     return Buffer.from(await res.arrayBuffer());
+  }
+  async remove(key: string) {
+    const res = await fetch(this.endpoint(key), { method: "DELETE", headers: { Authorization: `Bearer ${this.key}` } });
+    if (!res.ok && res.status !== 404) throw new Error(`Storage delete failed (${res.status})`);
   }
 }
 

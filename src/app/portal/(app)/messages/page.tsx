@@ -11,14 +11,17 @@ import { NewMessage } from "./new-message";
 
 export const metadata: Metadata = { title: "Messages" };
 
-export default async function MessagesPage() {
+const PRIVACY_REQUEST = "Privacy request: please [correct / delete] my personal information. Details: ";
+
+export default async function MessagesPage({ searchParams }: PageProps<"/portal/messages">) {
   const viewer = await requireStaff();
+  const privacy = (await searchParams).compose === "privacy";
   const [threads, news] = await Promise.all([listStaffThreads(viewer.staff!.id), listStaffAnnouncements(viewer.staff!.id)]);
   return (
     <div className="grid gap-6">
       <div className="flex items-center justify-between">
         <h1 className="text-[22px] font-semibold">Messages</h1>
-        <NewMessage />
+        <NewMessage initiallyOpen={privacy} initialBody={privacy ? PRIVACY_REQUEST : ""} />
       </div>
 
       <section aria-labelledby="conversations">

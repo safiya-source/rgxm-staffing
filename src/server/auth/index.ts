@@ -2,6 +2,7 @@
 //  - Field staff: passwordless magic link. First sign-in creates the account.
 //  - Internal users: invited by an admin; email + password, optional TOTP MFA. Never magic link.
 import { betterAuth } from "better-auth";
+import { APIError, createAuthMiddleware, getSessionFromCtx } from "better-auth/api";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { nextCookies } from "better-auth/next-js";
 import { magicLink, twoFactor } from "better-auth/plugins";
@@ -12,6 +13,7 @@ import * as schema from "@/server/db/schema";
 import { env } from "@/server/env";
 import { sendEmail } from "@/server/notify/mailer";
 import { actionEmail } from "@/server/notify/templates";
+import { getOrgSettings } from "@/server/settings";
 
 const MAGIC_LINK_TTL_SECONDS = 15 * 60;
 
@@ -33,6 +35,17 @@ async function hasCredentialAccount(userId: string) {
   return Boolean(row);
 }
 
+/** Admins and Finance can't switch off two-step verification while the org requires it. */
+const keepPrivilegedMfa = createAuthMiddleware(async (ctx) => {
+  if (ctx.path !== "/two-factor/disable") return;
+  const session = await getSessionFromCtx(ctx);
+  if (!session) return;
+  const roles = await db.select({ role: schema.userRoles.role }).from(schema.userRoles).where(eq(schema.userRoles.userId, session.user.id));
+  if (!roles.some((r) => r.role === "admin" || r.role === "finance")) return;
+  if (!(await getOrgSettings()).requireMfaForPrivileged) return;
+  throw new APIError("FORBIDDEN", { message: "Two-step verification is required for administrators and Finance." });
+});
+
 export const auth = betterAuth({
   appName: "RGXM Staffing",
   baseURL: env.APP_URL,
@@ -52,8 +65,13 @@ export const auth = betterAuth({
   advanced: {
     database: { generateId: "uuid" },
     cookiePrefix: "rgxm",
+    ipAddress: {
+      ipAddressHeaders: env.AUTH_IP_HEADERS.split(",").map((h) => h.trim().toLowerCase()).filter(Boolean),
+      ...(env.AUTH_TRUSTED_PROXIES ? { trustedProxies: env.AUTH_TRUSTED_PROXIES.split(",").map((p) => p.trim()).filter(Boolean) } : {}),
+    },
     useSecureCookies: env.APP_URL.startsWith("https://"),
   },
+  hooks: { before: keepPrivilegedMfa },
   user: {
     additionalFields: {
       kind: { type: "string", required: false, defaultValue: "staff", input: false },
@@ -84,6 +102,7 @@ export const auth = betterAuth({
     disableSignUp: true,
     minPasswordLength: 12,
     revokeSessionsOnPasswordReset: true,
+    // Invitations and resets share this link type; 24 h gives new team members time to accept.
     resetPasswordTokenExpiresIn: 60 * 60 * 24,
     sendResetPassword: async ({ user, url }) => {
       const record = await findUserByEmail(user.email);
@@ -150,6 +169,8 @@ export const auth = betterAuth({
   plugins: [
     magicLink({
       expiresIn: MAGIC_LINK_TTL_SECONDS,
+      // Only a hash is stored, so a database copy can't be used to sign in.
+      storeToken: "hashed",
       sendMagicLink: async ({ email, url }) => {
         const existing = await findUserByEmail(email);
         // Internal users must use password (+ MFA). Silently skip so the endpoint doesn't reveal account types.

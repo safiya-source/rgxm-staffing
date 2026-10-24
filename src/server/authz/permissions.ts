@@ -26,6 +26,8 @@ export const PERMISSIONS = {
   "settings.view": { admin: A, finance: A },
   "audit.view": { admin: A, project_manager: S, finance: A },
   "mail_log.view": { admin: A },
+  // Erasing a person's personal details on request (privacy officer duties).
+  "privacy.manage": { admin: A },
 
   "project.view": { admin: A, project_manager: A, staffing_coordinator: A, finance: A },
   "project.create": { admin: A, project_manager: A },

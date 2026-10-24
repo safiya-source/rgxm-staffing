@@ -1,6 +1,7 @@
 import { PageHeader } from "@/components/app/page-header";
 import { canAny, type Permission } from "@/server/authz/permissions";
 import { requireInternal, toActor } from "@/server/session";
+import { getOrgSettings } from "@/server/settings";
 import { SettingsNav } from "./settings-nav";
 
 const ITEMS: { href: string; label: string; permission?: Permission }[] = [
@@ -12,12 +13,18 @@ const ITEMS: { href: string; label: string; permission?: Permission }[] = [
 ];
 
 export default async function SettingsLayout({ children }: LayoutProps<"/dashboard/settings">) {
-  const viewer = await requireInternal();
+  const viewer = await requireInternal(undefined, { allowWithoutMfa: true });
   const actor = toActor(viewer);
   const items = ITEMS.filter((i) => !i.permission || canAny(actor, i.permission));
+  const settings = await getOrgSettings();
   return (
     <>
       <PageHeader title="Settings" />
+      {!settings.requireMfaForPrivileged ? (
+        <p role="status" className="mb-4 rounded-lg border border-warning/40 bg-warning-soft px-4 py-2.5 text-sm text-warning">
+          Two-step verification isn&apos;t required for Administrators and Finance. Turn it on in Organisation settings before using real data.
+        </p>
+      ) : null}
       <SettingsNav items={items} />
       {children}
     </>

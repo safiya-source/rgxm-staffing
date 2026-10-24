@@ -7,7 +7,7 @@ Staffing, scheduling, attendance and payments for RGXM's experiential activation
 
 See [`docs/PLAN.md`](docs/PLAN.md) for the product plan, architecture, data model and milestones.
 
-> **Status: Milestones 1–5.** Authentication, roles and permissions, the database with integrity rules,
+> **Status: Milestones 1–6.** Authentication, roles and permissions, the database with integrity rules,
 > staff registration and availability, the talent database (search, profiles, rates history, lists,
 > CSV import/export), projects (locations, requirements, team) and scheduling (bulk shifts, calendar,
 > drag-and-drop), offers and booking (eligibility, responses, confirmation with conflict checks, waitlist),
@@ -57,9 +57,12 @@ With `MAIL_TRANSPORT=log` (the default) no email ever leaves the system. Message
 | `npm run test:e2e` | Playwright end-to-end tests against the dev DB (seed it first) |
 | `npm run db:generate` | Generate a migration from schema changes |
 | `npm run db:migrate` / `db:seed` / `db:reset` | Apply migrations / seed demo data / drop and rebuild (dev only) |
+| `npm run admin:create -- --email … --name …` | Create the first administrator on a fresh (unseeded) database |
 
 To use a pre-installed Chromium for E2E: `PLAYWRIGHT_CHROMIUM_PATH=/path/to/chrome npm run test:e2e`.
 Set `AUTH_RATE_LIMIT=off` in `.env` for local E2E runs (it's rejected in production).
+A local `npm run build` runs as production: use `AUTH_RATE_LIMIT=on ALLOW_LOG_MAIL_IN_PRODUCTION=on npm run build`
+while `MAIL_TRANSPORT=log`.
 
 ## Project layout
 
@@ -95,13 +98,21 @@ minute in production, e.g. Vercel Cron). Failed deliveries retry with backoff an
 - Database triggers and constraints enforce no double-booking, immutable agreed rates and payables, append-only
   audit/attendance/adjustment history, a single live payable per timesheet, a single active batch per payable,
   a single live export per batch, and two-person batch approval.
-- Field staff sign in by magic link only. Internal users need a password (12+ characters) and can enable TOTP.
-  Internal accounts can't use magic links.
+- Field staff sign in by magic link only (hashed, single use, 15 minutes). Internal users need a password (12+ characters);
+  two-step verification is required for Administrators and Finance. Internal accounts can't use magic links.
+- Nonce-based Content Security Policy, rate limits on sign-in and sensitive actions, and privacy retention/erasure tools.
+  Details in [`docs/SECURITY.md`](docs/SECURITY.md).
 - Sign-in links are redacted from the stored mail log whenever real delivery is enabled.
 
 ## Before production
 
-Not yet done (tracked for M6). Do not claim production readiness until these are complete:
-legal review of the privacy notice and worker-classification/tax flows, a security review, Sentry wiring,
-backup/restore drills, a Supabase (or other Canadian-region) Postgres deployment, a verified sending domain,
-and enforcing MFA for admin and finance roles.
+M1–M6 are built and tested, but the platform is **not production-ready** until RGXM completes the checklist in
+[`docs/SECURITY.md`](docs/SECURITY.md#before-using-real-data-rgxm-to-complete):
+- legal/privacy review;
+- accountant sign-off on worker classification and export layouts;
+- a Canadian-region deployment with a verified sending domain;
+- backups with a restore drill;
+- monitoring;
+- an external security test.
+
+Guides: [deployment](docs/DEPLOYMENT.md) · [administrators](docs/ADMIN_GUIDE.md) · [security & privacy](docs/SECURITY.md).

@@ -8,10 +8,10 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 
-export function NewMessage() {
+export function NewMessage({ initialBody = "", initiallyOpen = false }: { initialBody?: string; initiallyOpen?: boolean }) {
   const router = useRouter();
-  const [open, setOpen] = useState(false);
-  const [body, setBody] = useState("");
+  const [open, setOpen] = useState(initiallyOpen);
+  const [body, setBody] = useState(initialBody);
   const [pending, start] = useTransition();
   return (
     <Dialog open={open} onOpenChange={setOpen}>

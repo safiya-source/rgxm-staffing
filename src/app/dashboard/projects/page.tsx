@@ -10,6 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { formatDateRange, formatMoney } from "@/lib/format";
 import { canAny } from "@/server/authz/permissions";
 import { listProjects } from "@/server/queries/projects";
+import { projectScope } from "@/server/queries/timesheets";
 import { requireInternal, toActor } from "@/server/session";
 import { ProjectFilters } from "./project-filters";
 
@@ -23,6 +24,9 @@ export default async function ProjectsPage({ searchParams }: PageProps<"/dashboa
   const status = str(sp.status) ?? "active";
   const rows = await listProjects({ q: str(sp.q)?.slice(0, 80), status, mine: str(sp.mine), userId: viewer.userId });
   const showBudget = canAny(actor, "budget.view");
+  // PMs see budgets only for their own projects.
+  const budgetScope = showBudget ? await projectScope(actor, "budget.view") : [];
+  const canSeeBudget = (id: string) => budgetScope === null || budgetScope.includes(id);
 
   return (
     <>
@@ -97,8 +101,14 @@ export default async function ProjectsPage({ searchParams }: PageProps<"/dashboa
                       </TableCell>
                       {showBudget ? (
                         <TableCell className="text-right text-sm whitespace-nowrap tabular-nums">
-                          <span className={over ? "font-medium text-destructive" : undefined}>{formatMoney(est, p.currency)}</span>
-                          <span className="text-muted-foreground"> / {p.budgetCents != null ? formatMoney(p.budgetCents, p.currency) : "—"}</span>
+                          {canSeeBudget(p.id) ? (
+                            <>
+                              <span className={over ? "font-medium text-destructive" : undefined}>{formatMoney(est, p.currency)}</span>
+                              <span className="text-muted-foreground"> / {p.budgetCents != null ? formatMoney(p.budgetCents, p.currency) : "—"}</span>
+                            </>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
                         </TableCell>
                       ) : null}
                       <TableCell className="text-sm text-muted-foreground">{p.ownerName ?? "—"}</TableCell>

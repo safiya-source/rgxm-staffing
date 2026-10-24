@@ -20,6 +20,9 @@ export default async function OrgSettingsPage() {
         accentColor: settings.accentColor,
         checkInWindowMinutes: settings.checkInWindowMinutes,
         checkInGeofenceMeters: settings.checkInGeofenceMeters,
+        requireMfaForPrivileged: settings.requireMfaForPrivileged,
+        locationRetentionDays: settings.locationRetentionDays,
+        mailLogRetentionDays: settings.mailLogRetentionDays,
       }}
     />
   );

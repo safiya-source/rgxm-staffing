@@ -370,4 +370,37 @@ Classification defaults to *unset*; payable rounding to the minute; no automatic
 - The QuickBooks-style CSV and payroll CSV layouts are unverified against RGXM's actual accounting/payroll setup.
 - `npm audit`: `uuid` (via ExcelJS; the advisory affects v3/v5/v6 with a caller-supplied buffer, ExcelJS uses v4) and `esbuild` (dev server, via drizzle-kit) are moderate and not exploitable in how they're used here; revisit in M6.
 
-### Next: M6 — Hardening
+### M6 — Hardening & deployment docs: delivered
+- **Security review**: two independent code reviews (authorisation/IDOR; input, auth, files, configuration). All 17 confirmed findings were fixed with regression tests; the list is in `docs/SECURITY.md`. Highlights:
+  - project scoping on offers, location/requirement deletes, emergency contacts, budgets and staff messages;
+  - supervision limited to overlapping shifts;
+  - suspension now ends portal access;
+  - nonce-based CSP;
+  - magic-link tokens stored hashed;
+  - upload size and origin checks;
+  - `uuid` advisory resolved.
+- **Two-step verification required for Administrators and Finance** (org setting, on by default; the demo seed turns it off and shows a banner). It's enforced on pages, actions and download routes, and can't be switched off while required. Admins can reset another user's two-step setup.
+- **Rate limits**: Better Auth sign-in limits keyed on a configurable client-IP header. App-level Postgres-backed limits cover messages, offer responses, check-ins, sending offers, uploads and exports.
+- **Privacy**:
+  - retention settings (check-in coordinates 90 days, mail-log bodies 30 days) applied by the scheduled runner; the attendance append-only guard allows only clearing coordinates;
+  - staff "download a copy of my data";
+  - admin access-request export;
+  - erasure of a former staff member's personal details on request, keeping legally required work/pay/tax records;
+  - privacy notice updated (still marked draft pending legal review).
+- **Operations**:
+  - `/api/health`;
+  - structured JSON error logging (`instrumentation.ts`); the unused `SENTRY_DSN` setting was removed rather than implying an integration;
+  - `npm run admin:create` to bootstrap the first administrator on a fresh database;
+  - `MAIL_TRANSPORT=log` refused in production unless explicitly allowed for demo/staging.
+- **Docs**: `docs/SECURITY.md` (controls, review findings, pre-production checklist), `docs/DEPLOYMENT.md` (Supabase + Vercel, env, cron, backups, go-live checks), `docs/ADMIN_GUIDE.md` (roles, routine tasks, privacy requests, payments).
+- **Tests**: 164 Vitest (incl. security regressions, privacy retention/export/erasure, rate limits) and 32 Playwright E2E (incl. CSP nonce + hydration, MFA enforcement, health, data download).
+
+### Still not production-ready
+The milestone exit criterion was the §11 checklist; production readiness still needs RGXM's own steps, listed in
+`docs/SECURITY.md` → "Before using real data":
+- legal/privacy review;
+- accountant sign-off on classification and export layouts;
+- a Canadian-region deployment (the Supabase Storage and Resend adapters are still unexercised);
+- backups with a restore drill;
+- monitoring;
+- an external security test.

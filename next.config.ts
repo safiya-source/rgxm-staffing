@@ -7,21 +7,8 @@ const securityHeaders = [
   { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains; preload" },
   // Location is only requested by the check-in screen; camera/mic are never used.
   { key: "Permissions-Policy", value: "geolocation=(self), camera=(), microphone=(), payment=()" },
-  {
-    key: "Content-Security-Policy",
-    value: [
-      "default-src 'self'",
-      "script-src 'self' 'unsafe-inline'" + (process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : ""),
-      "style-src 'self' 'unsafe-inline'",
-      "img-src 'self' data: blob:",
-      "font-src 'self' data:",
-      "connect-src 'self'",
-      "frame-ancestors 'none'",
-      "base-uri 'self'",
-      "form-action 'self'",
-      "object-src 'none'",
-    ].join("; "),
-  },
+  // The Content-Security-Policy for pages is set per request (with a nonce) in src/proxy.ts.
+  // API routes return JSON or downloads and set their own restrictive CSP where they render.
 ];
 
 const nextConfig: NextConfig = {

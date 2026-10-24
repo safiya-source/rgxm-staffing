@@ -11,7 +11,7 @@ import { getNotificationSummary } from "@/server/queries/notifications";
 import { requireInternal, toActor } from "@/server/session";
 
 export default async function DashboardLayout({ children }: LayoutProps<"/dashboard">) {
-  const viewer = await requireInternal();
+  const viewer = await requireInternal(undefined, { allowWithoutMfa: true });
   const actor = toActor(viewer);
   const allowed = DASHBOARD_NAV.filter((i) => !i.permission || canAny(actor, i.permission)).map((i) => i.href);
   const notifications = await getNotificationSummary(viewer.userId);

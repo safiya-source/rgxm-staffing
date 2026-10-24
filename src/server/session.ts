@@ -15,6 +15,7 @@ import {
 } from "@/server/authz/permissions";
 import { db } from "@/server/db";
 import { projectMembers, projects, staffProfiles, userRoles, users } from "@/server/db/schema";
+import { getOrgSettings } from "@/server/settings";
 
 export class ForbiddenError extends Error {
   constructor(message = "You don't have permission to do that.") {
@@ -94,10 +95,26 @@ export function homeFor(viewer: Viewer) {
 
 // ─── Page guards (redirect) ───────────────────────────────────────────────────────
 
-export async function requireInternal(permission?: Permission): Promise<Viewer> {
+// Roles that can move money or change access must use two-step verification.
+export const PRIVILEGED_ROLES: readonly InternalRole[] = ["admin", "finance"];
+export const MFA_SETUP_PATH = "/dashboard/settings/security?required=1";
+
+/** True when this person must turn on two-step verification before doing anything else. */
+export async function needsMfaSetup(viewer: Viewer) {
+  if (viewer.kind !== "internal" || viewer.twoFactorEnabled) return false;
+  if (!viewer.roles.some((r) => PRIVILEGED_ROLES.includes(r))) return false;
+  return (await getOrgSettings()).requireMfaForPrivileged;
+}
+
+/**
+ * Every dashboard page calls this. Layouts and the security page pass `allowWithoutMfa` so an
+ * admin/finance user without two-step verification can still reach the screen that sets it up.
+ */
+export async function requireInternal(permission?: Permission, opts: { allowWithoutMfa?: boolean } = {}): Promise<Viewer> {
   const viewer = await getViewer();
   if (!viewer) redirect("/sign-in");
   if (viewer.kind !== "internal") redirect(homeFor(viewer));
+  if (!opts.allowWithoutMfa && (await needsMfaSetup(viewer))) redirect(MFA_SETUP_PATH);
   if (permission && !canAny(toActor(viewer), permission)) redirect("/dashboard?denied=1");
   return viewer;
 }
@@ -115,8 +132,20 @@ export async function requireStaff(opts: { allowIncompleteOnboarding?: boolean }
 export async function authorizeInternal(permission: Permission): Promise<Viewer> {
   const viewer = await getViewer();
   if (!viewer || viewer.kind !== "internal") throw new ForbiddenError("Please sign in.");
+  if (await needsMfaSetup(viewer)) throw new ForbiddenError("Turn on two-step verification (Settings → My security) before doing this.");
   if (!canAny(toActor(viewer), permission)) throw new ForbiddenError();
   return viewer;
+}
+
+/**
+ * Route handlers (downloads) use this instead of reading the viewer directly, so they get the
+ * same rules as actions, including the two-step verification requirement. Returns null when denied.
+ */
+export async function authorizeInternalRoute(permission: Permission): Promise<Viewer | null> {
+  const viewer = await getViewer();
+  if (!viewer || viewer.kind !== "internal") return null;
+  if (await needsMfaSetup(viewer)) return null;
+  return canAny(toActor(viewer), permission) ? viewer : null;
 }
 
 export async function loadProjectScopes(projectIds: string[]): Promise<Map<string, ProjectScope>> {

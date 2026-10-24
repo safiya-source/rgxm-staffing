@@ -8,6 +8,7 @@ import { canAny } from "@/server/authz/permissions";
 import { db } from "@/server/db";
 import { languages, skills, staffLanguages, staffProfiles, staffRates, staffRoles, staffSkills } from "@/server/db/schema";
 import { parseTalentFilters, searchTalent } from "@/server/domain/talent-search";
+import { RateLimitError, rateLimit } from "@/server/rate-limit";
 import { getOrgSettings } from "@/server/settings";
 import { authorizeInternal, ForbiddenError, toActor } from "@/server/session";
 
@@ -17,8 +18,10 @@ export async function GET(request: Request) {
   let viewer;
   try {
     viewer = await authorizeInternal("talent.export");
+    await rateLimit("export.talent", viewer.userId);
   } catch (err) {
     if (err instanceof ForbiddenError) return new Response("Forbidden", { status: 403 });
+    if (err instanceof RateLimitError) return new Response(err.message, { status: 429 });
     throw err;
   }
   const url = new URL(request.url);

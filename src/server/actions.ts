@@ -3,6 +3,8 @@
 import { ZodError } from "zod";
 import type { ActionResult } from "@/lib/action-result";
 import { SeparationOfDutiesError } from "@/server/authz/permissions";
+import { logError } from "@/server/observability";
+import { RateLimitError } from "@/server/rate-limit";
 import { ForbiddenError } from "@/server/session";
 
 export class UserFacingError extends Error {}
@@ -14,12 +16,12 @@ export async function runAction<T>(fn: () => Promise<ActionResult<T>>): Promise<
     if (err instanceof ZodError) {
       return { ok: false, error: "Please check the highlighted fields.", fieldErrors: err.flatten().fieldErrors as Record<string, string[]> };
     }
-    if (err instanceof ForbiddenError || err instanceof SeparationOfDutiesError || err instanceof UserFacingError) {
+    if (err instanceof ForbiddenError || err instanceof SeparationOfDutiesError || err instanceof UserFacingError || err instanceof RateLimitError) {
       return { ok: false, error: err.message };
     }
     // Next.js uses thrown errors for redirect()/notFound(); let them through.
     if (err && typeof err === "object" && "digest" in err) throw err;
-    console.error("[action] unexpected error", err);
+    logError(err, { where: "server-action" });
     return { ok: false, error: "Something went wrong. Please try again." };
   }
 }

@@ -2,12 +2,21 @@
 import { useState } from "react";
 import { Field, FormMessage } from "@/components/app/form";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useFormAction } from "@/lib/use-form-action";
 import { updateOrgSettings } from "./actions";
 
-type Initial = { orgName: string; accentColor: string; checkInWindowMinutes: number; checkInGeofenceMeters: number };
+type Initial = {
+  orgName: string;
+  accentColor: string;
+  checkInWindowMinutes: number;
+  checkInGeofenceMeters: number;
+  requireMfaForPrivileged: boolean;
+  locationRetentionDays: number;
+  mailLogRetentionDays: number;
+};
 
 export function OrgSettingsForm({ initial, canEdit }: { initial: Initial; canEdit: boolean }) {
   const [state, onSubmit, pending] = useFormAction(updateOrgSettings);
@@ -57,6 +66,29 @@ export function OrgSettingsForm({ initial, canEdit }: { initial: Initial; canEdi
             <Field label="Location radius (metres)" htmlFor="checkInGeofenceMeters" error={errors?.checkInGeofenceMeters}>
               <Input id="checkInGeofenceMeters" name="checkInGeofenceMeters" type="number" min={50} max={5000} defaultValue={initial.checkInGeofenceMeters} />
             </Field>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Security & privacy</CardTitle>
+            <CardDescription>Retention clears personal details that are no longer needed. Work, pay and audit records are kept.</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-5">
+            <label className="flex items-start gap-3">
+              <Checkbox name="requireMfaForPrivileged" defaultChecked={initial.requireMfaForPrivileged} className="mt-0.5" />
+              <span>
+                <span className="block text-sm font-medium">Require two-step verification for Administrators and Finance</span>
+                <span className="block text-xs text-muted-foreground">Strongly recommended. Turning this off is recorded in the audit log.</span>
+              </span>
+            </label>
+            <div className="grid gap-5 sm:grid-cols-2">
+              <Field label="Keep check-in locations for (days)" htmlFor="locationRetentionDays" error={errors?.locationRetentionDays} hint="Coordinates are then cleared; the check-in time stays.">
+                <Input id="locationRetentionDays" name="locationRetentionDays" type="number" min={7} max={3650} defaultValue={initial.locationRetentionDays} />
+              </Field>
+              <Field label="Keep email copies in the mail log for (days)" htmlFor="mailLogRetentionDays" error={errors?.mailLogRetentionDays} hint="Message bodies are then cleared; who/when stays.">
+                <Input id="mailLogRetentionDays" name="mailLogRetentionDays" type="number" min={1} max={3650} defaultValue={initial.mailLogRetentionDays} />
+              </Field>
+            </div>
           </CardContent>
           {canEdit ? (
             <CardFooter className="justify-between gap-4">

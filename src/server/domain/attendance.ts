@@ -138,6 +138,8 @@ export async function recordAttendance(actor: AttendanceActor, bookingId: string
       .for("update", { of: bookings });
     if (!row) throw new AttendanceError("Shift not found.");
     const { booking: b, shift: s, location: l } = row;
+    // Supervisors and RGXM record attendance for others, never for themselves (rules 7–8).
+    if (actor.kind !== "staff") assertNotOwnTimesheet(actor.userId, await staffUserId(tx, b.staffId));
     if (actor.kind === "staff" && b.staffId !== actor.staffId) throw new AttendanceError("Shift not found.");
     if (actor.kind === "supervisor") {
       if (b.staffId === actor.staffId) throw new SeparationOfDutiesError("Record your own attendance from your shift screen.");
@@ -214,7 +216,7 @@ export async function recordAttendance(actor: AttendanceActor, bookingId: string
 
 // ─── Supervision ────────────────────────────────────────────────────────────
 
-/** True when `supervisorStaffId` is confirmed as TL/AM on the same project, location and local date, with a role that outranks the member's. */
+/** True when `supervisorStaffId` is confirmed as TL/AM at the same project and location on a shift that overlaps the member's, with a role that outranks theirs. */
 export async function isSupervisorOf(tx: Tx | typeof db, supervisorStaffId: string, bookingId: string) {
   const r = await tx.execute<{ role: string; member_role: string }>(sql`
     select sb.role::text as role, b.role::text as member_role
@@ -224,7 +226,7 @@ export async function isSupervisorOf(tx: Tx | typeof db, supervisorStaffId: stri
     join ${shifts} ss on ss.id = sb.shift_id and ss.location_id = s.location_id
     where b.id = ${bookingId}
       and b.staff_id <> ${supervisorStaffId}
-      and (ss.starts_at at time zone ss.timezone)::date = (s.starts_at at time zone s.timezone)::date`);
+      and ss.starts_at < s.ends_at and s.starts_at < ss.ends_at`);
   return r.rows.some((x) => supervises(x.role, x.member_role));
 }
 
@@ -265,7 +267,7 @@ export async function getSupervisedTeam(supervisorStaffId: string, opts: { from:
     join project_locations l on l.id = s.location_id
     join bookings sb on sb.project_id = b.project_id and sb.staff_id = ${supervisorStaffId} and sb.status in ('confirmed', 'completed') and sb.role in ('TL', 'AM')
     join shifts ss on ss.id = sb.shift_id and ss.location_id = s.location_id
-      and (ss.starts_at at time zone ss.timezone)::date = (s.starts_at at time zone s.timezone)::date
+      and ss.starts_at < s.ends_at and s.starts_at < ss.ends_at
     left join timesheets t on t.booking_id = b.id
     where b.status in ('confirmed', 'completed') and b.staff_id <> ${supervisorStaffId}
       and s.starts_at < ${opts.to.toISOString()}::timestamptz and s.ends_at > ${opts.from.toISOString()}::timestamptz

@@ -18,6 +18,9 @@ export const getOrgSettings = cache(async () => {
       checkInGeofenceMeters: 300,
       payPeriodRule: "semi_monthly",
       payableRounding: "minute",
+      requireMfaForPrivileged: true,
+      locationRetentionDays: 90,
+      mailLogRetentionDays: 30,
       updatedAt: new Date(),
       updatedBy: null,
     }

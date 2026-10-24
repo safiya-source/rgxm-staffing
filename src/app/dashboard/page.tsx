@@ -7,7 +7,7 @@ import { StatCard } from "@/components/app/stat-card";
 import { DemoBadge, StatusBadge } from "@/components/app/status-badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatDateRange, formatMoney } from "@/lib/format";
-import { canAny } from "@/server/authz/permissions";
+import { canAny, resolveGrant } from "@/server/authz/permissions";
 import { getOverview } from "@/server/queries/overview";
 import { requireInternal, toActor } from "@/server/session";
 
@@ -17,7 +17,8 @@ export default async function OverviewPage({ searchParams }: PageProps<"/dashboa
   const viewer = await requireInternal();
   const { denied } = await searchParams;
   const data = await getOverview();
-  const showMoney = canAny(toActor(viewer), "payments.view");
+  // Organisation-wide pay totals: only for roles that see every project's payments (not PMs).
+  const showMoney = resolveGrant(viewer.roles, "payments.view") === "all";
   const firstName = viewer.name.split(" ")[0];
 
   return (

@@ -8,6 +8,7 @@ import { isIsoDate } from "@/lib/time";
 import { runAction, UserFacingError } from "@/server/actions";
 import { canAny } from "@/server/authz/permissions";
 import * as talent from "@/server/domain/talent";
+import { canSeeEmergency } from "@/server/queries/staff-detail";
 import { authorizeInternal, toActor } from "@/server/session";
 
 const uuid = z.string().uuid();
@@ -149,7 +150,7 @@ export async function setClassificationAction(staffId: string, _prev: ActionResu
 export async function setEmergencyContactAction(staffId: string, _prev: ActionResult, formData: FormData): Promise<ActionResult> {
   return runAction(async () => {
     const viewer = await authorizeInternal("talent.edit");
-    if (!canAny(toActor(viewer), "talent.emergency.view")) throw new UserFacingError("You can't edit emergency contacts.");
+    if (!(await canSeeEmergency(toActor(viewer), uuid.parse(staffId)))) throw new UserFacingError("You can't edit this person's emergency contact.");
     const text = (k: string) => String(formData.get(k) ?? "").trim() || null;
     const phone = text("phone");
     if (phone && !talent.phoneSchema.safeParse(phone).success) {

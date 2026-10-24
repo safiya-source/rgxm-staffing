@@ -37,7 +37,8 @@ export default async function ProjectStaffingPage({ params, searchParams }: Page
   const groups = await getShiftGroups(projectId);
   const groupKey = typeof sp.group === "string" && groups.some((g) => g.key === sp.group) ? sp.group : groups[0]?.key;
   const group = groups.find((g) => g.key === groupKey);
-  const [board, threads] = await Promise.all([group ? getBoard(group.shifts.map((s) => s.id)) : [], listProjectThreads(projectId)]);
+  // Staff messages are only for the project's own team (people who can reply).
+  const [board, threads] = await Promise.all([group ? getBoard(group.shifts.map((s) => s.id)) : [], can.reply ? listProjectThreads(projectId) : Promise.resolve([])]);
   const openThreadId = typeof sp.thread === "string" && threads.some((t) => t.id === sp.thread) ? sp.thread : null;
   const openThread = openThreadId ? await getThreadMessages(openThreadId) : null;
 

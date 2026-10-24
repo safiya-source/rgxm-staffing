@@ -13,7 +13,7 @@ import { authClient } from "@/lib/auth-client";
 
 type Step = { kind: "idle" } | { kind: "scan"; qr: string; secret: string; backupCodes: string[] } | { kind: "done"; backupCodes: string[] };
 
-export function TwoFactorSettings({ enabled }: { enabled: boolean }) {
+export function TwoFactorSettings({ enabled, required = false }: { enabled: boolean; required?: boolean }) {
   const router = useRouter();
   const [step, setStep] = useState<Step>({ kind: "idle" });
   const [error, setError] = useState<string>();
@@ -103,6 +103,8 @@ export function TwoFactorSettings({ enabled }: { enabled: boolean }) {
               ))}
             </ul>
           </div>
+        ) : enabled && required ? (
+          <p className="text-sm text-muted-foreground">Required for your role, so it can&apos;t be turned off. Lost your device? Use a backup code, or ask another administrator to reset it.</p>
         ) : enabled ? (
           <form onSubmit={disable} className="grid max-w-sm gap-4">
             <Field label="Confirm your password to turn it off" htmlFor="password">

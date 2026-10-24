@@ -27,7 +27,8 @@ import {
 } from "@/server/db/schema";
 
 /** Emergency contacts: "all" grant sees everyone; "assigned" only people booked on the viewer's projects. */
-async function canSeeEmergency(actor: Actor, staffId: string) {
+/** Admins: anyone. PMs: only people booked on their projects. Used for reading and editing. */
+export async function canSeeEmergency(actor: Actor, staffId: string) {
   const grant = resolveGrant(actor.roles, "talent.emergency.view");
   if (grant === "all") return true;
   if (grant !== "assigned") return false;

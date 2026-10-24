@@ -15,6 +15,7 @@ export default defineConfig({
       MAIL_TRANSPORT: "log",
       STORAGE_DRIVER: "local",
       STORAGE_LOCAL_DIR: "./test-results/storage",
+      AUTH_RATE_LIMIT: "on",
     },
     fileParallelism: false,
   },

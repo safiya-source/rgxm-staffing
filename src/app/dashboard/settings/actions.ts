@@ -8,7 +8,7 @@ import { runAction, UserFacingError } from "@/server/actions";
 import { auth } from "@/server/auth";
 import { INTERNAL_ROLES, type InternalRole } from "@/server/authz/permissions";
 import { db } from "@/server/db";
-import { orgSettings, sessions, userRoles, users } from "@/server/db/schema";
+import { orgSettings, sessions, twoFactors, userRoles, users } from "@/server/db/schema";
 import { HEX_COLOR } from "@/server/settings";
 import { authorizeInternal } from "@/server/session";
 
@@ -21,12 +21,15 @@ const orgSchema = z.object({
   accentColor: z.string().regex(HEX_COLOR, "Use a 6-digit hex colour, e.g. #E4572E"),
   checkInWindowMinutes: z.coerce.number().int().min(0).max(240),
   checkInGeofenceMeters: z.coerce.number().int().min(50).max(5000),
+  requireMfaForPrivileged: z.preprocess((v) => v === "on" || v === "true", z.boolean()),
+  locationRetentionDays: z.coerce.number().int().min(7).max(3650),
+  mailLogRetentionDays: z.coerce.number().int().min(1).max(3650),
 });
 
 export async function updateOrgSettings(_prev: ActionResult, formData: FormData): Promise<ActionResult> {
   return runAction(async () => {
     const viewer = await authorizeInternal("settings.manage");
-    const input = orgSchema.parse(Object.fromEntries(formData));
+    const input = orgSchema.parse({ ...Object.fromEntries(formData), requireMfaForPrivileged: formData.get("requireMfaForPrivileged") ?? "off" });
     await db.transaction(async (tx) => {
       const [before] = await tx.select().from(orgSettings).where(eq(orgSettings.id, 1));
       await tx
@@ -162,5 +165,27 @@ export async function setUserActive(userId: string, active: boolean): Promise<Ac
     });
     revalidatePath("/dashboard/settings/users");
     return { ok: true, message: active ? "Account reactivated." : "Account deactivated and signed out." };
+  });
+}
+
+/**
+ * For someone who lost their authenticator and backup codes. Removes their two-step setup and
+ * signs them out; if their role requires it, they'll be asked to set it up again on next sign-in.
+ */
+export async function resetUserTwoFactor(userId: string): Promise<ActionResult> {
+  return runAction(async () => {
+    const viewer = await authorizeInternal("users.manage");
+    const id = z.string().uuid().parse(userId);
+    if (id === viewer.userId) throw new UserFacingError("Ask another administrator to reset your own two-step verification.");
+    await db.transaction(async (tx) => {
+      const [u] = await tx.select({ kind: users.kind }).from(users).where(eq(users.id, id));
+      if (u?.kind !== "internal") throw new UserFacingError("User not found.");
+      await tx.delete(twoFactors).where(eq(twoFactors.userId, id));
+      await tx.update(users).set({ twoFactorEnabled: false }).where(eq(users.id, id));
+      await tx.delete(sessions).where(eq(sessions.userId, id));
+      await recordAudit({ actorId: viewer.userId, action: "user.reset_2fa", entityType: "user", entityId: id }, tx);
+    });
+    revalidatePath("/dashboard/settings/users");
+    return { ok: true, message: "Two-step verification reset. They've been signed out and will set it up again." };
   });
 }

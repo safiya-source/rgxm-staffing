@@ -1,4 +1,5 @@
 "use server";
+import { rateLimit } from "@/server/rate-limit";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import type { ActionResult } from "@/lib/action-result";
@@ -69,6 +70,7 @@ export async function removeFromBatchAction(batchId: string, payableId: string, 
 export async function exportBatchAction(batchId: string, format: string): Promise<ActionResult<{ exportId: string }>> {
   return runAction(async () => {
     const viewer = await authorizeInternal("payments.manage");
+    await rateLimit("export.payments", viewer.userId);
     const f = z.enum(EXPORT_FORMATS).parse(format);
     const res = await guard(() => pay.exportBatch(viewer.userId, uuid.parse(batchId), f));
     refresh(batchId);

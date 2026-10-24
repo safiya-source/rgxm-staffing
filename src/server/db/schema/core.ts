@@ -84,6 +84,12 @@ export const orgSettings = pgTable("org_settings", {
   checkInGeofenceMeters: integer().notNull().default(300),
   payPeriodRule: text().notNull().default("semi_monthly"),
   payableRounding: text().notNull().default("minute"),
+  // Admins and Finance must use two-step verification. Only the demo seed turns this off.
+  requireMfaForPrivileged: boolean().notNull().default(true),
+  // Privacy retention (days). Check-in coordinates are cleared after this; the event itself stays.
+  locationRetentionDays: integer().notNull().default(90),
+  // Stored copies of sent emails (mail log) have their bodies cleared after this.
+  mailLogRetentionDays: integer().notNull().default(30),
   updatedAt: updatedAt(),
   updatedBy: userRef(),
 });
@@ -130,6 +136,8 @@ export const staffProfiles = pgTable(
     classification: workerClassification().notNull().default("unset"),
     onboardingCompletedAt: tstz(),
     isDemo: boolean().notNull().default(false),
+    // Set when personal details were erased on request; work and pay records are kept.
+    anonymizedAt: tstz(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -1091,4 +1099,15 @@ export const auditLog = pgTable(
     index("audit_log_project_idx").on(t.projectId),
     index("audit_log_created_idx").on(t.createdAt),
   ],
+);
+
+// Fixed-window counters for app-level rate limits (sign-in limits live in Better Auth's table).
+export const appRateLimits = pgTable(
+  "app_rate_limits",
+  {
+    key: text().notNull(),
+    windowStart: tstz().notNull(),
+    count: integer().notNull().default(0),
+  },
+  (t) => [primaryKey({ columns: [t.key, t.windowStart] }), index("app_rate_limits_window_idx").on(t.windowStart)],
 );

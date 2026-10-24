@@ -120,7 +120,7 @@ export async function archiveDocument(actorId: string, documentId: string) {
   });
 }
 
-/** Staff may see a document if they're confirmed (or completed) on its project — or on its shift, if it's shift-specific. */
+/** Staff may see a document if they're confirmed (or completed) on its project, or on its shift if it's shift-specific, until 30 days after that work. */
 export async function staffCanAccessDocument(staffId: string, doc: { projectId: string; shiftId: string | null; archivedAt: Date | null }) {
   if (doc.archivedAt) return false;
   const [row] = await db
@@ -132,6 +132,8 @@ export async function staffCanAccessDocument(staffId: string, doc: { projectId: 
         eq(bookings.projectId, doc.projectId),
         inArray(bookings.status, ["confirmed", "completed"]),
         doc.shiftId ? eq(bookings.shiftId, doc.shiftId) : undefined,
+        // Same window as the portal list: briefs stay available for 30 days after the work.
+        gte(bookings.endsAt, sql`now() - interval '30 days'`),
       ),
     )
     .limit(1);

@@ -1,11 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Logo } from "@/components/app/logo";
+import { getOrgSettings } from "@/server/settings";
 
 export const metadata: Metadata = { title: "Privacy notice" };
 
 // DRAFT. Must be reviewed by RGXM's legal/privacy advisor before production use (PIPEDA).
-export default function PrivacyPage() {
+export default async function PrivacyPage() {
+  const settings = await getOrgSettings();
   return (
     <div className="mx-auto max-w-2xl px-5 py-10">
       <Link href="/">
@@ -39,13 +41,17 @@ export default function PrivacyPage() {
         </p>
         <h2>How long we keep it</h2>
         <p>
-          We keep work and payment records for as long as the law requires (generally six years for tax records in Canada).
-          You can ask us to deactivate your account at any time. We&apos;ll remove what we&apos;re allowed to and keep only
-          what we&apos;re legally required to retain.
+          Check-in locations are cleared automatically after {settings.locationRetentionDays} days (the check-in time stays
+          with your timesheet). Copies of emails we send you are cleared from our records after {settings.mailLogRetentionDays}{" "}
+          days. Work and payment records are kept as long as the law requires (generally six years for tax records in Canada).
         </p>
         <h2>Your rights</h2>
         <p>
-          You can ask to see or correct your information, or withdraw consent, by contacting RGXM&apos;s privacy officer.
+          You can download a copy of your data at any time from <em>My profile → Download a copy of my data</em>. You can ask
+          us to correct your information, withdraw consent, or delete your account from <em>My profile → Ask RGXM to correct
+          or delete my information</em>, or by contacting RGXM&apos;s privacy officer. When we delete an account we erase your
+          name, contact details, availability, skills, files and notes, and keep only the work, payment and tax records we
+          are legally required to retain.
         </p>
       </div>
     </div>
