@@ -291,7 +291,12 @@ export function StaffingBoard({
                               {can.rates && (r.agreedRateCents ?? r.offeredRateCents) != null
                                 ? `${r.agreedRateCents != null ? "Agreed" : "Offered"} ${formatMoney((r.agreedRateCents ?? r.offeredRateCents)!)}/h`
                                 : cell.label}
-                              {r.respondedAt ? ` · replied $<TimeAgo date={r.respondedAt} />` : ""}
+                              {r.respondedAt ? (
+                                <>
+                                  {" · replied "}
+                                  <TimeAgo date={r.respondedAt} />
+                                </>
+                              ) : null}
                               {r.lastQuestion ? <span className="mt-1 block text-foreground">“{r.lastQuestion}”</span> : null}
                               {r.overrideReason ? <span className="mt-1 block text-warning">Override: {r.overrideReason}</span> : null}
                               {r.cancelReason ? <span className="mt-1 block">{r.cancelledByStaff ? "They cancelled" : "Reason"}: {r.cancelReason}</span> : null}

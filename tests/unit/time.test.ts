@@ -10,7 +10,8 @@ describe("zoned time conversion", () => {
   });
 
   it("handles other zones", () => {
-    expect(zonedToUtc("2026-11-12", "10:00", "America/Vancouver").toISOString()).toBe("2026-11-12T18:00:00.000Z");
+    // Regina has no DST changes, so this doesn't depend on the tzdata version (Vancouver's rules changed in tzdata 2026b).
+    expect(zonedToUtc("2026-11-12", "10:00", "America/Regina").toISOString()).toBe("2026-11-12T16:00:00.000Z");
     expect(zonedToUtc("2026-11-12", "10:00", "America/St_Johns").toISOString()).toBe("2026-11-12T13:30:00.000Z");
   });
 

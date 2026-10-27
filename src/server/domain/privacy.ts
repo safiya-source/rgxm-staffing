@@ -108,7 +108,11 @@ export async function exportStaffData(staffId: string) {
   const threadMessages = threadRows.length
     ? await db.select({ threadId: messages.threadId, authorId: messages.authorId, body: messages.body, at: messages.createdAt }).from(messages).where(inArray(messages.threadId, threadRows.map((t) => t.id)))
     : [];
-  const { id: _id, userId: _u, isDemo: _d, ...profileFields } = profile;
+  // Internal identifiers and flags aren't part of the person's record.
+  const profileFields: Partial<typeof profile> = { ...profile };
+  delete profileFields.id;
+  delete profileFields.userId;
+  delete profileFields.isDemo;
   return {
     exportedAt: new Date().toISOString(),
     note: "Your RGXM staff record. Internal notes and evaluations are available on request from RGXM's privacy officer.",

@@ -11,7 +11,7 @@ describe("formatting", () => {
     // 2026-11-01 is the fall-back date in Toronto (EDT → EST).
     expect(formatInZone("2026-10-31T14:00:00Z", "America/Toronto", "yyyy-MM-dd HH:mm")).toBe("2026-10-31 10:00");
     expect(formatInZone("2026-11-12T14:00:00Z", "America/Toronto", "yyyy-MM-dd HH:mm")).toBe("2026-11-12 09:00");
-    expect(formatInZone("2026-11-12T14:00:00Z", "America/Vancouver", "yyyy-MM-dd HH:mm")).toBe("2026-11-12 06:00");
+    expect(formatInZone("2026-11-12T14:00:00Z", "America/Regina", "yyyy-MM-dd HH:mm")).toBe("2026-11-12 08:00"); // no DST, any tzdata version
   });
 
   it("formats durations and ranges", () => {

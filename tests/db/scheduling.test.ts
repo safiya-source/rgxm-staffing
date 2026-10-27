@@ -7,7 +7,7 @@ import { book, makeStaff, makeUser, one, pool } from "./fixtures";
 let actor: { id: string };
 let projectId: string;
 let torontoId: string;
-let vancouverId: string;
+let reginaId: string;
 
 const baseShift = { role: "BA" as const, headcount: 2, rateCents: "25.00" };
 
@@ -18,7 +18,7 @@ beforeAll(async () => {
     projects.projectSchema.parse({ name: "Scheduling test", code: `SCH-${Date.now() % 1e6}`, newClientName: "Test Client", budget: "1000" }),
   );
   torontoId = await projects.saveLocation(actor.id, projectId, null, projects.locationSchema.parse({ name: "Eaton Centre", timezone: "America/Toronto" }));
-  vancouverId = await projects.saveLocation(actor.id, projectId, null, projects.locationSchema.parse({ name: "Pacific Centre", timezone: "America/Vancouver" }));
+  reginaId = await projects.saveLocation(actor.id, projectId, null, projects.locationSchema.parse({ name: "Cornwall Centre", timezone: "America/Regina" }));
 });
 afterAll(async () => {
   await pool.end();
@@ -47,15 +47,15 @@ describe("bulk shift creation", () => {
     const ids = await shifts.createShifts(
       actor.id,
       projectId,
-      shifts.bulkShiftSchema.parse({ ...baseShift, locationId: vancouverId, startDate: "2026-11-12", endDate: "2026-11-14", startTime: "10:00", endTime: "18:00" }),
+      shifts.bulkShiftSchema.parse({ ...baseShift, locationId: reginaId, startDate: "2026-11-12", endDate: "2026-11-14", startTime: "10:00", endTime: "18:00" }),
     );
     expect(ids).toHaveLength(3);
     const first = await one<{ starts_at: Date; timezone: string; rate_cents: number; status: string }>(
       "select starts_at, timezone, rate_cents, status from shifts where id = $1",
       [ids[0]],
     );
-    expect(first.starts_at.toISOString()).toBe("2026-11-12T18:00:00.000Z"); // 10:00 PST
-    expect(first).toMatchObject({ timezone: "America/Vancouver", rate_cents: 2500, status: "open" });
+    expect(first.starts_at.toISOString()).toBe("2026-11-12T16:00:00.000Z"); // 10:00 CST (Regina: no DST)
+    expect(first).toMatchObject({ timezone: "America/Regina", rate_cents: 2500, status: "open" });
   });
 
   it("supports overnight shifts and draft creation", async () => {

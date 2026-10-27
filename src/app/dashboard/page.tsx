@@ -7,9 +7,9 @@ import { StatCard } from "@/components/app/stat-card";
 import { DemoBadge, StatusBadge } from "@/components/app/status-badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatDateRange, formatMoney } from "@/lib/format";
-import { canAny, resolveGrant } from "@/server/authz/permissions";
+import { resolveGrant } from "@/server/authz/permissions";
 import { getOverview } from "@/server/queries/overview";
-import { requireInternal, toActor } from "@/server/session";
+import { requireInternal } from "@/server/session";
 
 export const metadata: Metadata = { title: "Overview" };
 
