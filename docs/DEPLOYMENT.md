@@ -11,18 +11,21 @@ for data, and **Vercel** for the app. Any host that runs a Node 22 Next.js serve
 ## 1. Database (Supabase)
 
 1. Create a Supabase project in **Canada (Central)**. On a paid plan, enable **Point-in-Time Recovery**.
-2. Note two connection strings (Project Settings → Database):
-   - **Direct** connection (port 5432), used only to run migrations.
+2. Note two connection strings (the **Connect** button → Connection string):
+   - **Session pooler** (port 5432; works over IPv4), used to run migrations.
    - **Transaction pooler** (port 6543), used by the app (`DATABASE_URL`). Many short-lived serverless functions need the pooler.
-   - Add `?sslmode=require` to both.
-3. Run migrations from your machine or CI with the direct URL:
+3. Download Supabase's SSL certificate (Project Settings → Database → SSL configuration) and set its contents
+   as `DATABASE_CA_CERT`. The app then verifies the database server against it. Without it, the Postgres driver
+   rejects Supabase's certificate, because it treats `sslmode=require` as full verification.
+4. Run migrations with the session-pooler URL. Either use the **Staging database** GitHub Action
+   (Actions tab; uses the `STAGING_DATABASE_URL` and `STAGING_DATABASE_CA_CERT` secrets), or run locally:
    ```bash
-   DATABASE_URL="postgres://…:5432/postgres?sslmode=require" npm run db:migrate
+   DATABASE_URL="postgres://…:5432/postgres" DATABASE_CA_CERT="$(cat prod-ca.crt)" npm run db:migrate
    ```
    Migrations are plain SQL in `src/server/db/migrations` and are safe to re-run (already-applied ones are skipped).
    They enable row-level security on every table and revoke access for Supabase's `anon`/`authenticated` roles. The
    app connects as the database owner.
-4. **Never run `npm run db:seed` against production.** It creates demo accounts with a shared password and
+5. **Never run `npm run db:seed` against production.** It creates demo accounts with a shared password and
    turns off the two-step verification requirement.
 
 ## 2. File storage (Supabase Storage)
@@ -49,7 +52,8 @@ demo/staging site, because the Mail log then holds working sign-in links.
 
 | Variable | Value |
 |---|---|
-| `DATABASE_URL` | Supabase pooler URL with `sslmode=require` |
+| `DATABASE_URL` | Supabase transaction-pooler URL (port 6543) |
+| `DATABASE_CA_CERT` | Supabase's SSL certificate (paste the PEM text) |
 | `APP_URL` | `https://staffing.rgxm.ca` (the public URL; used for links and cookie security) |
 | `BETTER_AUTH_SECRET` | `openssl rand -base64 48` (different per environment; rotating it signs everyone out) |
 | `MAIL_TRANSPORT`, `RESEND_API_KEY`, `MAIL_FROM` | see above |
@@ -76,6 +80,17 @@ Schedule it **every minute** (5 minutes at most). With Vercel Cron, add a `verce
 
 Check Vercel's documentation for your plan's cron frequency and for how it sends `CRON_SECRET`. Any external
 scheduler that can send the header works too.
+
+### Staging (demo data)
+
+A demo staging site uses the same setup with three differences:
+- `MAIL_TRANSPORT=log` plus `ALLOW_LOG_MAIL_IN_PRODUCTION=on` (no email provider needed; sign-in links appear in Settings → Mail log);
+- demo data loaded by the **Staging database** workflow (tick "Also load demo data");
+- the **Staging scheduled runner** workflow calls the cron URL every 15 minutes once the repository variable
+  `STAGING_URL` and the secret `STAGING_CRON_SECRET` are set.
+
+Demo staging is for looking around only. Its sign-in password is public in the README, so never put real
+people's data in it.
 
 ## 6. First administrator
 

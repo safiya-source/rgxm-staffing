@@ -3,6 +3,8 @@ import { z } from "zod";
 const schema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   DATABASE_URL: z.string().url(),
+  // CA certificate (PEM) for hosted Postgres, e.g. Supabase → Database settings → SSL certificate.
+  DATABASE_CA_CERT: z.string().optional(),
   APP_URL: z.string().url().default("http://localhost:3000"),
   BETTER_AUTH_SECRET: z.string().min(32, "BETTER_AUTH_SECRET must be at least 32 characters"),
   // "log" stores outgoing mail in notification_deliveries and never sends it.

@@ -3,11 +3,12 @@ import "dotenv/config";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { Pool } from "pg";
+import { poolOptions } from "../src/server/db/connection";
 
 async function main() {
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error("DATABASE_URL is not set");
-  const pool = new Pool({ connectionString: url, max: 1 });
+  const pool = new Pool(poolOptions(url, process.env.DATABASE_CA_CERT, 1));
   await migrate(drizzle(pool), { migrationsFolder: "src/server/db/migrations" });
   await pool.end();
   console.log(`Migrations applied to ${new URL(url).pathname.slice(1)}`);

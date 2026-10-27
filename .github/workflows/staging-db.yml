@@ -1,0 +1,44 @@
+# Manually run database setup for the staging environment (Actions → Staging database → Run workflow).
+# Needs repository secrets STAGING_DATABASE_URL (Supabase *session pooler* URL, port 5432) and
+# STAGING_DATABASE_CA_CERT (Supabase's SSL certificate, PEM). Secrets never appear in logs.
+name: Staging database
+
+on:
+  workflow_dispatch:
+    inputs:
+      seed_demo_data:
+        description: "Also load demo data (staging/demo only, never production)"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency: staging-database
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Apply migrations
+        run: npm run db:migrate
+        env:
+          DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+          DATABASE_CA_CERT: ${{ secrets.STAGING_DATABASE_CA_CERT }}
+      - name: Load demo data
+        if: ${{ inputs.seed_demo_data }}
+        run: |
+          # The seed signs nothing; a throwaway secret satisfies start-up validation.
+          export BETTER_AUTH_SECRET="$(openssl rand -base64 48)"
+          npm run db:seed
+        env:
+          DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+          DATABASE_CA_CERT: ${{ secrets.STAGING_DATABASE_CA_CERT }}
+          MAIL_TRANSPORT: log
