@@ -1,6 +1,6 @@
 # RGXM Staffing Platform — Discovery & Implementation Plan
 
-Status: **Draft for approval** · Prepared 2026-10-23
+Status: **Approved 2026-10-23** · M1–M3 delivered (see §14)
 
 ---
 
@@ -73,7 +73,7 @@ Enforced **server-side** in a single permission module (`can(user, action, resou
 | UI | **Tailwind CSS + shadcn/ui (Radix)** | Accessible primitives and a fully owned design system. Accent colour set via CSS variable tokens. |
 | Database | **PostgreSQL (Supabase, Canada region `ca-central-1`)** | Relational integrity, exclusion constraints for double-booking, RLS, Canadian data residency for PIPEDA. |
 | Data access / migrations | **Drizzle ORM + drizzle-kit SQL migrations** | Typed queries, plain SQL migrations under version control, runs against any Postgres (local, CI, Supabase). |
-| Auth | **Supabase Auth** | Magic link / email OTP for staff. Email + password + TOTP MFA for internal users. Password reset and rate limiting included. |
+| Auth | **Better Auth** (changed from Supabase Auth; see §14) | Magic link for staff. Email + password + TOTP MFA for internal users. Password reset and DB-backed rate limiting. Runs on the same Postgres, so local, CI and Supabase all behave identically. |
 | Authorization | App permission layer + **Postgres RLS deny-by-default** | The browser never queries the DB directly. All reads and writes go through server code that checks permissions. RLS is a second line of defence. |
 | File storage | **Supabase Storage, private buckets, short-lived signed URLs** | Briefs, resumes and photos are never public. |
 | Background jobs | **pg-boss** (Postgres-backed queue) + **transactional outbox** | Jobs are idempotent (dedupe keys), retried with backoff and fail visibly. No extra infrastructure. |
@@ -283,3 +283,124 @@ None of these block M1. Defaults shown in **bold** are what I'll build with unle
 - The working directory was empty. This is a new project, created in `/home/user/rgxm`.
 - **This cloud container is temporary.** Work must be pushed to a GitHub repository to persist. Please create (or tell me) a repo, e.g. `rgxm/staffing-platform`, that I can push to.
 - Local Postgres 16 and Docker are available, so I can build and test the full workflow here without external accounts. Supabase, Resend and Sentry keys are only needed for staging and production.
+
+---
+
+## 14. Implementation log
+
+### Changes from the approved plan
+- **Auth: Better Auth instead of Supabase Auth.** Better Auth stores identities in our own Postgres (Drizzle adapter), so local dev, CI and production share one code path with no auth "shim". It includes magic links, TOTP, backup codes and rate limiting. It still runs on Supabase Postgres, and Supabase remains the recommended database and storage host.
+- **Next.js 16** (current stable) instead of 15. Cache Components / PPR are off because almost every page is per-user.
+- **shadcn/ui components were written directly on Radix** (the shadcn registry was unreachable from the build environment). Same structure and conventions as shadcn output.
+- **Bookings and offers are one table** (`bookings`). Each (shift, staff) row moves through the brief's booking statuses, with `offer_responses` and `booking_status_history` holding the trail. This keeps one row per person per shift and lets the database enforce no double-booking.
+
+### Decisions adopted (defaults from §12, pending RGXM confirmation)
+Classification defaults to *unset*; payable rounding to the minute; no automatic break deductions; semi-monthly pay periods; Supabase `ca-central-1` + Vercel; generic + QBO-style CSV; placeholder branding (`#E4572E` accent, editable in Settings); check-in location off by default with a 300 m radius.
+
+### M1 — Foundation: delivered
+- Full core schema (58 tables) and migrations, including `0001_integrity.sql` with DB-level business rules.
+- Auth: staff magic link (self-registration), internal password + optional TOTP MFA, password reset, invitation by admin, deactivation with session revocation.
+- Multi-role permission matrix with project scoping and separation-of-duties helpers; server-side guards for pages and actions.
+- Dashboard shell: navigation by permission, global search (staff + projects), notification centre, user menu; Overview KPIs from live data.
+- Settings: organisation branding and check-in defaults, team & roles, my security (MFA), audit log, mail log.
+- Staff portal shell (PWA, installable, offline page): onboarding, home (next shift, to-dos, latest payment, all live queries), profile.
+- Demo seed (Cadbury Eaton Centre scenario, Taco Bell two-location project, 60 GTA staff, saved lists).
+- Tests: 39 unit + DB integrity tests (Vitest); 11 E2E tests across five personas on desktop and mobile (Playwright); GitHub Actions CI.
+
+### M2 — Talent & Projects: delivered
+- **Talent directory**: filter by role, city, skills, languages, unexpired certifications, saved list, project history, status, experience, vehicle, rate range (rate filters only for users who can see rates), availability on a date, and "no booking conflicts that day". URL-driven filters, pagination, bulk add-to-list, bulk/filtered CSV export (formula-injection safe, audited, rates only for `rates.view`).
+- **Staff profiles**: create/edit; status changes with reasons; roles; skills/languages; certifications with expiry; default rates with full history (new rate closes the old one; confirmed bookings keep their snapshot); pay setup (classification, GST/HST registration with format check, legal/business name; tax details only for `rates.edit`); emergency contact (restricted; project managers only for people booked on their projects); internal notes; lists; upcoming/past shifts and reliability counts.
+- **CSV import**: validate-then-commit with per-row errors, match by email, never erases data with blanks, adds roles/skills/languages, reuses lookups case-insensitively, rate columns ignored without `rates.edit`, 2,000-row cap.
+- **Staff availability (portal)**: weekly pattern + date-specific available/unavailable entries.
+- **Projects**: create/edit (inline new client), status transitions with reasons, locations (time zone locked once shifts exist; check-in location verification requires coordinates), staffing requirements, project team; overview with coverage by role × location, unfilled positions, pending offers, estimated cost vs budget.
+- **Shifts**: bulk creation from a date range + weekdays (live preview incl. overnight "+1 day" and DST-length warnings, cost estimate), templates, edit (headcount can't drop below confirmed; reschedules that would double-book are rejected), duplicate to dates, publish drafts, cancel with reason (cancels active bookings, keeps history).
+- **Schedule**: day/week/month across projects with project/role filters, coverage colours, unfilled-in-next-7-days list, drag-and-drop to move a shift in week view (permission-checked).
+- Tests: 82 Vitest (incl. DST gap/fold, overnight, search filters, import rules, scheduling rules) and 21 Playwright E2E.
+
+### Notes carried into M3
+- A shift with no rate means "use each person's default rate"; M3's rate resolution must implement shift → project override → staff default, snapshotting the result at confirmation.
+- Drag-and-drop exists in week view only; day/month are read-only.
+
+### M3 — Offers & Booking: delivered
+- **Booking state machine** (pure, unit-tested): only RGXM can confirm; interest ≠ booking; declined/cancelled rows are final and a re-offer creates a new row so history is kept. "Awaiting confirmation" is used as RGXM's shortlist.
+- **Rate resolution** (rule 3): person-specific project override → shift rate → project role override → staff default. The offered rate is stored on the offer and becomes the agreed-rate snapshot at confirmation. Project rate overrides are managed on the project Setup tab (`rates.project_override`).
+- **Offer builder**: qualified, active staff for a role with per-shift availability, conflicts, existing offers and resolved rate; filters; response deadline in the location's time zone; sends exactly the person × shift pairs shown.
+- **Response board** (people × shift dates): offered / interested / question / shortlisted / confirmed / waitlist / declined, per-cell actions, bulk confirm, waitlist positions, release, withdraw, cancel with reason. Confirmation checks capacity under a row lock and double-booking; an overlap needs `booking.override_conflict` plus a reason (recorded on the booking and in the audit log); the DB exclusion constraint remains the backstop.
+- **Staff portal**: Opportunities (interested / can't make it / ask a question, "interested in all"), My schedule (confirmed, briefs to review, recent cancellations, past), shift detail (where/when/report-to/uniform/instructions/agreed rate, briefs, announcements, message RGXM, "can't make this shift"), Messages (threads + announcements), Notifications with header badge.
+- **Briefs & updates** project tab: private document uploads (20 MB, type + signature checked) through API routes with same-origin checks; authenticated downloads; required acknowledgement tracked per document version with who's still pending; new versions reset acknowledgements; announcements (important ones emailed).
+- **Notifications**: transactional outbox → in-app notifications and email, each with a dedupe key so retries never double-send; SKIP LOCKED claiming, exponential backoff, failed after 5 attempts, stuck-event release. Processed right after the response via `after()`, plus `GET /api/cron/outbox` (Bearer `CRON_SECRET`) as the scheduled safety net. Shift edits/cancellations notify affected staff.
+- Tests: 105 Vitest (state machine, rates, offers, responses, capacity, waitlist, conflict override, outbox idempotency/retry, document access and versioned acknowledgements) and 23 Playwright E2E incl. the offer → question → reply → confirm → brief → acknowledge flow across three personas.
+
+### Deviations / notes
+- **pg-boss was not needed**: the outbox processor above covers idempotent jobs with retry. Revisit if job volume grows.
+- **Supabase Storage adapter** is written against Supabase's documented REST API but has not been exercised against a live project. Local disk storage is used in development and tests.
+- SMS remains Phase 2 (shift reminders by email/in-app arrived in M4).
+
+### M4 — Attendance & Timesheets: delivered
+- **Check-in/out** from the staff Home screen and shift page. The window opens 60 minutes before the start (org setting) and closes at the scheduled end; check-out is allowed up to 12 hours after the end. Events are append-only, idempotent on a client event id, and stamped with server time when online.
+- **Location** is requested only at the moment of tapping, and only where the venue has "require location at check-in" turned on. A position outside the geofence (or no position) is flagged for review, never blocked. Nothing is tracked in the background.
+- **Offline**: a tap without a connection is kept on the phone (localStorage) with the device time, shown as "waiting to sync", and sent when the browser comes back online. Device times more than 2 minutes old are recorded as `offline_sync` and flagged. Future times and times older than 24 hours are rejected.
+- **Timesheets** keep three layers separately (rule 9): actual (from check-in/out), worked (what the person or a reviewer says they worked) and payable (approved). Every change to worked times or breaks writes a `timesheet_adjustments` row with old value, new value, reason, stage and who made it. Changing a time needs a reason; times are compared to the minute.
+- **Objective flags** for reviewers: late, left early, no check-in/out, recorded offline, outside venue radius, recorded by supervisor, times corrected, much longer than scheduled. Flags inform review; they never change pay on their own.
+- **Workflow**: staff review and submit their hours (Hours to submit list and shift page). Team Leads verify BAs/PAs and AMs verify everyone except other AMs on the same project, location and local date (My team page), with an optional recommended adjustment, or send hours back with a note. Supervisors can record a check-in/out with a required note when someone couldn't. RGXM reviews in Dashboard → Timesheets (views: to approve, not submitted, approved, all; bulk approve), can adjust before approval, record attendance, send back, mark a no-show (only for started shifts without attendance) and approve.
+- **Approval** (rule 7 + 8): nobody approves or verifies their own hours; approval needs the shift to have ended and worked times. Payable defaults to worked minus break (rounding from org settings); a different payable amount needs a reason. Approval completes the booking.
+- **After approval** (rule 10): the database rejects changes to approved hours unless they come through the correction workflow (transaction-local `rgxm.hours_correction` flag), which bumps the version and records a `post_approval_correction` adjustment and audit entry. Locked, exported and paid timesheets cannot be changed at all.
+- **Reminders** (`runSweeps`, run by the cron route before the outbox): a shift reminder for confirmed shifts starting within 24 hours, and a "submit your hours" reminder 30 minutes after a shift ends, each sent once (dedupe keys). Notifications for submitted, sent back and approved hours.
+- Tests: 136 Vitest (incl. attendance rules, window/order, idempotent offline sync, geofence, adjustments, SoD, approval, correction guard, no-shows, sweeps) and 26 Playwright E2E incl. check-in with geofence flag → staff correction → Team Lead verification → PM approval, and an offline check-in that syncs.
+
+### Notes carried into M5
+- Approval does **not** yet create payable items; that happens in M5 (payables from approved timesheets with the agreed-rate snapshot, contractor vs employee flows, payment batches that lock timesheets).
+- SMS reminders remain Phase 2. Service worker background sync is not used; the queue flushes when the app is open and online.
+- Supervisor check-in is per person (no "check in whole team" bulk action yet).
+
+### M5 — Payments & Budget: delivered
+- **Payables on approval** (rule 6): approving hours creates one immutable payable at the booking's agreed-rate snapshot: `round_half_up(payable_minutes × rate / 60)` to the cent, stored with its inputs and a calculation version (`base-v1`). The DB rejects edits to amounts, deletes, and a payable whose minutes don't match the timesheet's approved minutes. A post-approval correction (before batching) voids the old payable and creates a new one.
+- **Contractor vs employee** (rule 15): each payable snapshots the person's classification. Contractors and employees go into separate batches (`contractor` / `payroll`); "unset" can't be batched. If someone is (re)classified after approval, "Refresh classifications" voids and recreates their unbatched payables with the new classification (amounts unchanged, audited).
+- **Batches**: Finance picks ready payables by type (optionally limited to a semi-monthly pay period) → draft batch, which locks the timesheets. A **second person** must approve (domain check + DB check constraint). Items can be removed from a draft with a reason. Demo payables only go into demo batches.
+- **Exports**: generic CSV, QuickBooks-style bills CSV (contractors only; column names follow QBO's bill import, account name to be confirmed by RGXM's accountant) and .xlsx. CSV cells are formula-safe. Each file is stored privately with a SHA-256 fingerprint; there is one live export per batch, so a second file can't be generated until the first is voided with a reason. Re-downloads return the same bytes (fingerprint checked) and are audited. Demo exports say "DEMO - DO NOT PAY" in the file name and on every row.
+- **Mark paid**: records the payment date; items that bounced are marked failed with a reason and can go into a later batch. Payables and timesheets move to paid, and each person gets an in-app + email notification (suppressed for demo/.test addresses). Paid and void batches are final (DB trigger). Unpaid batches can be voided with a reason, returning items to ready-to-pay.
+- **Staff portal → Pay**: each approved shift with hours × rate, amount, status (approved, in a payment run, being paid, paid with date, payment issue), "coming to you" and "paid this year".
+- **Project → Budget tab** (`budget.view`): budget, actual (approved payables), pending approval (ended shifts, estimated from hours under review or the schedule), committed (upcoming confirmed shifts), forecast and variance, by role, location and date.
+- **Employee review hints** (no pay changes): payroll items under 3 hours or in a week over 44 hours are flagged for review against the ESA. Payroll exports carry gross hours and pay only; deductions and vacation pay belong to the payroll provider.
+- Demo seed now includes a finished project (Oreo Cookie Truck, Oct 10–11) whose hours were approved through the real workflow, giving 10 demo payables across contractor, employee and unset.
+- Tests: 154 Vitest (pay rounding, periods incl. leap years, state machines, ESA hints, export files, payable immutability, correction replacement, classification refresh, batch separation, four-eyes, one-live-export, supersede, paid/failed, void, DB guards) and 28 Playwright E2E incl. batch → second-person approval → export → mark paid → staff see "Paid" → budget.
+
+### Notes carried into M6
+- Not built: PDF payment statements, self-billing invoices / GST-HST (Phase 2, needs accountant sign-off), expense claims, disputes workflow, accounting-system API sync, payment-provider integration. Nothing in the platform moves money.
+- The QuickBooks-style CSV and payroll CSV layouts are unverified against RGXM's actual accounting/payroll setup.
+- `npm audit`: `uuid` (via ExcelJS; the advisory affects v3/v5/v6 with a caller-supplied buffer, ExcelJS uses v4) and `esbuild` (dev server, via drizzle-kit) are moderate and not exploitable in how they're used here; revisit in M6.
+
+### M6 — Hardening & deployment docs: delivered
+- **Security review**: two independent code reviews (authorisation/IDOR; input, auth, files, configuration). All 17 confirmed findings were fixed with regression tests; the list is in `docs/SECURITY.md`. Highlights:
+  - project scoping on offers, location/requirement deletes, emergency contacts, budgets and staff messages;
+  - supervision limited to overlapping shifts;
+  - suspension now ends portal access;
+  - nonce-based CSP;
+  - magic-link tokens stored hashed;
+  - upload size and origin checks;
+  - `uuid` advisory resolved.
+- **Two-step verification required for Administrators and Finance** (org setting, on by default; the demo seed turns it off and shows a banner). It's enforced on pages, actions and download routes, and can't be switched off while required. Admins can reset another user's two-step setup.
+- **Rate limits**: Better Auth sign-in limits keyed on a configurable client-IP header. App-level Postgres-backed limits cover messages, offer responses, check-ins, sending offers, uploads and exports.
+- **Privacy**:
+  - retention settings (check-in coordinates 90 days, mail-log bodies 30 days) applied by the scheduled runner; the attendance append-only guard allows only clearing coordinates;
+  - staff "download a copy of my data";
+  - admin access-request export;
+  - erasure of a former staff member's personal details on request, keeping legally required work/pay/tax records;
+  - privacy notice updated (still marked draft pending legal review).
+- **Operations**:
+  - `/api/health`;
+  - structured JSON error logging (`instrumentation.ts`); the unused `SENTRY_DSN` setting was removed rather than implying an integration;
+  - `npm run admin:create` to bootstrap the first administrator on a fresh database;
+  - `MAIL_TRANSPORT=log` refused in production unless explicitly allowed for demo/staging.
+- **Docs**: `docs/SECURITY.md` (controls, review findings, pre-production checklist), `docs/DEPLOYMENT.md` (Supabase + Vercel, env, cron, backups, go-live checks), `docs/ADMIN_GUIDE.md` (roles, routine tasks, privacy requests, payments).
+- **Tests**: 164 Vitest (incl. security regressions, privacy retention/export/erasure, rate limits) and 32 Playwright E2E (incl. CSP nonce + hydration, MFA enforcement, health, data download).
+
+### Still not production-ready
+The milestone exit criterion was the §11 checklist; production readiness still needs RGXM's own steps, listed in
+`docs/SECURITY.md` → "Before using real data":
+- legal/privacy review;
+- accountant sign-off on classification and export layouts;
+- a Canadian-region deployment (the Supabase Storage and Resend adapters are still unexercised);
+- backups with a restore drill;
+- monitoring;
+- an external security test.
