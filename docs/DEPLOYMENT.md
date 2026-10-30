@@ -31,7 +31,8 @@ for data, and **Vercel** for the app. Any host that runs a Node 22 Next.js serve
 ## 2. File storage (Supabase Storage)
 
 Create a **private** bucket (default name `rgxm-private`). Set `STORAGE_DRIVER=supabase`, `SUPABASE_URL`,
-`SUPABASE_SERVICE_ROLE_KEY` and `SUPABASE_STORAGE_BUCKET`. The service-role key is used server-side only. Files are
+`SUPABASE_SERVICE_ROLE_KEY` and `SUPABASE_STORAGE_BUCKET`. The key can be a new-style secret key (`sb_secret_…`)
+or a legacy `service_role` key; both work. The service-role key is used server-side only. Files are
 never public; downloads go through authenticated routes.
 
 ## 3. Email (Resend)

@@ -46,25 +46,38 @@ class SupabaseStorage implements StorageAdapter {
   ) {}
   private endpoint(key: string) {
     assertSafeKey(key);
-    return `${this.url}/storage/v1/object/${this.bucket}/${key}`;
+    return `${this.url.replace(/\/+$/, "")}/storage/v1/object/${this.bucket}/${key}`;
+  }
+  private authHeaders() {
+    return supabaseAuthHeaders(this.key);
   }
   async put(key: string, data: Buffer, contentType: string) {
     const res = await fetch(this.endpoint(key), {
       method: "POST",
-      headers: { Authorization: `Bearer ${this.key}`, "Content-Type": contentType, "x-upsert": "false" },
+      headers: { ...this.authHeaders(), "Content-Type": contentType, "x-upsert": "false" },
       body: new Uint8Array(data),
     });
     if (!res.ok) throw new Error(`Storage upload failed (${res.status}): ${await res.text()}`);
   }
   async get(key: string) {
-    const res = await fetch(this.endpoint(key), { headers: { Authorization: `Bearer ${this.key}` } });
+    const res = await fetch(this.endpoint(key), { headers: this.authHeaders() });
     if (!res.ok) throw new Error(`Storage download failed (${res.status})`);
     return Buffer.from(await res.arrayBuffer());
   }
   async remove(key: string) {
-    const res = await fetch(this.endpoint(key), { method: "DELETE", headers: { Authorization: `Bearer ${this.key}` } });
+    const res = await fetch(this.endpoint(key), { method: "DELETE", headers: this.authHeaders() });
     if (!res.ok && res.status !== 404) throw new Error(`Storage delete failed (${res.status})`);
   }
+}
+
+/**
+ * Supabase accepts two kinds of server key: the newer secret keys ("sb_secret_…"), which go in the
+ * `apikey` header only, and legacy service_role JWTs, which also go in `Authorization: Bearer`.
+ * Sending a secret key as a Bearer token is rejected ("Invalid Compact JWS").
+ */
+export function supabaseAuthHeaders(key: string): Record<string, string> {
+  const isJwt = /^[\w-]+\.[\w-]+\.[\w-]+$/.test(key);
+  return isJwt ? { apikey: key, Authorization: `Bearer ${key}` } : { apikey: key };
 }
 
 let adapter: StorageAdapter | undefined;
