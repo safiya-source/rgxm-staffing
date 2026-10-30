@@ -5,8 +5,9 @@ import { Pool } from "pg";
 async function main() {
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error("DATABASE_URL is not set");
-  if (process.env.NODE_ENV === "production" || /prod/i.test(new URL(url).pathname)) {
-    throw new Error("Refusing to reset what looks like a production database.");
+  const host = new URL(url).hostname;
+  if (process.env.NODE_ENV === "production" || /prod/i.test(new URL(url).pathname) || !["localhost", "127.0.0.1", "::1", "postgres"].includes(host)) {
+    throw new Error(`Refusing to reset ${host}: only local development/test databases can be reset.`);
   }
   const pool = new Pool({ connectionString: url, max: 1 });
   await pool.query("DROP SCHEMA IF EXISTS drizzle CASCADE; DROP SCHEMA public CASCADE; CREATE SCHEMA public;");

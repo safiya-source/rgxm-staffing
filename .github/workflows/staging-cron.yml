@@ -1,0 +1,25 @@
+# Calls the staging site's scheduled runner (notifications, reminders, privacy retention) every
+# 15 minutes. Does nothing until the repository variable STAGING_URL and the secret
+# STAGING_CRON_SECRET are set. GitHub may delay scheduled runs; that's fine for staging.
+name: Staging scheduled runner
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  run:
+    if: ${{ vars.STAGING_URL != '' }}
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - name: Call /api/cron/outbox
+        run: |
+          curl --fail-with-body --silent --show-error --max-time 60 \
+            -H "Authorization: Bearer $CRON_SECRET" "$STAGING_URL/api/cron/outbox"
+        env:
+          STAGING_URL: ${{ vars.STAGING_URL }}
+          CRON_SECRET: ${{ secrets.STAGING_CRON_SECRET }}
