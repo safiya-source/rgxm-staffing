@@ -1111,3 +1111,23 @@ export const appRateLimits = pgTable(
   },
   (t) => [primaryKey({ columns: [t.key, t.windowStart] }), index("app_rate_limits_window_idx").on(t.windowStart)],
 );
+
+// Invitations to the staff portal ("set up your profile" emails). The link is single-use and
+// expires; only a hash of its token is stored.
+export const staffInvitations = pgTable(
+  "staff_invitations",
+  {
+    id: id(),
+    staffId: uuid()
+      .notNull()
+      .references(() => staffProfiles.id),
+    invitedBy: userRef().notNull(),
+    tokenHash: text().unique(),
+    expiresAt: tstz(),
+    sentAt: tstz(),
+    acceptedAt: tstz(),
+    revokedAt: tstz(),
+    createdAt: createdAt(),
+  },
+  (t) => [index("staff_invitations_staff_idx").on(t.staffId, t.createdAt)],
+);

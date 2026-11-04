@@ -1,0 +1,61 @@
+# Manually run database setup for PRODUCTION (Actions → Production database → Run workflow).
+# Applies migrations, and on the first run can create the first administrator.
+# It never loads demo data.
+#
+# Uses the "production" GitHub environment. Add these secrets to that environment:
+#   PRODUCTION_DATABASE_URL      Supabase *session pooler* URL (port 5432)
+#   PRODUCTION_DATABASE_CA_CERT  Supabase's SSL certificate (PEM)
+#   PRODUCTION_RESEND_API_KEY    only needed to email the first administrator's invitation
+# and this repository variable (Settings → Secrets and variables → Actions → Variables):
+#   PRODUCTION_URL               https://crew.rgxmagency.com
+name: Production database
+
+on:
+  workflow_dispatch:
+    inputs:
+      admin_email:
+        description: "First run only: email of the first administrator (leave blank to only apply migrations)"
+        type: string
+        default: ""
+      admin_name:
+        description: "First run only: their full name"
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency: production-database
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Apply migrations
+        run: npm run db:migrate
+        env:
+          DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+          DATABASE_CA_CERT: ${{ secrets.PRODUCTION_DATABASE_CA_CERT }}
+      - name: Create the first administrator
+        if: ${{ inputs.admin_email != '' }}
+        run: |
+          # The invitation link is a random token stored (hashed) in the database; the auth secret
+          # isn't used for it, so a throwaway one satisfies start-up validation.
+          export BETTER_AUTH_SECRET="$(openssl rand -base64 48)"
+          npm run admin:create -- --email "$ADMIN_EMAIL" --name "$ADMIN_NAME"
+        env:
+          DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+          DATABASE_CA_CERT: ${{ secrets.PRODUCTION_DATABASE_CA_CERT }}
+          APP_URL: ${{ vars.PRODUCTION_URL }}
+          MAIL_TRANSPORT: resend
+          RESEND_API_KEY: ${{ secrets.PRODUCTION_RESEND_API_KEY }}
+          MAIL_FROM: "RGXM Staffing <staffing@rgxmagency.com>"
+          ADMIN_EMAIL: ${{ inputs.admin_email }}
+          ADMIN_NAME: ${{ inputs.admin_name }}

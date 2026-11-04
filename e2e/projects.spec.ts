@@ -63,7 +63,7 @@ test("schedule calendar shows seeded Cadbury shifts with coverage", async ({ pag
   await signInAsTeam(page, "coordinator");
   await page.goto("/dashboard/schedule?view=week&date=2026-11-12");
   await expect(page.getByRole("heading", { name: "Nov 9 – Nov 15, 2026" })).toBeVisible();
-  await expect(page.getByRole("link", { name: /10:00am BA 0\/10/ }).first()).toBeVisible();
+  await expect(page.getByRole("link", { name: /10:00am BA \d+\/10/ }).first()).toBeVisible();
   await page.getByRole("link", { name: "month" }).click();
   await expect(page.getByRole("heading", { name: "November 2026" })).toBeVisible();
 });

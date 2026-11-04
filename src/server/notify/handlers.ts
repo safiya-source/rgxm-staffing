@@ -4,6 +4,7 @@ import { and, count, eq, gte, inArray, sql } from "drizzle-orm";
 import { formatInZone, formatMoney } from "@/lib/format";
 import { FIELD_ROLE_NAMES, type FieldRole } from "@/lib/roles";
 import { db } from "@/server/db";
+import { sendInvitation } from "@/server/domain/invitations";
 import {
   announcements,
   bookings,
@@ -250,6 +251,10 @@ export const handlers: Record<string, Handler> = {
       body: `${c.b.projectName} · ${formatInZone(c.b.startsAt, c.b.timezone, "MMM d")}`,
       href: `/portal/shifts/${c.b.id}`,
     });
+  },
+
+  "staff.invite": async (payload) => {
+    await sendInvitation(payload.invitationId as string);
   },
 
   "payment.paid": async (payload, eventId) => {
