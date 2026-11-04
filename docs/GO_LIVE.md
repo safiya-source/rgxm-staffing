@@ -60,8 +60,8 @@ and to the Supabase, Vercel and GitHub accounts.
 ## Step 3 — GitHub: the production environment & first administrator (~15 min)
 
 1. Repository → **Settings → Environments → New environment** → `production`.
-   Under **Deployment branches and tags**, choose *Selected branches* and add `main`. Optionally add yourself as
-   **Required reviewer**, so production database runs need your approval.
+   Under **Deployment branches and tags**, choose *Selected branches* and add `main`. Leave **Required reviewers**
+   off: the scheduled runner uses this environment every 5 minutes, and it would stop at each run to wait for approval.
 2. In that environment, add **secrets**:
    - `PRODUCTION_DATABASE_URL` = the session pooler URL (step 2.3)
    - `PRODUCTION_DATABASE_CA_CERT` = the certificate text (step 2.5)
