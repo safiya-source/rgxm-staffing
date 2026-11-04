@@ -4,7 +4,7 @@ import { z } from "zod";
 import { FIELD_ROLES } from "@/lib/roles";
 import { isIsoDate, isValidTimeZone } from "@/lib/time";
 import { recordAudit } from "@/server/audit";
-import { db, type Tx } from "@/server/db";
+import { db, inTransaction, type Tx } from "@/server/db";
 import { clients, projectLocations, projectMembers, projects, shifts, staffingRequirements, users } from "@/server/db/schema";
 
 export class ProjectError extends Error {}
@@ -97,8 +97,8 @@ function projectValues(input: ProjectInput, clientId: string | null) {
   };
 }
 
-export async function createProject(actorId: string, input: ProjectInput) {
-  return db.transaction(async (tx) => {
+export async function createProject(actorId: string, input: ProjectInput, outer?: Tx) {
+  return inTransaction(outer, async (tx) => {
     await assertCodeFree(tx, input.code);
     await assertInternalUsers(tx, [input.ownerId, input.coordinatorId]);
     const clientId = await resolveClient(tx, input);
@@ -161,11 +161,11 @@ async function shiftCount(tx: Tx, where: ReturnType<typeof eq>) {
   return r?.n ?? 0;
 }
 
-export async function saveLocation(actorId: string, projectId: string, locationId: string | null, input: LocationInput) {
+export async function saveLocation(actorId: string, projectId: string, locationId: string | null, input: LocationInput, outer?: Tx) {
   if (input.requireLocationAtCheckIn && (input.latitude == null || input.longitude == null)) {
     throw new ProjectError("Add the venue's latitude and longitude to verify location at check-in.");
   }
-  return db.transaction(async (tx) => {
+  return inTransaction(outer, async (tx) => {
     if (locationId) {
       const [before] = await tx
         .select()

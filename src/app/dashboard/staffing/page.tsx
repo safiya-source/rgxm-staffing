@@ -1,27 +1,37 @@
-import { SendIcon } from "lucide-react";
+import { PlusIcon, SendIcon } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { EmptyState } from "@/components/app/empty-state";
 import { PageHeader } from "@/components/app/page-header";
 import { DemoBadge, StatusBadge } from "@/components/app/status-badge";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatInZone } from "@/lib/format";
 import { getStaffingOverview } from "@/server/queries/staffing";
 import { getOrgSettings } from "@/server/settings";
-import { requireInternal } from "@/server/session";
+import { canAny } from "@/server/authz/permissions";
+import { requireInternal, toActor } from "@/server/session";
 
 export const metadata: Metadata = { title: "Staffing Requests" };
 
 export default async function StaffingPage() {
-  await requireInternal("booking.offer");
+  const viewer = await requireInternal("booking.offer");
+  const canRequest = canAny(toActor(viewer), "shift.manage");
   const [rows, settings] = await Promise.all([getStaffingOverview(), getOrgSettings()]);
+  const newRequest = canRequest ? (
+    <Button asChild size="sm">
+      <Link href="/dashboard/staffing/new">
+        <PlusIcon /> New staffing request
+      </Link>
+    </Button>
+  ) : null;
   return (
     <>
-      <PageHeader title="Staffing Requests" description="Send shift offers, review responses and confirm staff." />
+      <PageHeader title="Staffing Requests" description="Send shift offers, review responses and confirm staff." actions={newRequest} />
       {rows.length === 0 ? (
-        <EmptyState icon={SendIcon} title="Nothing to staff right now" description="Projects with upcoming published shifts appear here." />
+        <EmptyState icon={SendIcon} title="Nothing to staff right now" description="Projects with upcoming published shifts appear here." action={newRequest} />
       ) : (
         <Card className="overflow-hidden">
           <Table>

@@ -1,8 +1,9 @@
-import { ArrowLeftIcon, SendIcon } from "lucide-react";
+import { ArrowLeftIcon, PlusIcon, SendIcon } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { EmptyState } from "@/components/app/empty-state";
+import { Button } from "@/components/ui/button";
 import { DemoBadge } from "@/components/app/status-badge";
 import { formatInZone } from "@/lib/format";
 import { FIELD_ROLE_NAMES, type FieldRole } from "@/lib/roles";
@@ -33,6 +34,7 @@ export default async function ProjectStaffingPage({ params, searchParams }: Page
     reply: canOnProject(actor, "comms.manage", scope),
     rates: canAny(actor, "rates.view"),
   };
+  const canAddShifts = canOnProject(actor, "shift.manage", scope);
 
   const groups = await getShiftGroups(projectId);
   const groupKey = typeof sp.group === "string" && groups.some((g) => g.key === sp.group) ? sp.group : groups[0]?.key;
@@ -54,9 +56,18 @@ export default async function ProjectStaffingPage({ params, searchParams }: Page
             {header.project.name} {header.project.isDemo ? <DemoBadge /> : null}
           </h1>
         </div>
-        <Link href={`/dashboard/projects/${projectId}/shifts`} className="text-sm text-muted-foreground hover:text-foreground">
-          Manage shifts →
-        </Link>
+        <div className="flex items-center gap-4">
+          <Link href={`/dashboard/projects/${projectId}/shifts`} className="text-sm text-muted-foreground hover:text-foreground">
+            Manage shifts →
+          </Link>
+          {canAddShifts ? (
+            <Button asChild size="sm" variant="outline">
+              <Link href={`/dashboard/staffing/new?project=${projectId}`}>
+                <PlusIcon /> Add more shifts
+              </Link>
+            </Button>
+          ) : null}
+        </div>
       </div>
 
       {groups.length === 0 ? (
@@ -64,6 +75,15 @@ export default async function ProjectStaffingPage({ params, searchParams }: Page
           icon={SendIcon}
           title="No upcoming published shifts"
           description="Create and publish shifts for this project, then come back to send offers."
+          action={
+            canAddShifts ? (
+              <Button asChild size="sm">
+                <Link href={`/dashboard/staffing/new?project=${projectId}`}>
+                  <PlusIcon /> New staffing request
+                </Link>
+              </Button>
+            ) : null
+          }
         />
       ) : (
         <div className="grid gap-6 2xl:grid-cols-[1fr_20rem]">
