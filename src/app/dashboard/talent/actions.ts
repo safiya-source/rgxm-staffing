@@ -7,6 +7,8 @@ import { FIELD_ROLES } from "@/lib/roles";
 import { isIsoDate } from "@/lib/time";
 import { runAction, UserFacingError } from "@/server/actions";
 import { canAny } from "@/server/authz/permissions";
+import { inviteStaff, SKIP_LABEL } from "@/server/domain/invitations";
+import { kickOutbox } from "@/server/notify/run";
 import * as talent from "@/server/domain/talent";
 import { canSeeEmergency } from "@/server/queries/staff-detail";
 import { authorizeInternal, toActor } from "@/server/session";
@@ -208,6 +210,26 @@ export async function removeFromListAction(listId: string, staffIds: string[]): 
     await guard(() => talent.removeFromList(viewer.userId, uuid.parse(listId), z.array(uuid).max(500).parse(staffIds)));
     revalidatePath("/dashboard/talent", "layout");
     return { ok: true, message: "Removed from list." };
+  });
+}
+
+// ─── Portal invitations ─────────────────────────────────────────────────────
+
+/** Emails "Set up your RGXM profile" links. People who can't be invited are skipped with a reason. */
+export async function inviteStaffAction(staffIds: string[], resend = false): Promise<ActionResult> {
+  return runAction(async () => {
+    const viewer = await authorizeInternal("talent.edit");
+    const ids = z.array(uuid).min(1).max(500).parse(staffIds);
+    const { invited, skipped } = await inviteStaff(viewer.userId, ids, { resend });
+    if (invited.length) kickOutbox();
+    revalidatePath("/dashboard/talent", "layout");
+    const reasons = [...new Set(skipped.map((s) => SKIP_LABEL[s.reason]))];
+    const skippedText = skipped.length ? ` Skipped ${skipped.length} (${reasons.join(", ")}).` : "";
+    if (!invited.length) throw new UserFacingError(`No invitations sent.${skippedText}`);
+    return {
+      ok: true,
+      message: `Invitation${invited.length === 1 ? "" : "s"} sent to ${invited.length} ${invited.length === 1 ? "person" : "people"}.${skippedText}`,
+    };
   });
 }
 

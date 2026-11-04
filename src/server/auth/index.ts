@@ -14,6 +14,7 @@ import { env } from "@/server/env";
 import { sendEmail } from "@/server/notify/mailer";
 import { actionEmail } from "@/server/notify/templates";
 import { getOrgSettings } from "@/server/settings";
+import { staffInvite } from "./staff-invite-plugin";
 
 const MAGIC_LINK_TTL_SECONDS = 15 * 60;
 
@@ -189,6 +190,7 @@ export const auth = betterAuth({
       },
     }),
     twoFactor({ issuer: "RGXM Staffing" }),
+    staffInvite(),
     nextCookies(),
   ],
 });

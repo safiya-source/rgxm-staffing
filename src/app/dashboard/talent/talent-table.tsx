@@ -1,6 +1,6 @@
 "use client";
 import { TimeAgo } from "@/components/app/time-ago";
-import { DownloadIcon, ListPlusIcon, UsersIcon } from "lucide-react";
+import { DownloadIcon, ListPlusIcon, MailIcon, UsersIcon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
@@ -14,7 +14,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { NativeSelect } from "@/components/ui/native-select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatMoney } from "@/lib/format";
-import { addToListAction } from "./actions";
+import { addToListAction, inviteStaffAction } from "./actions";
 
 export type TalentTableRow = {
   id: string;
@@ -85,6 +85,23 @@ export function TalentTable({
                 <ListPlusIcon /> Add
               </Button>
             </>
+          ) : null}
+          {canEdit ? (
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={pending}
+              onClick={() =>
+                start(async () => {
+                  const res = await inviteStaffAction(selected);
+                  if (res.ok) toast.success(res.message ?? "Invitations queued");
+                  else toast.error(res.error);
+                  router.refresh();
+                })
+              }
+            >
+              <MailIcon /> Send portal invite
+            </Button>
           ) : null}
           {canExport ? (
             <Button size="sm" variant="outline" asChild>

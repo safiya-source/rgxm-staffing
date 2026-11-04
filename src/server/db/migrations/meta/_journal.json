@@ -57,6 +57,13 @@
       "when": 1792871820583,
       "tag": "0007_app_rate_limits",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1793825986473,
+      "tag": "0008_staff_invitations",
+      "breakpoints": true
     }
   ]
 }

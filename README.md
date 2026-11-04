@@ -115,4 +115,4 @@ M1–M6 are built and tested, but the platform is **not production-ready** until
 - monitoring;
 - an external security test.
 
-Guides: [deployment](docs/DEPLOYMENT.md) · [administrators](docs/ADMIN_GUIDE.md) · [security & privacy](docs/SECURITY.md).
+Guides: [going live](docs/GO_LIVE.md) · [deployment](docs/DEPLOYMENT.md) · [administrators](docs/ADMIN_GUIDE.md) · [security & privacy](docs/SECURITY.md).

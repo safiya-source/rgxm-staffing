@@ -10,11 +10,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { WEEKDAYS } from "@/lib/availability";
 import { formatInZone, formatMinutes } from "@/lib/format";
 import { canAny } from "@/server/authz/permissions";
+import { latestInvitations } from "@/server/domain/invitations";
 import { getTalentLookups } from "@/server/domain/talent";
 import { getStaffDetail } from "@/server/queries/staff-detail";
 import { requireInternal, toActor } from "@/server/session";
 import { updateStaffAction } from "../actions";
 import { StaffForm } from "../staff-form";
+import { InviteButton } from "./invite-button";
 import { PrivacyCard } from "./privacy-card";
 import { CertificationsEditor, EmergencyContact, NotesCard, PaySetup, RatesCard, RolesEditor, StatusControl, TagsEditor } from "./sections";
 
@@ -38,6 +40,18 @@ export default async function StaffProfilePage({ params }: PageProps<"/dashboard
   if (!detail) notFound();
   const lookups = await getTalentLookups();
   const p = detail.profile;
+  const invite = p.userId ? undefined : (await latestInvitations([p.id])).get(p.id);
+  const inviteLive = Boolean(invite && !invite.acceptedAt && (!invite.expiresAt || invite.expiresAt > new Date()));
+  const portalStatus = p.userId
+    ? "Uses the staff portal"
+    : inviteLive
+      ? invite!.sentAt
+        ? `Invited ${format(invite!.sentAt, "MMM d")} · hasn't accepted yet`
+        : "Invitation sending…"
+      : invite
+        ? "Invitation expired"
+        : "Not invited to the portal yet";
+  const canInvite = can.edit && !p.userId && !p.isDemo && p.status === "active";
   const name = `${p.preferredName ?? p.firstName} ${p.lastName}`;
   const toOption = (x: { id: string; name: string }) => ({ value: x.id, label: x.name });
 
@@ -64,11 +78,16 @@ export default async function StaffProfilePage({ params }: PageProps<"/dashboard
                 </a>
               ) : null}
               <span>{[p.city, p.province].filter(Boolean).join(", ") || "Location not set"}</span>
-              <span>{p.userId ? "Uses the staff portal" : "Hasn't signed in yet"}</span>
+              <span>{portalStatus}</span>
             </p>
           </div>
         </div>
-        {can.edit ? <StatusControl staffId={p.id} status={p.status} /> : null}
+        {can.edit ? (
+          <div className="flex flex-wrap items-center gap-2">
+            {canInvite ? <InviteButton staffId={p.id} invitedRecently={inviteLive} /> : null}
+            <StatusControl staffId={p.id} status={p.status} />
+          </div>
+        ) : null}
       </div>
 
       <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-5">

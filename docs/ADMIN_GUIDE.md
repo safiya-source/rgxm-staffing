@@ -24,8 +24,13 @@ privacy and security tasks. Deployment is in DEPLOYMENT.md; the security model i
    "Their projects" means projects where the person is the owner, the coordinator, or a project member
    (*Project → Setup → Team*). Give people the fewest roles they need.
 
-5. **Field staff** don't need invitations. They join with a magic link at `/join` (or are imported by a
-   Coordinator) and sign in with links sent to their email.
+5. **Field staff** sign in with links sent to their email; they never have a password. Two ways in:
+   - **Invite them** (recommended for people you already work with): add or import them in *Talent*, then
+     *Talent → person → Send portal invite*, or tick several people in the Talent list and use *Send portal invite*.
+     They get a "Set up your RGXM staff profile" email with a link that works once and expires in 7 days.
+     The profile shows *Invited (date)*, then *Uses the staff portal* once they accept. You can resend after 24 hours,
+     or straight away with *Resend invite*. Demo, suspended, inactive and archived profiles are skipped.
+   - **Self sign-up** at `/join` with their email.
 
 ## Routine tasks
 

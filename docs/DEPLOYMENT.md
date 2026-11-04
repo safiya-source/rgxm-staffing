@@ -3,10 +3,10 @@
 The recommended setup (plan §12, decision 5) is **Supabase Postgres + private Storage in `ca-central-1`**
 for data, and **Vercel** for the app. Any host that runs a Node 22 Next.js server and Postgres 16 works.
 
-> **Status:** the app has been built and tested against local Postgres 16, local file storage and the "log"
-> mail transport. The Supabase Storage adapter, the Resend adapter and a Vercel deployment have **not** been
-> exercised yet. Do the first deployment to a staging environment and run the checks at the end of this guide
-> before production.
+> **Status:** a demo staging site runs on Vercel + Supabase, which has exercised the database, the Supabase Storage
+> adapter, sign-in, and the security headers. The **Resend** email adapter has **not** sent a real email
+> yet; the first production set-up does that (see the go-live checks). For the step-by-step production launch on
+> `crew.rgxmagency.com`, follow [GO_LIVE.md](GO_LIVE.md).
 
 ## 1. Database (Supabase)
 
@@ -37,10 +37,10 @@ never public; downloads go through authenticated routes.
 
 ## 3. Email (Resend)
 
-Verify a sending domain (e.g. `staffing@rgxm.ca`) in Resend, with SPF and DKIM. Set:
+Verify a sending domain (e.g. `staffing@rgxmagency.com`) in Resend, with SPF and DKIM. Set:
 - `MAIL_TRANSPORT=resend`
 - `RESEND_API_KEY`
-- `MAIL_FROM="RGXM Staffing <staffing@rgxm.ca>"`
+- `MAIL_FROM="RGXM Staffing <staffing@rgxmagency.com>"`
 
 `MAIL_TRANSPORT=log` is refused in production unless `ALLOW_LOG_MAIL_IN_PRODUCTION=on`. Use that **only** for a
 demo/staging site, because the Mail log then holds working sign-in links.
@@ -55,7 +55,7 @@ demo/staging site, because the Mail log then holds working sign-in links.
 |---|---|
 | `DATABASE_URL` | Supabase transaction-pooler URL (port 6543) |
 | `DATABASE_CA_CERT` | Supabase's SSL certificate (paste the PEM text) |
-| `APP_URL` | `https://staffing.rgxm.ca` (the public URL; used for links and cookie security) |
+| `APP_URL` | `https://crew.rgxmagency.com` (the public URL; used for links and cookie security) |
 | `BETTER_AUTH_SECRET` | `openssl rand -base64 48` (different per environment; rotating it signs everyone out) |
 | `MAIL_TRANSPORT`, `RESEND_API_KEY`, `MAIL_FROM` | see above |
 | `STORAGE_DRIVER`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_STORAGE_BUCKET` | see above |
@@ -98,8 +98,8 @@ people's data in it.
 On a fresh production database:
 
 ```bash
-DATABASE_URL="…" APP_URL="https://staffing.rgxm.ca" BETTER_AUTH_SECRET="…" MAIL_TRANSPORT=resend RESEND_API_KEY="…" MAIL_FROM="…" \
-  npm run admin:create -- --email you@rgxm.ca --name "Your Name"
+DATABASE_URL="…" APP_URL="https://crew.rgxmagency.com" BETTER_AUTH_SECRET="…" MAIL_TRANSPORT=resend RESEND_API_KEY="…" MAIL_FROM="…" \
+  npm run admin:create -- --email you@rgxmagency.com --name "Your Name"
 ```
 
 This emails an invitation to set a password. It refuses to run if an active administrator already exists. Sign in,

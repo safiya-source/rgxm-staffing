@@ -2,7 +2,7 @@
 // invitation to set a password. After that, administrators invite everyone else from
 // Settings → Team & roles. Refuses if an active administrator already exists.
 //
-//   npm run admin:create -- --email you@rgxm.ca --name "Your Name"
+//   npm run admin:create -- --email you@rgxmagency.com --name "Your Name"
 import "dotenv/config";
 import { and, eq, sql } from "drizzle-orm";
 import { recordAudit } from "../src/server/audit";

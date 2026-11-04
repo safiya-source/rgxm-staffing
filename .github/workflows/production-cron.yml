@@ -1,0 +1,28 @@
+# Calls the production site's scheduled runner every 5 minutes (GitHub's shortest schedule):
+# shift reminders, post-shift timesheet prompts, notification retries and privacy retention.
+# Most emails go out immediately anyway; this is the safety net. Does nothing until the
+# *repository* variable PRODUCTION_URL and the "production" environment secret PRODUCTION_CRON_SECRET are set.
+# GitHub can delay scheduled runs at busy times; for exact timing use Vercel Cron (Pro plan) or
+# another scheduler calling the same URL with the same header.
+name: Production scheduled runner
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  run:
+    if: ${{ vars.PRODUCTION_URL != '' }}
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Call /api/cron/outbox
+        run: |
+          curl --fail-with-body --silent --show-error --max-time 60 \
+            -H "Authorization: Bearer $CRON_SECRET" "$PRODUCTION_URL/api/cron/outbox"
+        env:
+          PRODUCTION_URL: ${{ vars.PRODUCTION_URL }}
+          CRON_SECRET: ${{ secrets.PRODUCTION_CRON_SECRET }}
