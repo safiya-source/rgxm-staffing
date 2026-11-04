@@ -23,15 +23,18 @@ and to the Supabase, Vercel and GitHub accounts.
 
 1. Create an account at **resend.com**, ideally with a shared RGXM address rather than a personal one.
 2. **Domains → Add domain** → `rgxmagency.com`. Choose region **North America (us-east-1)**.
-3. Resend shows 3–4 DNS records: an **MX** and a **TXT (SPF)** record on the `send` subdomain, a **TXT (DKIM)** record
-   named `resend._domainkey`, and optionally a **DMARC** TXT record. Keep that page open.
+3. Resend shows the DNS records to add (as of November 2026: a **TXT** record named `resend._domainkey`, and two
+   **CNAME** records named `send` and `rsend`). The list can differ between accounts. Always add exactly what
+   *your* Resend page shows. Leave **Enable receiving** switched off. Keep that page open.
 4. In **Squarespace**: *Domains → rgxmagency.com → DNS → DNS Settings → Custom records → Add record*. Add each record
    exactly as Resend shows it:
-   - **Host:** Squarespace adds `.rgxmagency.com` itself, so enter `send` (not `send.rgxmagency.com`), `resend._domainkey`, `_dmarc`.
-   - **Priority** (MX only): the number Resend shows (usually 10).
-   - **Do not change or delete your existing MX records** (the ones for your normal inbox). Resend's records are
-     on the `send` subdomain and don't affect existing email.
-   - If you already have a `_dmarc` record, keep yours and skip Resend's.
+   - **Host:** enter only the part Resend shows under *Name* (`resend._domainkey`, `send`, `rsend`).
+     Squarespace adds `.rgxmagency.com` itself.
+   - **Type:** as shown (TXT or CNAME). **Data/Value:** copy it with Resend's copy button. The DKIM value is long, so
+     don't retype it.
+   - Leave TTL at Squarespace's default.
+   - **Don't change or delete your existing records**, such as the MX records for your normal inbox. Resend's records
+     only add new names, so existing email isn't affected.
 5. Back in Resend, click **Verify DNS records**. It can take from a few minutes to a few hours. Wait for **Verified**.
 6. **API Keys → Create API key**: name `rgxm-production`, permission **Sending access**, domain `rgxmagency.com`.
    Copy it (starts with `re_`). You'll paste it into Vercel and GitHub. Don't email it or put it in a document.
