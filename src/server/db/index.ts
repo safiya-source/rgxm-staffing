@@ -14,3 +14,8 @@ export const db = drizzle(pool, { schema, casing: "snake_case" });
 export type Db = typeof db;
 export type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 export { schema };
+
+/** Runs `fn` in the caller's transaction when one is given, otherwise in a new one. */
+export function inTransaction<T>(tx: Tx | undefined, fn: (tx: Tx) => Promise<T>): Promise<T> {
+  return tx ? fn(tx) : db.transaction(fn);
+}

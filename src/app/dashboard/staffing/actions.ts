@@ -12,12 +12,15 @@ import { canOnProject } from "@/server/authz/permissions";
 import { db } from "@/server/db";
 import { bookings, messageThreads, shifts } from "@/server/db/schema";
 import * as b from "@/server/domain/bookings";
+import { ProjectError } from "@/server/domain/projects";
+import { ShiftError } from "@/server/domain/shifts";
+import { createStaffingRequest, staffingRequestSchema } from "@/server/domain/staffing-request";
 import { CommsError, markThreadRead, postMessage } from "@/server/domain/comms";
 import { parseTalentFilters } from "@/server/domain/talent-search";
 import { kickOutbox } from "@/server/notify/run";
 import { getCandidates, type Candidate } from "@/server/queries/staffing";
 import { getOrgSettings } from "@/server/settings";
-import { authorizeProject, ForbiddenError, loadProjectScopes, toActor } from "@/server/session";
+import { authorizeInternal, authorizeProject, ForbiddenError, loadProjectScopes, toActor } from "@/server/session";
 
 const uuid = z.string().uuid();
 
@@ -225,5 +228,42 @@ export async function revokeProjectRateAction(projectId: string, projectRateId: 
     await guard(() => b.revokeProjectRate(viewer.userId, projectId, uuid.parse(projectRateId)));
     refresh(projectId);
     return { ok: true, message: "Project rate removed." };
+  });
+}
+
+// ─── New staffing request (shortcut) ─────────────────────────────────────────
+
+/**
+ * Creates a staffing request in one step: a new project and/or venue when needed, plus published
+ * shifts. Returns the staffing board to send offers from.
+ */
+export async function createStaffingRequestAction(input: unknown): Promise<ActionResult<{ url: string }>> {
+  return runAction(async () => {
+    const parsed = staffingRequestSchema.parse(input);
+    let viewer;
+    if (parsed.project.mode === "new") {
+      // The creator becomes the project's owner, so they can add its venue and shifts.
+      viewer = await authorizeInternal("project.create");
+    } else {
+      viewer = await authorizeProject("shift.manage", parsed.project.projectId);
+      if (parsed.location.mode === "new") await authorizeProject("project.edit", parsed.project.projectId);
+    }
+    let res;
+    try {
+      res = await createStaffingRequest(viewer.userId, parsed);
+    } catch (err) {
+      if (err instanceof ProjectError || err instanceof ShiftError) throw new UserFacingError(err.message);
+      throw err;
+    }
+    kickOutbox();
+    revalidatePath("/dashboard/staffing");
+    revalidatePath("/dashboard/projects", "layout");
+    revalidatePath("/dashboard/schedule");
+    const n = res.shiftIds.length;
+    return {
+      ok: true,
+      message: `Created ${n} shift${n === 1 ? "" : "s"}. Now choose who to offer them to.`,
+      data: { url: `/dashboard/staffing/${res.projectId}?group=${encodeURIComponent(res.group)}` },
+    };
   });
 }

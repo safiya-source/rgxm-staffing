@@ -1,15 +1,16 @@
-import { BriefcaseIcon, InfoIcon } from "lucide-react";
+import { BriefcaseIcon, InfoIcon, PlusIcon } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { EmptyState } from "@/components/app/empty-state";
 import { PageHeader } from "@/components/app/page-header";
 import { StatCard } from "@/components/app/stat-card";
 import { DemoBadge, StatusBadge } from "@/components/app/status-badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatDateRange, formatMoney } from "@/lib/format";
-import { resolveGrant } from "@/server/authz/permissions";
+import { canAny, resolveGrant } from "@/server/authz/permissions";
 import { getOverview } from "@/server/queries/overview";
-import { requireInternal } from "@/server/session";
+import { requireInternal, toActor } from "@/server/session";
 
 export const metadata: Metadata = { title: "Overview" };
 
@@ -23,7 +24,19 @@ export default async function OverviewPage({ searchParams }: PageProps<"/dashboa
 
   return (
     <>
-      <PageHeader title={`Hello, ${firstName}`} description="What's happening across RGXM activations." />
+      <PageHeader
+        title={`Hello, ${firstName}`}
+        description="What's happening across RGXM activations."
+        actions={
+          canAny(toActor(viewer), "shift.manage") ? (
+            <Button asChild size="sm">
+              <Link href="/dashboard/staffing/new">
+                <PlusIcon /> New staffing request
+              </Link>
+            </Button>
+          ) : null
+        }
+      />
 
       {denied ? (
         <p role="alert" className="mb-6 rounded-lg bg-danger-soft px-4 py-3 text-sm text-destructive">

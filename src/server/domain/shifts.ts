@@ -5,7 +5,7 @@ import { z } from "zod";
 import { FIELD_ROLES } from "@/lib/roles";
 import { expandShiftPattern, isIsoDate, isLocalTime, shiftInstants, utcToZoned } from "@/lib/time";
 import { recordAudit } from "@/server/audit";
-import { db, type Tx } from "@/server/db";
+import { db, inTransaction, type Tx } from "@/server/db";
 import {
   bookings,
   bookingStatusHistory,
@@ -75,8 +75,8 @@ function isExclusionViolation(err: unknown) {
 }
 
 /** Creates one shift per matching date in the pattern, all in one transaction. */
-export async function createShifts(actorId: string, projectId: string, input: BulkShiftInput) {
-  return db.transaction(async (tx) => {
+export async function createShifts(actorId: string, projectId: string, input: BulkShiftInput, outer?: Tx) {
+  return inTransaction(outer, async (tx) => {
     const loc = await loadLocation(tx, projectId, input.locationId);
     await assertRequirement(tx, projectId, input.requirementId);
     let windows;
