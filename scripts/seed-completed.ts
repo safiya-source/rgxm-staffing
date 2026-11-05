@@ -34,8 +34,8 @@ export async function seedCompletedProject(domain: string) {
     .values({ projectId: project!.id, name: "Union Station — Front St concourse", address: "65 Front St W, Toronto, ON", city: "Toronto", province: "ON", timezone: "America/Toronto" })
     .returning({ id: projectLocations.id });
 
-  // Brand Ambassadors with a mix of pay classifications (including one not set yet).
-  const pickBy = async (classification: "contractor" | "employee" | "unset", n: number, exclude: string[] = []) =>
+  // Brand Ambassadors (all contractors; some GST/HST-registered in the demo data).
+  const pickBy = async (classification: "contractor", n: number, exclude: string[] = []) =>
     db
       .select({ id: staffProfiles.id })
       .from(staffProfiles)
@@ -44,7 +44,7 @@ export async function seedCompletedProject(domain: string) {
       .orderBy(staffProfiles.lastName)
       .limit(n);
   const [jordan] = await db.select({ id: staffProfiles.id }).from(staffProfiles).where(eq(staffProfiles.email, `ba.demo@${domain}`));
-  const people = [jordan!, ...(await pickBy("contractor", 2, [jordan!.id])), ...(await pickBy("employee", 1)), ...(await pickBy("unset", 1))];
+  const people = [jordan!, ...(await pickBy("contractor", 4, [jordan!.id]))];
 
   const windows = expandShiftPattern({ startDate: "2026-10-10", endDate: "2026-10-11", weekdays: [], startTime: "11:00", endTime: "17:00", timeZone: "America/Toronto" });
   for (const w of windows) {

@@ -27,11 +27,10 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/dashboa
 
   return (
     <>
-      <PageHeader title="Payments" description="Approved hours become payables. Finance batches them by pay type, exports a file for payment, then records what was paid." />
+      <PageHeader title="Payments" description="Approved hours become payables. Finance batches them, exports a file for payment, then records what was paid." />
       <p className="-mt-2 mb-4 max-w-3xl text-sm text-muted-foreground">
-        This platform doesn&apos;t send money. Exports are imported into your accounting or payroll system, and pay classification
-        (contractor or employee) should be confirmed with your accountant. Payroll batches carry gross hours and pay only; deductions and
-        vacation pay are calculated by the payroll provider.
+        This platform doesn&apos;t send money. All field staff are paid as independent contractors: export a batch, import the bills
+        into your accounting system, pay them, then record the payment here. HST is added for GST/HST-registered contractors.
       </p>
       {canManage ? (
         <nav aria-label="Payment views" className="mb-4 flex gap-1.5">
@@ -48,6 +47,9 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/dashboa
               {label}
             </Link>
           ))}
+          <Link href="/dashboard/payments/t4a" className="rounded-full border bg-card px-3 py-1 text-sm hover:bg-accent">
+            T4A summary
+          </Link>
         </nav>
       ) : null}
 

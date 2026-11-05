@@ -182,10 +182,22 @@ export async function getStaffDetail(
       ? {
           classification: profile.classification,
           taxRegistered: sensitive?.taxRegistered ?? false,
-          // Tax and legal identity details only for people who can edit pay setup.
-          gstHstNumber: can.editRates ? (sensitive?.gstHstNumber ?? null) : null,
-          legalName: can.editRates ? (sensitive?.legalName ?? null) : null,
-          businessName: can.editRates ? (sensitive?.businessName ?? null) : null,
+          hasSin: Boolean(sensitive?.sinLast3),
+          // Tax and legal identity details only for people who can edit pay setup. Never the SIN itself.
+          tax: can.editRates
+            ? {
+                legalName: sensitive?.legalName ?? null,
+                businessName: sensitive?.businessName ?? null,
+                businessNumber: sensitive?.businessNumber ?? null,
+                taxRegistered: sensitive?.taxRegistered ?? false,
+                gstHstNumber: sensitive?.gstHstNumber ?? null,
+                sinLast3: sensitive?.sinLast3 ?? null,
+                mailingStreet: sensitive?.mailingStreet ?? null,
+                mailingCity: sensitive?.mailingCity ?? null,
+                mailingProvince: sensitive?.mailingProvince ?? null,
+                mailingPostalCode: sensitive?.mailingPostalCode ?? null,
+              }
+            : null,
         }
       : null,
     emergency: showEmergency

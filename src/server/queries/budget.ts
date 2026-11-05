@@ -1,5 +1,6 @@
 // Project budget: what's paid-for (approved), waiting on approval, and still scheduled,
-// against the project budget. Every figure comes from agreed-rate snapshots or approved payables.
+// against the project budget. Every figure comes from agreed-rate snapshots or approved payables, before HST
+// (registered businesses usually recover HST as input tax credits; confirm with the accountant).
 import { sql } from "drizzle-orm";
 import { utcToZoned } from "@/lib/time";
 import { db } from "@/server/db";
@@ -27,7 +28,7 @@ export async function getProjectBudget(projectId: string, now = new Date()) {
   }>(sql`
     select b.id as booking_id, b.role::text as role, l.name as location, s.starts_at, s.ends_at, s.timezone, b.agreed_rate_cents,
            t.worked_start, t.worked_end, t.break_minutes, t.status::text as timesheet_status,
-           (select p.total_cents from payable_items p where p.timesheet_id = t.id and p.status <> 'void' limit 1) as payable_total
+           (select p.base_cents from payable_items p where p.timesheet_id = t.id and p.status <> 'void' limit 1) as payable_total
       from bookings b
       join shifts s on s.id = b.shift_id
       join project_locations l on l.id = s.location_id

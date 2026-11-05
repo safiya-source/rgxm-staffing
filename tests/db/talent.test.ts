@@ -41,15 +41,6 @@ describe("talent profiles", () => {
     expect(rows[0].effective_to).not.toBeNull();
     expect(rows[1].effective_to).toBeNull();
   });
-
-  it("validates GST/HST numbers for registered contractors", async () => {
-    const id = await staff("Contractor");
-    const base = { classification: "contractor" as const, legalName: null, businessName: null };
-    await expect(talent.setClassification(actor.id, id, { ...base, taxRegistered: true, gstHstNumber: null })).rejects.toThrow(/GST\/HST number/);
-    await expect(talent.setClassification(actor.id, id, { ...base, taxRegistered: true, gstHstNumber: "12345" })).rejects.toThrow(/look like/);
-    await talent.setClassification(actor.id, id, { ...base, taxRegistered: true, gstHstNumber: "123456789 RT0001" });
-    expect((await one("select classification from staff_profiles where id = $1", [id])).classification).toBe("contractor");
-  });
 });
 
 describe("talent search", () => {

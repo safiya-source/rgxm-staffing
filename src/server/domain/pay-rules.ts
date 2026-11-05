@@ -1,13 +1,27 @@
 // Pure payment rules (no database). Unit-tested in tests/unit/pay-rules.test.ts.
 
 /** Bumped whenever the calculation changes; stored on every payable with its inputs. */
-export const CALC_VERSION = "base-v1";
+export const CALC_VERSION = "base-hst-v2";
 
 /** Base pay in cents: payable minutes × hourly rate, rounded half up to the cent. */
 export function basePayCents(payableMinutes: number, rateCentsPerHour: number) {
   if (!Number.isInteger(payableMinutes) || payableMinutes < 0) throw new Error("payableMinutes must be a non-negative integer");
   if (!Number.isInteger(rateCentsPerHour) || rateCentsPerHour < 0) throw new Error("rate must be a non-negative integer");
   return Math.floor((payableMinutes * rateCentsPerHour + 30) / 60);
+}
+
+// ─── HST ─────────────────────────────────────────────────────────────────────────
+
+/**
+ * HST charged by GST/HST-registered contractors, in basis points (13% Ontario HST). RGXM's accountant
+ * should confirm the rate for contractors who supply services from other provinces.
+ */
+export const HST_RATE_BP = 1300;
+
+/** HST in cents on a pre-tax amount, rounded half up to the cent. */
+export function hstCents(subtotalCents: number, rateBp = HST_RATE_BP) {
+  if (!Number.isInteger(subtotalCents) || subtotalCents < 0) throw new Error("subtotal must be a non-negative integer");
+  return Math.floor((subtotalCents * rateBp + 5000) / 10000);
 }
 
 // ─── Pay periods ──────────────────────────────────────────────────────────────

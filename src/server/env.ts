@@ -16,6 +16,9 @@ const schema = z.object({
   SUPABASE_URL: z.string().url().optional(),
   SUPABASE_SERVICE_ROLE_KEY: z.string().optional(),
   SUPABASE_STORAGE_BUCKET: z.string().default("rgxm-private"),
+  // Encrypts Social Insurance Numbers for T4A slips: `openssl rand -base64 32`. Never change it once
+  // SINs are stored (they could no longer be read). Optional: SIN entry is disabled without it.
+  TAX_ID_ENCRYPTION_KEY: z.string().optional(),
   // Shared secret for the scheduled outbox runner (/api/cron/outbox).
   CRON_SECRET: z.string().min(24).optional(),
   // Auth endpoint rate limiting. May only be turned off outside production (e.g. for E2E runs).

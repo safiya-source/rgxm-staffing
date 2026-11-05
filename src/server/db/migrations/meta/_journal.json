@@ -71,6 +71,13 @@
       "when": 1793907136577,
       "tag": "0009_org_default_rates",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1793913248642,
+      "tag": "0010_contractors_tax_details",
+      "breakpoints": true
     }
   ]
 }

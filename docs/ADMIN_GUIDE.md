@@ -41,9 +41,15 @@ privacy and security tasks. Deployment is in DEPLOYMENT.md; the security model i
 - **Suspend a field staff member:** *Talent → person → Status → Suspended*. This signs them out, blocks portal access,
   and stops them accepting offers or being confirmed. *Inactive* only means "not taking work"; they can still see
   their schedule and pay.
-- **Pay classification:** each person is *unset* until Finance (or an admin) sets *contractor* or *employee*
-  (*Talent → person → Pay setup*). People who are unset can't be paid. After classifying someone with approved
-  hours, use *Payments → Refresh classifications*.
+- **Contractors, HST and tax details:** everyone in the talent pool is paid as an independent contractor. Each person's
+  *Talent → person → Pay & tax details* holds their legal name, SIN or business number, mailing address and GST/HST
+  registration. Contractors can fill these in themselves under *My profile → Tax details* in the staff portal. The SIN is
+  encrypted, only its last 3 digits are ever shown, and it only appears in the year-end T4A file.
+  - **GST/HST-registered** contractors get 13% HST added on top of their pay when their hours are approved. If someone's
+    registration changes after approval, *Payments* lists those payables under *Pay details changed*; use *Refresh pay details*.
+  - **T4A:** *Payments → T4A summary* totals fees paid per contractor for a calendar year (by the date payment was recorded),
+    flags who is over the $500 threshold and who is missing details, and downloads a CSV for your accountant. The CSV
+    contains full SINs, so store it securely and delete it after filing. Each download is recorded in the audit log.
 - **Audit log** (*Settings → Audit log*): who did what and when, including sign-ins, approvals, payment batches,
   exports, downloads, setting changes and privacy actions. It can't be edited.
 - **Mail log** (*Settings → Mail log*): every email the system sent or suppressed, and delivery failures.

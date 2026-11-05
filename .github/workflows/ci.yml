@@ -30,6 +30,8 @@ jobs:
       BETTER_AUTH_SECRET: ci-only-secret-ci-only-secret-ci-only-secret
       MAIL_TRANSPORT: log
       AUTH_RATE_LIMIT: "on"
+      # CI-only key for SIN encryption tests (not a real secret).
+      TAX_ID_ENCRYPTION_KEY: Y2ktb25seS1rZXktY2ktb25seS1rZXktY2ktb25seTI=
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
