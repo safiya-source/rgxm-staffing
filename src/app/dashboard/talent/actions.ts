@@ -215,7 +215,7 @@ export async function removeFromListAction(listId: string, staffIds: string[]): 
 
 // ─── Portal invitations ─────────────────────────────────────────────────────
 
-/** Emails "Set up your RGXM profile" links. People who can't be invited are skipped with a reason. */
+/** Emails "You've been invited to join RGXM Crew" links. People who can't be invited are skipped with a reason. */
 export async function inviteStaffAction(staffIds: string[], resend = false): Promise<ActionResult> {
   return runAction(async () => {
     const viewer = await authorizeInternal("talent.edit");

@@ -40,7 +40,7 @@ never public; downloads go through authenticated routes.
 Verify a sending domain (e.g. `staffing@rgxmagency.com`) in Resend, with SPF and DKIM. Set:
 - `MAIL_TRANSPORT=resend`
 - `RESEND_API_KEY`
-- `MAIL_FROM="RGXM Staffing <staffing@rgxmagency.com>"`
+- `MAIL_FROM="RGXM Crew <staffing@rgxmagency.com>"`
 
 `MAIL_TRANSPORT=log` is refused in production unless `ALLOW_LOG_MAIL_IN_PRODUCTION=on`. Use that **only** for a
 demo/staging site, because the Mail log then holds working sign-in links.

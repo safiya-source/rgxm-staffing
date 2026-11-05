@@ -56,6 +56,6 @@ jobs:
           APP_URL: ${{ vars.PRODUCTION_URL }}
           MAIL_TRANSPORT: resend
           RESEND_API_KEY: ${{ secrets.PRODUCTION_RESEND_API_KEY }}
-          MAIL_FROM: "RGXM Staffing <staffing@rgxmagency.com>"
+          MAIL_FROM: "RGXM Crew <staffing@rgxmagency.com>"
           ADMIN_EMAIL: ${{ inputs.admin_email }}
           ADMIN_NAME: ${{ inputs.admin_name }}

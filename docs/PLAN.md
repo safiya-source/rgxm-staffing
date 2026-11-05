@@ -1,4 +1,4 @@
-# RGXM Staffing Platform — Discovery & Implementation Plan
+# RGXM Crew Platform — Discovery & Implementation Plan
 
 Status: **Approved 2026-10-23** · M1–M3 delivered (see §14)
 

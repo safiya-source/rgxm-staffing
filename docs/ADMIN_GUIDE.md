@@ -27,7 +27,7 @@ privacy and security tasks. Deployment is in DEPLOYMENT.md; the security model i
 5. **Field staff** sign in with links sent to their email; they never have a password. Two ways in:
    - **Invite them** (recommended for people you already work with): add or import them in *Talent*, then
      *Talent → person → Send portal invite*, or tick several people in the Talent list and use *Send portal invite*.
-     They get a "Set up your RGXM staff profile" email with a link that works once and expires in 7 days.
+     They get a "You've been invited to join RGXM Crew" email with a link that works once and expires in 7 days.
      The profile shows *Invited (date)*, then *Uses the staff portal* once they accept. You can resend after 24 hours,
      or straight away with *Resend invite*. Demo, suspended, inactive and archived profiles are skipped.
    - **Self sign-up** at `/join` with their email.

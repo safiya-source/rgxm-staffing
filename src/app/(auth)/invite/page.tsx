@@ -12,9 +12,9 @@ export default async function InvitePage({ searchParams }: PageProps<"/invite">)
   const { token } = await searchParams;
   return (
     <div>
-      <h1 className="text-2xl font-semibold">You&apos;re invited to work with RGXM</h1>
+      <h1 className="text-2xl font-semibold">You&apos;ve been invited to join RGXM Crew</h1>
       <p className="mt-2 text-[15px] text-muted-foreground">
-        This portal is where you&apos;ll get shift offers, event briefs and payment updates. Continue to sign in and finish
+        RGXM Crew is where you&apos;ll get shift offers, event briefs and payment updates. Continue to sign in and finish
         your profile. It takes about two minutes, and you won&apos;t need a password.
       </p>
       <div className="mt-6">

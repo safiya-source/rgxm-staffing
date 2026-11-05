@@ -9,7 +9,7 @@ What you end up with:
 | | Production |
 |---|---|
 | Address | `https://crew.rgxmagency.com` |
-| Emails from | `RGXM Staffing <staffing@rgxmagency.com>` |
+| Emails from | `RGXM Crew <staffing@rgxmagency.com>` |
 | Database & files | A new Supabase project in **Canada (Central)** |
 | App | A second Vercel project that deploys the `production` branch |
 | Email provider | Resend, with `rgxmagency.com` verified |
@@ -72,7 +72,7 @@ and to the Supabase, Vercel and GitHub accounts.
 4. Create the release branch: on the repository's main page, open the branch menu, type `production`, and choose
    **Create branch production from main**.
 5. **Actions → Production database → Run workflow**. Enter your work email and full name in the two boxes, then run it.
-   It applies the database structure and emails you **"Your RGXM Staffing invitation"**. Wait until step 5 to click the
+   It applies the database structure and emails you **"Your RGXM Crew invitation"**. Wait until step 5 to click the
    link: it expires in 24 hours, and the site must be live first. If it expires, run the workflow again without the boxes
    filled in, then use **Forgot password** on the sign-in page.
 
@@ -90,7 +90,7 @@ and to the Supabase, Vercel and GitHub accounts.
 | `BETTER_AUTH_SECRET` | a new value from `openssl rand -base64 48` (**not** the staging one) |
 | `MAIL_TRANSPORT` | `resend` |
 | `RESEND_API_KEY` | the Resend key |
-| `MAIL_FROM` | `RGXM Staffing <staffing@rgxmagency.com>` |
+| `MAIL_FROM` | `RGXM Crew <staffing@rgxmagency.com>` |
 | `STORAGE_DRIVER` | `supabase` |
 | `SUPABASE_URL` | the Project URL |
 | `SUPABASE_SERVICE_ROLE_KEY` | the `sb_secret_…` key |

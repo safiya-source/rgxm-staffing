@@ -1,4 +1,4 @@
-// Staff portal invitations ("Set up your RGXM profile" emails). RGXM decides who to invite; the
+// Staff portal invitations ("You've been invited to join RGXM Crew" emails). RGXM decides who to invite; the
 // email carries a single-use link valid for 7 days that signs the person in and takes them to
 // profile set-up. Only a hash of the link's token is stored.
 import { createHash, randomBytes } from "node:crypto";
@@ -96,13 +96,13 @@ export async function sendInvitation(invitationId: string) {
   const name = row.preferredName ?? row.firstName;
   await sendEmail({
     to: row.email,
-    subject: "Set up your RGXM staff profile",
+    subject: "You've been invited to join RGXM Crew",
     containsSecretLink: true,
     dedupeKey: `staff.invite:${invitationId}`,
     ...actionEmail({
-      heading: `Hi ${name}, you're invited to RGXM's staff portal`,
+      heading: `Hi ${name}, you've been invited to join RGXM Crew`,
       intro:
-        "RGXM uses this portal to offer event shifts, share briefs, record your hours and show your payments. Tap below to sign in and finish your profile — no password needed. After this, you can sign in any time with a link sent to this email address.",
+        "RGXM Crew is where you'll get shift offers and event briefs, record your hours and see your payments. Tap below to sign in and finish your profile — no password needed. After this, you can sign in any time with a link sent to this email address.",
       actionLabel: "Set up my profile",
       url,
       footer: `This link works once and expires in ${INVITE_TTL_DAYS} days. If you weren't expecting this, you can ignore it.`,
