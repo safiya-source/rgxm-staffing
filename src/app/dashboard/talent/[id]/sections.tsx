@@ -378,12 +378,10 @@ export function PaySetup({
   staffId,
   pay,
   canEdit,
-  sinAvailable,
 }: {
   staffId: string;
-  pay: { classification: string; taxRegistered: boolean; hasSin: boolean; tax: TaxDetailsValues | null };
+  pay: { classification: string; taxRegistered: boolean; tax: TaxDetailsValues | null };
   canEdit: boolean;
-  sinAvailable: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const report = useReport();
@@ -391,7 +389,6 @@ export function PaySetup({
     return (
       <TaxDetailsForm
         initial={pay.tax}
-        sinAvailable={sinAvailable}
         action={setTaxDetailsAction.bind(null, staffId)}
         onDone={() => {
           report({ ok: true, message: "Tax details saved." });
@@ -402,7 +399,7 @@ export function PaySetup({
     );
   }
   const t = pay.tax;
-  const missing = t ? [!t.legalName && "legal name", !pay.hasSin && !t.businessNumber && "SIN or business number", !t.mailingStreet && "mailing address"].filter(Boolean) : [];
+  const missing = t ? [!t.legalName && "legal name", !t.mailingStreet && "mailing address"].filter(Boolean) : [];
   return (
     <div className="grid gap-2 text-sm">
       <p>Independent contractor{pay.classification === "employee" ? " (previously set as employee)" : ""}</p>
@@ -410,7 +407,6 @@ export function PaySetup({
       {t ? (
         <>
           {t.legalName ? <p className="text-muted-foreground">Legal name: {t.legalName}{t.businessName ? ` (${t.businessName})` : ""}</p> : null}
-          <p className="text-muted-foreground">SIN: {t.sinLast3 ? `on file, ends in ${t.sinLast3}` : "not on file"}</p>
           {missing.length ? <Badge tone="warning" className="w-fit">Needed for T4A: {missing.join(", ")}</Badge> : null}
         </>
       ) : null}

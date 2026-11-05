@@ -2,7 +2,6 @@ import { ArrowLeftIcon } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { TaxDetailsForm } from "@/components/app/tax-details-form";
-import { taxIdStorageReady } from "@/server/crypto/tax-id";
 import { getTaxDetails } from "@/server/domain/tax-details";
 import { requireStaff } from "@/server/session";
 import { saveMyTaxDetailsAction } from "../../../actions";
@@ -20,11 +19,11 @@ export default async function TaxDetailsPage() {
       <div>
         <h1 className="text-[22px] font-semibold">Tax details</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          RGXM pays you as an independent contractor. We need these details to pay you correctly and to send your T4A tax slip.
-          Your SIN is encrypted and only RGXM&apos;s finance team can use it, for tax slips.
+          RGXM pays you as an independent contractor. We need these details to pay you correctly and for your T4A tax slip.
+          Please don&apos;t enter your SIN here: if it&apos;s needed, RGXM&apos;s accountant will ask you for it directly.
         </p>
       </div>
-      <TaxDetailsForm initial={details} action={saveMyTaxDetailsAction} sinAvailable={taxIdStorageReady()} selfService />
+      <TaxDetailsForm initial={details} action={saveMyTaxDetailsAction} selfService />
     </div>
   );
 }

@@ -60,7 +60,6 @@ demo/staging site, because the Mail log then holds working sign-in links.
 | `MAIL_TRANSPORT`, `RESEND_API_KEY`, `MAIL_FROM` | see above |
 | `STORAGE_DRIVER`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_STORAGE_BUCKET` | see above |
 | `CRON_SECRET` | `openssl rand -hex 32` |
-| `TAX_ID_ENCRYPTION_KEY` | `openssl rand -base64 32`. Encrypts SINs for T4A slips. **Never change it** once SINs are stored; keep a copy in your password manager |
 | `AUTH_IP_HEADERS` | `x-vercel-forwarded-for` on Vercel (`x-real-ip` behind nginx, `cf-connecting-ip` behind Cloudflare) |
 | `AUTH_RATE_LIMIT` | `on` (`off` is refused in production) |
 

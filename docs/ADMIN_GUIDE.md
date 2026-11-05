@@ -42,14 +42,15 @@ privacy and security tasks. Deployment is in DEPLOYMENT.md; the security model i
   and stops them accepting offers or being confirmed. *Inactive* only means "not taking work"; they can still see
   their schedule and pay.
 - **Contractors, HST and tax details:** everyone in the talent pool is paid as an independent contractor. Each person's
-  *Talent → person → Pay & tax details* holds their legal name, SIN or business number, mailing address and GST/HST
-  registration. Contractors can fill these in themselves under *My profile → Tax details* in the staff portal. The SIN is
-  encrypted, only its last 3 digits are ever shown, and it only appears in the year-end T4A file.
+  *Talent → person → Pay & tax details* holds their legal name, business number (if any), mailing address and GST/HST
+  registration. Contractors can fill these in themselves under *My profile → Tax details* in the staff portal.
+  **SINs are not collected in the platform**: your accountant gathers them directly for T4A slips.
   - **GST/HST-registered** contractors get 13% HST added on top of their pay when their hours are approved. If someone's
     registration changes after approval, *Payments* lists those payables under *Pay details changed*; use *Refresh pay details*.
   - **T4A:** *Payments → T4A summary* totals fees paid per contractor for a calendar year (by the date payment was recorded),
-    flags who is over the $500 threshold and who is missing details, and downloads a CSV for your accountant. The CSV
-    contains full SINs, so store it securely and delete it after filing. Each download is recorded in the audit log.
+    flags who is over the $500 threshold and who is missing details, and downloads a CSV for your accountant, with an
+    empty SIN column for them to complete. The CSV contains names, addresses and pay totals, so store it securely. Each
+    download is recorded in the audit log.
 - **Audit log** (*Settings → Audit log*): who did what and when, including sign-ins, approvals, payment batches,
   exports, downloads, setting changes and privacy actions. It can't be edited.
 - **Mail log** (*Settings → Mail log*): every email the system sent or suppressed, and delivery failures.

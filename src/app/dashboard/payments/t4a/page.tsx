@@ -53,15 +53,15 @@ export default async function T4aPage({ searchParams }: PageProps<"/dashboard/pa
       </div>
       <p className="mb-4 max-w-3xl text-sm text-muted-foreground">
         {rows.length} contractor{rows.length === 1 ? "" : "s"} paid {formatMoney(total)} before HST. {slips.length} {slips.length === 1 ? "is" : "are"} over the $500 T4A threshold
-        {incomplete.length ? `, and ${incomplete.length} of them ${incomplete.length === 1 ? "is" : "are"} missing tax details` : ""}. The CSV contains full SINs: store it securely and delete it once filed.
-        Your accountant should confirm the slip boxes and amounts.
+        {incomplete.length ? `, and ${incomplete.length} of them ${incomplete.length === 1 ? "is" : "are"} missing tax details` : ""}. RGXM doesn&apos;t store SINs: the CSV has an empty SIN column for your
+        accountant to complete. Your accountant should confirm the slip boxes and amounts.
       </p>
       <Card className="overflow-hidden">
         <Table>
           <TableHeader>
             <TableRow className="hover:bg-transparent">
               <TableHead>Contractor</TableHead>
-              <TableHead>SIN / BN</TableHead>
+              <TableHead>Business number</TableHead>
               <TableHead className="text-right">Fees (before HST)</TableHead>
               <TableHead className="text-right">HST</TableHead>
               <TableHead className="text-right">Total paid</TableHead>
@@ -84,7 +84,7 @@ export default async function T4aPage({ searchParams }: PageProps<"/dashboard/pa
                     </Link>
                     {r.businessName ? <p className="text-xs text-muted-foreground">{r.businessName}</p> : null}
                   </TableCell>
-                  <TableCell className="text-sm text-muted-foreground">{r.sinLast3 ? `SIN ••• ••• ${r.sinLast3}` : r.businessNumber ? `BN ${r.businessNumber}` : "—"}</TableCell>
+                  <TableCell className="text-sm text-muted-foreground">{r.businessNumber ?? "—"}</TableCell>
                   <TableCell className="text-right tabular-nums">{formatMoney(r.feesCents)}</TableCell>
                   <TableCell className="text-right tabular-nums">{formatMoney(r.hstCents)}</TableCell>
                   <TableCell className="text-right tabular-nums">{formatMoney(r.totalCents)}</TableCell>

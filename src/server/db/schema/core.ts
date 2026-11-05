@@ -161,11 +161,7 @@ export const staffSensitive = pgTable("staff_sensitive", {
   businessNumber: text(),
   taxRegistered: boolean().notNull().default(false),
   gstHstNumber: text(),
-  // Social Insurance Number for T4A slips: AES-256-GCM ciphertext (see server/crypto/tax-id.ts),
-  // never stored or logged in plain text. Only the last 3 digits are kept readable for display.
-  sinEncrypted: text(),
-  sinLast3: text(),
-  // Mailing address for tax slips.
+  // Mailing address for tax slips. SINs are deliberately not stored: RGXM's accountant collects them.
   mailingStreet: text(),
   mailingCity: text(),
   mailingProvince: text(),

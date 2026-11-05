@@ -1,13 +1,13 @@
-// Contractor tax details: legal/business name, GST/HST registration, business number, SIN and
-// mailing address, used for HST on payables and year-end T4A slips. Entered by Finance/Admins on
-// the talent profile, or by the contractor in the staff portal. SINs are encrypted and write-only.
+// Contractor tax details: legal/business name, GST/HST registration, business number and mailing
+// address, used for HST on payables and year-end T4A slips. Entered by Finance/Admins on the talent
+// profile, or by the contractor in the staff portal. SINs are deliberately NOT collected or stored
+// here: RGXM's accountant collects them directly when preparing T4A slips.
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { PROVINCE_CODES } from "@/lib/provinces";
 import { recordAudit } from "@/server/audit";
 import { db } from "@/server/db";
 import { staffProfiles, staffSensitive } from "@/server/db/schema";
-import { encryptSin, normalizeSin, TaxIdError } from "@/server/crypto/tax-id";
 
 export class TaxDetailsError extends Error {}
 
@@ -27,8 +27,6 @@ export const taxDetailsSchema = z
       (v) => (typeof v === "string" ? v.replace(/\s/g, "").toUpperCase() || null : v),
       z.string().regex(/^\d{9}RT\d{4}$/, "GST/HST numbers look like 123456789 RT0001").nullable().optional(),
     ),
-    // Blank keeps the SIN already on file.
-    sin: optText(20),
     mailingStreet: optText(200),
     mailingCity: optText(100),
     mailingProvince: z.preprocess(blankToNull, z.enum(PROVINCE_CODES).nullable().optional()),
@@ -45,17 +43,6 @@ export type TaxDetailsInput = z.input<typeof taxDetailsSchema>;
 /** Saves tax details. `bySelf` marks a contractor updating their own record from the portal. */
 export async function saveTaxDetails(actorId: string, staffId: string, raw: TaxDetailsInput, opts: { bySelf?: boolean } = {}) {
   const input = taxDetailsSchema.parse(raw);
-  let sin: { sinEncrypted: string; sinLast3: string } | null = null;
-  if (input.sin) {
-    const digits = normalizeSin(input.sin);
-    if (!digits) throw new TaxDetailsError("That SIN isn't valid. Check the 9 digits.");
-    try {
-      sin = { sinEncrypted: encryptSin(digits), sinLast3: digits.slice(-3) };
-    } catch (err) {
-      if (err instanceof TaxIdError) throw new TaxDetailsError(err.message);
-      throw err;
-    }
-  }
   const values = {
     legalName: input.legalName ?? null,
     businessName: input.businessName ?? null,
@@ -66,7 +53,6 @@ export async function saveTaxDetails(actorId: string, staffId: string, raw: TaxD
     mailingCity: input.mailingCity ?? null,
     mailingProvince: input.mailingProvince ?? null,
     mailingPostalCode: input.mailingPostalCode ?? null,
-    ...(sin ?? {}),
   };
   await db.transaction(async (tx) => {
     const [before] = await tx.select({ taxRegistered: staffSensitive.taxRegistered }).from(staffSensitive).where(eq(staffSensitive.staffId, staffId));
@@ -81,14 +67,14 @@ export async function saveTaxDetails(actorId: string, staffId: string, raw: TaxD
         entityType: "staff_profile",
         entityId: staffId,
         before: { taxRegistered: before?.taxRegistered ?? false },
-        after: { taxRegistered: values.taxRegistered, sinUpdated: Boolean(sin), hasBusinessNumber: Boolean(values.businessNumber), hasMailingAddress: Boolean(values.mailingStreet) },
+        after: { taxRegistered: values.taxRegistered, hasBusinessNumber: Boolean(values.businessNumber), hasMailingAddress: Boolean(values.mailingStreet) },
       },
       tx,
     );
   });
 }
 
-/** What the forms show: never the SIN itself, only whether one is on file and its last 3 digits. */
+/** What the tax-details forms show. */
 export async function getTaxDetails(staffId: string) {
   const [s] = await db.select().from(staffSensitive).where(eq(staffSensitive.staffId, staffId));
   return {
@@ -97,7 +83,6 @@ export async function getTaxDetails(staffId: string) {
     businessNumber: s?.businessNumber ?? null,
     taxRegistered: s?.taxRegistered ?? false,
     gstHstNumber: s?.gstHstNumber ?? null,
-    sinLast3: s?.sinLast3 ?? null,
     mailingStreet: s?.mailingStreet ?? null,
     mailingCity: s?.mailingCity ?? null,
     mailingProvince: s?.mailingProvince ?? null,
