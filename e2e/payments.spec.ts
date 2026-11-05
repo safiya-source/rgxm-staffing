@@ -13,13 +13,17 @@ async function approvedPayable() {
       where p.code = 'DEMO-ORE-2610' and s.email = 'ba.demo@rgxm-demo.test'`,
   );
   const ctx = rows[0];
-  // A unique past slot (September 2026) so reruns never overlap an earlier booking.
-  const slot = Math.floor(Date.now() / 60_000) % (25 * 24 * 6);
-  const start = new Date(Date.UTC(2026, 8, 1, 0, 0) + slot * 10 * 60_000);
+  // A past slot (from September 2026) after Jordan's previous test bookings, so reruns never overlap.
+  const last = (
+    await pool.query("select max(ends_at) as t from bookings where staff_id = $1 and starts_at >= '2026-09-01' and starts_at < '2026-10-01'", [ctx.staff_id])
+  ).rows[0].t as Date | null;
+  const start = new Date((last ?? new Date(Date.UTC(2026, 8, 1, 0, 0))).getTime() + 3_600_000);
   const end = new Date(start.getTime() + 5 * 3_600_000);
   const client = await pool.connect();
   try {
     await client.query("begin");
+    // Jordan isn't GST/HST-registered for this test, so the payable needs no HST.
+    await client.query("update staff_sensitive set tax_registered = false, gst_hst_number = null where staff_id = $1", [ctx.staff_id]);
     const shift = (
       await client.query(
         `insert into shifts (project_id, location_id, role, starts_at, ends_at, timezone, rate_cents, status)
@@ -44,7 +48,7 @@ async function approvedPayable() {
     const payable = (
       await client.query(
         `insert into payable_items (timesheet_id, staff_id, project_id, service_date, classification, payable_minutes, rate_cents, base_cents, total_cents, calc_version, calc_inputs)
-         values ($1, $2, $3, (($4::timestamptz) at time zone 'America/Toronto')::date, 'contractor', 300, 2400, 12000, 12000, 'base-v1', '{"role":"BA"}') returning id`,
+         values ($1, $2, $3, (($4::timestamptz) at time zone 'America/Toronto')::date, 'contractor', 300, 2400, 12000, 12000, 'base-hst-v2', '{"role":"BA","hst":null}') returning id`,
         [ts.id, ctx.staff_id, ctx.project_id, start],
       )
     ).rows[0];
@@ -66,7 +70,6 @@ test("finance batches, a second person approves, export once, mark paid, staff s
   const fin = await (await browser.newContext({ acceptDownloads: true })).newPage();
   await signInAsTeam(fin, "finance");
   await fin.goto("/dashboard/payments");
-  await expect(fin.getByText("Needs a pay classification")).toBeVisible();
   const section = fin.getByRole("region", { name: "Contractors · demo data" });
   await expect(section).toBeVisible();
   await expect(section.getByRole("checkbox", { name: /Select Jordan Lee/ }).first()).toBeChecked();
@@ -131,4 +134,19 @@ test("coordinators can't see payments or budgets", async ({ page }) => {
   await expect(page.getByRole("link", { name: "Budget" })).toHaveCount(0);
   const res = await page.request.get("/api/payments/exports/00000000-0000-0000-0000-000000000000");
   expect(res.status()).toBe(404);
+});
+
+test("finance sees the T4A summary and the talent tax details", async ({ page }) => {
+  await signInAsTeam(page, "finance");
+  await page.goto("/dashboard/payments");
+  await page.getByRole("link", { name: "T4A summary" }).click();
+  await expect(page.getByRole("heading", { name: /T4A summary \d{4}/ })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Download CSV for accountant" })).toBeVisible();
+  // Demo payments are never included.
+  await expect(page.getByText(/Jordan Lee/)).toHaveCount(0);
+
+  await page.goto("/dashboard/talent?q=Jordan%20Lee");
+  await page.getByRole("link", { name: "Jordan Lee" }).click();
+  await expect(page.getByRole("heading", { name: "Pay & tax details" })).toBeVisible();
+  await expect(page.getByText("Independent contractor")).toBeVisible();
 });

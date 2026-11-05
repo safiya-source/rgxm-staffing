@@ -21,6 +21,7 @@ export const getOrgSettings = cache(async () => {
       requireMfaForPrivileged: true,
       locationRetentionDays: 90,
       mailLogRetentionDays: 30,
+      defaultRates: {},
       updatedAt: new Date(),
       updatedBy: null,
     }

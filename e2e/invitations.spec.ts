@@ -26,7 +26,7 @@ test("an invited person sets up their profile from the email link", async ({ pag
   const ctx = await browser.newContext();
   const phone = await ctx.newPage();
   await phone.goto(link);
-  await expect(phone.getByRole("heading", { name: /invited to work with RGXM/ })).toBeVisible();
+  await expect(phone.getByRole("heading", { name: /invited to join RGXM Crew/ })).toBeVisible();
   await phone.getByRole("button", { name: "Set up my profile" }).click();
   await expect(phone).toHaveURL(/\/portal\/onboarding/);
 

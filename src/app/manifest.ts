@@ -2,7 +2,7 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "RGXM Staffing",
+    name: "RGXM Crew",
     short_name: "RGXM",
     description: "Your RGXM shifts, briefs, hours and pay.",
     start_url: "/portal",

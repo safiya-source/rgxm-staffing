@@ -21,6 +21,8 @@ export const LIMITS = {
   "export.payments": { max: 30, windowSeconds: 600 },
   "export.talent": { max: 20, windowSeconds: 600 },
   "export.personal_data": { max: 5, windowSeconds: 3600 },
+  "export.t4a": { max: 10, windowSeconds: 3600 },
+  "tax.self_update": { max: 10, windowSeconds: 3600 },
 } as const;
 export type LimitName = keyof typeof LIMITS;
 

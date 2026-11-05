@@ -5,7 +5,7 @@ import Link from "next/link";
 import { PageHeader } from "@/components/app/page-header";
 import { canAny, canOnProject } from "@/server/authz/permissions";
 import { db } from "@/server/db";
-import { projectLocations, projects } from "@/server/db/schema";
+import { projectLocations, projects, staffingRequirements } from "@/server/db/schema";
 import { getClients } from "@/server/queries/projects";
 import { projectScope } from "@/server/queries/timesheets";
 import { getOrgSettings } from "@/server/settings";
@@ -30,7 +30,8 @@ export default async function NewStaffingRequestPage({ searchParams }: PageProps
           .where(and(notInArray(projects.status, ["closed", "cancelled", "completed", "reconciliation"]), scope ? inArray(projects.id, scope) : undefined))
           .orderBy(asc(projects.name));
   const ids = rows.map((r) => r.id);
-  const [locations, scopes, clients, settings] = await Promise.all([
+  const showRates = canAny(actor, "rates.view");
+  const [locations, scopes, clients, settings, requirementRates] = await Promise.all([
     ids.length
       ? db
           .select({ id: projectLocations.id, projectId: projectLocations.projectId, name: projectLocations.name, city: projectLocations.city, timezone: projectLocations.timezone })
@@ -41,12 +42,20 @@ export default async function NewStaffingRequestPage({ searchParams }: PageProps
     loadProjectScopes(ids),
     canCreateProject ? getClients() : Promise.resolve([]),
     getOrgSettings(),
+    ids.length && showRates
+      ? db
+          .select({ projectId: staffingRequirements.projectId, role: staffingRequirements.role, rateCents: staffingRequirements.defaultRateCents })
+          .from(staffingRequirements)
+          .where(inArray(staffingRequirements.projectId, ids))
+      : Promise.resolve([]),
   ]);
 
   const projectOptions = rows.map((p) => ({
     id: p.id,
     label: `${p.name} (${p.code})`,
     canAddVenue: canOnProject(actor, "project.edit", scopes.get(p.id)!),
+    // The project's own rate for a role (Setup → Staffing requirements) beats the company default.
+    roleRates: Object.fromEntries(requirementRates.filter((r) => r.projectId === p.id && r.rateCents != null).map((r) => [r.role, r.rateCents!])),
     locations: locations.filter((l) => l.projectId === p.id).map((l) => ({ id: l.id, label: [l.name, l.city].filter(Boolean).join(", "), timezone: l.timezone })),
   }));
   const preselect = typeof sp.project === "string" && projectOptions.some((p) => p.id === sp.project) ? sp.project : undefined;
@@ -65,7 +74,8 @@ export default async function NewStaffingRequestPage({ searchParams }: PageProps
         clients={clients}
         canCreateProject={canCreateProject}
         defaultTimezone={settings.defaultTimezone}
-        showRates={canAny(actor, "rates.view")}
+        showRates={showRates}
+        defaultRates={showRates ? settings.defaultRates : {}}
         preselectProjectId={preselect}
       />
     </>

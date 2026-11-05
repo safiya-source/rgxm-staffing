@@ -53,3 +53,21 @@ test("staff set weekly availability and a day off", async ({ page }) => {
   await page.getByRole("button", { name: "Add date" }).click();
   await expect(page.getByText("Thursday, Dec 24")).toBeVisible();
 });
+
+test("a contractor adds their tax details (no SIN is asked for)", async ({ page }) => {
+  await signInWithMagicLink(page, "ba.demo@rgxm-demo.test");
+  await page.goto("/portal/profile");
+  await page.getByRole("link", { name: /Tax details/ }).click();
+  await expect(page.getByRole("heading", { name: "Tax details" })).toBeVisible();
+  await expect(page.getByLabel(/Social Insurance Number/)).toHaveCount(0);
+  await page.getByLabel("Legal name").fill("Jordan Lee");
+  await page.getByRole("checkbox", { name: /Registered for GST\/HST/ }).setChecked(false);
+  await page.getByLabel("Street address").fill("100 Queen St W");
+  await page.getByLabel("City", { exact: true }).fill("Toronto");
+  await page.getByLabel("Province").selectOption("ON");
+  await page.getByLabel("Postal code").fill("M5H 2N2");
+  await page.getByRole("button", { name: "Save tax details" }).click();
+  await expect(page.getByText("Tax details saved.")).toBeVisible();
+  await page.reload();
+  await expect(page.getByLabel("Street address")).toHaveValue("100 Queen St W");
+});

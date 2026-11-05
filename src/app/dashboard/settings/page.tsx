@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { canAny } from "@/server/authz/permissions";
 import { getOrgSettings } from "@/server/settings";
 import { requireInternal, toActor } from "@/server/session";
+import { DefaultRatesForm } from "./default-rates-form";
 import { OrgSettingsForm } from "./org-settings-form";
 
 export const metadata: Metadata = { title: "Settings" };
@@ -13,7 +14,9 @@ export default async function OrgSettingsPage() {
   if (!canAny(actor, "settings.view")) redirect("/dashboard/settings/security");
   const settings = await getOrgSettings();
   return (
-    <OrgSettingsForm
+    <div className="grid gap-6">
+      {canAny(actor, "rates.view") ? <DefaultRatesForm initial={settings.defaultRates} canEdit={canAny(actor, "rates.edit")} /> : null}
+      <OrgSettingsForm
       canEdit={canAny(actor, "settings.manage")}
       initial={{
         orgName: settings.orgName,
@@ -24,6 +27,7 @@ export default async function OrgSettingsPage() {
         locationRetentionDays: settings.locationRetentionDays,
         mailLogRetentionDays: settings.mailLogRetentionDays,
       }}
-    />
+      />
+    </div>
   );
 }

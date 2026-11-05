@@ -48,7 +48,7 @@ const keepPrivilegedMfa = createAuthMiddleware(async (ctx) => {
 });
 
 export const auth = betterAuth({
-  appName: "RGXM Staffing",
+  appName: "RGXM Crew",
   baseURL: env.APP_URL,
   secret: env.BETTER_AUTH_SECRET,
   trustedOrigins: [env.APP_URL],
@@ -112,7 +112,7 @@ export const auth = betterAuth({
       const isInvite = !(await hasCredentialAccount(record.id));
       const content = isInvite
         ? actionEmail({
-            heading: "You've been invited to RGXM Staffing",
+            heading: "You've been invited to join RGXM Crew",
             intro: "An administrator created an account for you. Choose a password to get started.",
             actionLabel: "Set your password",
             url,
@@ -120,14 +120,14 @@ export const auth = betterAuth({
           })
         : actionEmail({
             heading: "Reset your password",
-            intro: "We received a request to reset your RGXM Staffing password.",
+            intro: "We received a request to reset your RGXM Crew password.",
             actionLabel: "Choose a new password",
             url,
             footer: "If you didn't request this, you can ignore this email. The link expires in 24 hours.",
           });
       await sendEmail({
         to: user.email,
-        subject: isInvite ? "Your RGXM Staffing invitation" : "Reset your RGXM Staffing password",
+        subject: isInvite ? "You've been invited to join RGXM Crew" : "Reset your RGXM Crew password",
         containsSecretLink: true,
         ...content,
       });
@@ -178,18 +178,18 @@ export const auth = betterAuth({
         if (existing && existing.kind !== "staff") return;
         if (existing && existing.status !== "active") return;
         const content = actionEmail({
-          heading: existing ? "Sign in to RGXM Staffing" : "Welcome to RGXM Staffing",
+          heading: existing ? "Sign in to RGXM Crew" : "Welcome to RGXM Crew",
           intro: existing
             ? "Tap the button below to sign in. No password needed."
-            : "Tap the button below to create your RGXM staff profile. No password needed.",
+            : "Tap the button below to create your RGXM Crew profile. No password needed.",
           actionLabel: existing ? "Sign in" : "Create my profile",
           url,
           footer: "This link expires in 15 minutes and can only be used once.",
         });
-        await sendEmail({ to: email, subject: "Your RGXM sign-in link", containsSecretLink: true, ...content });
+        await sendEmail({ to: email, subject: "Your RGXM Crew sign-in link", containsSecretLink: true, ...content });
       },
     }),
-    twoFactor({ issuer: "RGXM Staffing" }),
+    twoFactor({ issuer: "RGXM Crew" }),
     staffInvite(),
     nextCookies(),
   ],

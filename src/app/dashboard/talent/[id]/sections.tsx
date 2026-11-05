@@ -18,11 +18,12 @@ import type { ActionResult } from "@/lib/action-result";
 import { formatMoney } from "@/lib/format";
 import { FIELD_ROLE_NAMES, FIELD_ROLES, type FieldRole } from "@/lib/roles";
 import { useFormAction } from "@/lib/use-form-action";
+import { TaxDetailsForm, type TaxDetailsValues } from "@/components/app/tax-details-form";
 import {
   addCertificationAction,
   addNoteAction,
   removeCertificationAction,
-  setClassificationAction,
+  setTaxDetailsAction,
   setEmergencyContactAction,
   setRateAction,
   setStaffRolesAction,
@@ -373,85 +374,48 @@ export function RatesCard({ staffId, rates, roles, canEdit }: { staffId: string;
 
 // ─── Pay setup ───────────────────────────────────────────────────────────────
 
-const CLASSIFICATION_LABEL = { unset: "Not set", contractor: "Independent contractor", employee: "Employee (payroll)" } as const;
-
 export function PaySetup({
   staffId,
   pay,
   canEdit,
 }: {
   staffId: string;
-  pay: { classification: keyof typeof CLASSIFICATION_LABEL; taxRegistered: boolean; gstHstNumber: string | null; legalName: string | null; businessName: string | null };
+  pay: { classification: string; taxRegistered: boolean; tax: TaxDetailsValues | null };
   canEdit: boolean;
 }) {
   const [editing, setEditing] = useState(false);
-  const [classification, setClassification] = useState(pay.classification);
-  const [state, onSubmit, pending] = useBoundForm(setClassificationAction.bind(null, staffId), () => setEditing(false));
-
-  if (!editing) {
+  const report = useReport();
+  if (editing && pay.tax) {
     return (
-      <div className="grid gap-2 text-sm">
-        <p className="flex items-center justify-between gap-2">
-          <span>{CLASSIFICATION_LABEL[pay.classification]}</span>
-          {pay.classification === "unset" ? <Badge tone="warning">Payments blocked</Badge> : null}
-        </p>
-        {pay.classification === "contractor" ? (
-          <p className="text-muted-foreground">{pay.taxRegistered ? "GST/HST registered" : "Not GST/HST registered"}</p>
-        ) : null}
-        {canEdit ? (
-          <Button variant="outline" size="sm" className="w-fit" onClick={() => setEditing(true)}>
-            Edit pay setup
-          </Button>
-        ) : null}
-      </div>
+      <TaxDetailsForm
+        initial={pay.tax}
+        action={setTaxDetailsAction.bind(null, staffId)}
+        onDone={() => {
+          report({ ok: true, message: "Tax details saved." });
+          setEditing(false);
+        }}
+        onCancel={() => setEditing(false)}
+      />
     );
   }
-
+  const t = pay.tax;
+  const missing = t ? [!t.legalName && "legal name", !t.mailingStreet && "mailing address"].filter(Boolean) : [];
   return (
-    <form onSubmit={onSubmit} className="grid gap-4">
-      <p className="rounded-md bg-warning-soft px-3 py-2 text-xs text-warning">
-        Worker classification must be determined with RGXM&apos;s accountant or legal advisor. The platform records the decision; it doesn&apos;t make it.
-      </p>
-      <Field label="Classification" htmlFor="classification">
-        <NativeSelect
-          id="classification"
-          name="classification"
-          value={classification}
-          onChange={(e) => setClassification(e.target.value as keyof typeof CLASSIFICATION_LABEL)}
-        >
-          {Object.entries(CLASSIFICATION_LABEL).map(([v, l]) => (
-            <option key={v} value={v}>
-              {l}
-            </option>
-          ))}
-        </NativeSelect>
-      </Field>
-      {classification === "contractor" ? (
+    <div className="grid gap-2 text-sm">
+      <p>Independent contractor{pay.classification === "employee" ? " (previously set as employee)" : ""}</p>
+      <p className="text-muted-foreground">{pay.taxRegistered ? `GST/HST registered${t?.gstHstNumber ? ` · ${t.gstHstNumber}` : ""}: HST added to pay` : "Not GST/HST registered"}</p>
+      {t ? (
         <>
-          <Field label="Legal name" htmlFor="legalName">
-            <Input id="legalName" name="legalName" defaultValue={pay.legalName ?? ""} />
-          </Field>
-          <Field label="Business name (if any)" htmlFor="businessName">
-            <Input id="businessName" name="businessName" defaultValue={pay.businessName ?? ""} />
-          </Field>
-          <label className="flex items-center gap-2 text-sm">
-            <Checkbox name="taxRegistered" defaultChecked={pay.taxRegistered} /> Registered for GST/HST
-          </label>
-          <Field label="GST/HST number" htmlFor="gstHstNumber" hint="Format: 123456789 RT0001">
-            <Input id="gstHstNumber" name="gstHstNumber" defaultValue={pay.gstHstNumber ?? ""} />
-          </Field>
+          {t.legalName ? <p className="text-muted-foreground">Legal name: {t.legalName}{t.businessName ? ` (${t.businessName})` : ""}</p> : null}
+          {missing.length ? <Badge tone="warning" className="w-fit">Needed for T4A: {missing.join(", ")}</Badge> : null}
         </>
       ) : null}
-      {!state.ok ? <FormMessage>{state.error}</FormMessage> : null}
-      <div className="flex gap-2">
-        <Button size="sm" type="submit" disabled={pending}>
-          Save
+      {canEdit && t ? (
+        <Button variant="outline" size="sm" className="w-fit" onClick={() => setEditing(true)}>
+          Edit tax details
         </Button>
-        <Button size="sm" variant="ghost" type="button" onClick={() => setEditing(false)}>
-          Cancel
-        </Button>
-      </div>
-    </form>
+      ) : null}
+    </div>
   );
 }
 

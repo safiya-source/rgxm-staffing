@@ -1,5 +1,6 @@
 "use client";
 import { format, parseISO } from "date-fns";
+import { PlusIcon, XIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
@@ -15,11 +16,13 @@ import { COMMON_TIME_ZONES, expandShiftPattern } from "@/lib/time";
 import { cn } from "@/lib/utils";
 import { createStaffingRequestAction } from "../actions";
 
-type ProjectOption = { id: string; label: string; canAddVenue: boolean; locations: { id: string; label: string; timezone: string }[] };
+type ProjectOption = { id: string; label: string; canAddVenue: boolean; roleRates: Partial<Record<FieldRole, number>>; locations: { id: string; label: string; timezone: string }[] };
 
 const DAY_LABELS = ["S", "M", "T", "W", "T", "F", "S"];
 const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const NEW = "__new";
+
+type RoleLine = { key: number; role: FieldRole; headcount: string; rate: string; rateEdited: boolean };
 const toCents = (v: string) => (/^\d{1,4}(\.\d{1,2})?$/.test(v.trim()) ? Math.round(Number(v) * 100) : null);
 
 function previewShifts(s: { startDate: string; endDate: string; weekdays: number[]; startTime: string; endTime: string }, timeZone: string) {
@@ -51,6 +54,7 @@ export function StaffingRequestForm({
   canCreateProject,
   defaultTimezone,
   showRates,
+  defaultRates,
   preselectProjectId,
 }: {
   projects: ProjectOption[];
@@ -58,6 +62,7 @@ export function StaffingRequestForm({
   canCreateProject: boolean;
   defaultTimezone: string;
   showRates: boolean;
+  defaultRates: Partial<Record<FieldRole, number>>;
   preselectProjectId?: string;
 }) {
   const router = useRouter();
@@ -72,15 +77,22 @@ export function StaffingRequestForm({
   const canAddVenue = projectMode === "new" || Boolean(project?.canAddVenue);
   const [locationChoice, setLocationChoice] = useState<string>(existingLocations[0]?.id ?? NEW);
   const [nl, setNl] = useState({ name: "", address: "", city: "", timezone: defaultTimezone });
+  // Rate to pre-fill for a role: the project's own rate, else the company default.
+  const rateFor = (role: FieldRole) => {
+    const cents = (projectMode === "existing" ? project?.roleRates[role] : undefined) ?? defaultRates[role];
+    return showRates && cents != null ? (cents / 100).toFixed(2) : "";
+  };
+  const [roles, setRoles] = useState<RoleLine[]>(() => [{ key: 1, role: "BA", headcount: "1", rate: "", rateEdited: false }]);
+  // Untouched rates follow the role and project; a rate someone typed is kept.
+  const lines = roles.map((l) => (l.rateEdited ? l : { ...l, rate: rateFor(l.role) }));
+  const setLine = (key: number, patch: Partial<RoleLine>) => setRoles((cur) => cur.map((l) => (l.key === key ? { ...l, ...patch } : l)));
+  const unusedRole = FIELD_ROLES.find((r) => !roles.some((l) => l.role === r));
   const [s, setS] = useState({
-    role: "BA" as FieldRole,
     startDate: "",
     endDate: "",
     weekdays: [] as number[],
     startTime: "10:00",
     endTime: "18:00",
-    headcount: "1",
-    rate: "",
     reportingLocation: "",
     uniform: "",
     instructions: "",
@@ -93,10 +105,11 @@ export function StaffingRequestForm({
   const timezone = usingNewVenue ? nl.timezone : (existingLocations.find((l) => l.id === venueValue)?.timezone ?? defaultTimezone);
 
   const preview = previewShifts(s, timezone);
-  const headcount = Number(s.headcount) || 0;
+  const headcount = lines.reduce((n, l) => n + (Number(l.headcount) || 0), 0);
   const minutes = preview?.windows.reduce((n, w) => n + w.minutes, 0) ?? 0;
-  const rateCents = toCents(s.rate);
-  const estimate = rateCents != null ? Math.round((minutes * headcount * rateCents) / 60) : null;
+  // Only estimate cost when every role has a rate.
+  const allRated = lines.every((l) => toCents(l.rate) != null);
+  const estimate = allRated ? lines.reduce((n, l) => n + Math.round((minutes * (Number(l.headcount) || 0) * toCents(l.rate)!) / 60), 0) : null;
 
   const missing =
     (projectMode === "existing" ? !projectId : np.name.trim().length < 2) ||
@@ -104,7 +117,7 @@ export function StaffingRequestForm({
     !s.startDate ||
     !s.endDate ||
     !preview?.windows.length ||
-    headcount < 1;
+    lines.some((l) => !(Number(l.headcount) >= 1));
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -117,14 +130,12 @@ export function StaffingRequestForm({
             : { mode: "new", name: np.name, clientId: np.clientId === NEW ? null : np.clientId || null, newClientName: np.clientId === NEW ? np.newClientName : null, code: np.code },
         location: usingNewVenue ? { mode: "new", ...nl } : { mode: "existing", locationId: venueValue },
         shifts: {
-          role: s.role,
+          roles: lines.map((l) => ({ role: l.role, headcount: l.headcount, rateCents: showRates ? l.rate : "" })),
           startDate: s.startDate,
           endDate: s.endDate,
           weekdays: s.weekdays,
           startTime: s.startTime,
           endTime: s.endTime,
-          headcount: s.headcount,
-          rateCents: s.rate,
           reportingLocation: s.reportingLocation,
           uniform: s.uniform,
           instructions: s.instructions,
@@ -248,25 +259,52 @@ export function StaffingRequestForm({
           <CardDescription>One shift is created for each matching day.</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-5">
-          <div className="grid gap-4 sm:grid-cols-3">
-            <Field label="Role" htmlFor="r-role">
-              <NativeSelect id="r-role" value={s.role} onChange={(e) => setShift({ role: e.target.value as FieldRole })}>
-                {FIELD_ROLES.map((r) => (
-                  <option key={r} value={r}>
-                    {FIELD_ROLE_NAMES[r]}
-                  </option>
-                ))}
-              </NativeSelect>
-            </Field>
-            <Field label="People per shift" htmlFor="r-head">
-              <Input id="r-head" type="number" min={1} max={500} value={s.headcount} onChange={(e) => setShift({ headcount: e.target.value })} />
-            </Field>
-            {showRates ? (
-              <Field label="Hourly rate (optional)" htmlFor="r-rate" hint="Blank = each person's own rate">
-                <Input id="r-rate" inputMode="decimal" value={s.rate} onChange={(e) => setShift({ rate: e.target.value })} placeholder="25.00" />
-              </Field>
-            ) : null}
-          </div>
+          <fieldset className="grid gap-3">
+            <legend className="sr-only">Roles</legend>
+            {lines.map((l, i) => (
+              <div key={l.key} className="grid items-end gap-3 sm:grid-cols-[1fr_8rem_9rem_2.25rem]" data-testid="role-line">
+                <Field label={i === 0 ? "Role" : `Role ${i + 1}`} htmlFor={`r-role-${l.key}`}>
+                  <NativeSelect id={`r-role-${l.key}`} value={l.role} onChange={(e) => setLine(l.key, { role: e.target.value as FieldRole })}>
+                    {FIELD_ROLES.filter((r) => r === l.role || !roles.some((o) => o.role === r)).map((r) => (
+                      <option key={r} value={r}>
+                        {FIELD_ROLE_NAMES[r]}
+                      </option>
+                    ))}
+                  </NativeSelect>
+                </Field>
+                <Field label="People per shift" htmlFor={`r-head-${l.key}`}>
+                  <Input id={`r-head-${l.key}`} type="number" min={1} max={500} value={l.headcount} onChange={(e) => setLine(l.key, { headcount: e.target.value })} />
+                </Field>
+                {showRates ? (
+                  <Field label="Hourly rate" htmlFor={`r-rate-${l.key}`}>
+                    <Input id={`r-rate-${l.key}`} inputMode="decimal" value={l.rate} onChange={(e) => setLine(l.key, { rate: e.target.value, rateEdited: true })} placeholder="Own rate" />
+                  </Field>
+                ) : (
+                  <span />
+                )}
+                {lines.length > 1 ? (
+                  <Button type="button" variant="ghost" size="icon" aria-label={`Remove ${FIELD_ROLE_NAMES[l.role]}`} onClick={() => setRoles((cur) => cur.filter((x) => x.key !== l.key))}>
+                    <XIcon />
+                  </Button>
+                ) : (
+                  <span />
+                )}
+              </div>
+            ))}
+            <div className="flex flex-wrap items-center gap-3">
+              {unusedRole ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setRoles((cur) => [...cur, { key: Math.max(...cur.map((x) => x.key)) + 1, role: unusedRole, headcount: "1", rate: "", rateEdited: false }])}
+                >
+                  <PlusIcon /> Add another role
+                </Button>
+              ) : null}
+              {showRates ? <span className="text-xs text-muted-foreground">Rates are pre-filled from the project or company defaults. Leave a rate blank to use each person&apos;s own rate.</span> : null}
+            </div>
+          </fieldset>
           <div className="grid gap-4 sm:grid-cols-4">
             <Field label="First day" htmlFor="r-start">
               <Input id="r-start" type="date" value={s.startDate} onChange={(e) => setShift({ startDate: e.target.value })} />
@@ -325,7 +363,8 @@ export function StaffingRequestForm({
         ) : preview?.windows.length ? (
           <p className="text-sm">
             <span className="font-medium">
-              {preview.windows.length} shift{preview.windows.length === 1 ? "" : "s"} × {headcount} {headcount === 1 ? "person" : "people"} = {preview.windows.length * headcount} position
+              {preview.windows.length} day{preview.windows.length === 1 ? "" : "s"} × {headcount} {headcount === 1 ? "person" : "people"}
+              {lines.length > 1 ? ` (${lines.map((l) => `${Number(l.headcount) || 0} ${l.role}`).join(" + ")})` : ""} = {preview.windows.length * headcount} position
               {preview.windows.length * headcount === 1 ? "" : "s"}
             </span>
             <span className="text-muted-foreground">

@@ -147,7 +147,7 @@ async function main() {
           hasVehicle: rand() < 0.4,
           willingToTravel: rand() < 0.5,
           travelRadiusKm: pick([10, 25, 50, 100]),
-          classification: i % 10 === 3 ? "employee" : i % 17 === 5 ? "unset" : "contractor",
+          classification: "contractor",
           onboardingCompletedAt: new Date("2026-09-01T14:00:00Z"),
           isDemo: true,
         })
@@ -155,7 +155,8 @@ async function main() {
       const staffId = p!.id;
       staff.push({ id: staffId, roles, city, langs });
 
-      await tx.insert(staffSensitive).values({ staffId, taxRegistered: i % 6 === 0 });
+      // Every sixth demo contractor is GST/HST-registered (fictional numbers), so HST shows up in pay.
+      await tx.insert(staffSensitive).values({ staffId, taxRegistered: i % 6 === 0, gstHstNumber: i % 6 === 0 ? `${String(800000000 + i * 7919).slice(0, 9)}RT0001` : null });
       await tx.insert(staffRoles).values(roles.map((role) => ({ staffId, role })));
       await tx.insert(staffRates).values(
         roles.map((role) => ({

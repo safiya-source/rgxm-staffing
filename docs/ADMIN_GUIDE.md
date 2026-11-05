@@ -27,7 +27,7 @@ privacy and security tasks. Deployment is in DEPLOYMENT.md; the security model i
 5. **Field staff** sign in with links sent to their email; they never have a password. Two ways in:
    - **Invite them** (recommended for people you already work with): add or import them in *Talent*, then
      *Talent → person → Send portal invite*, or tick several people in the Talent list and use *Send portal invite*.
-     They get a "Set up your RGXM staff profile" email with a link that works once and expires in 7 days.
+     They get a "You've been invited to join RGXM Crew" email with a link that works once and expires in 7 days.
      The profile shows *Invited (date)*, then *Uses the staff portal* once they accept. You can resend after 24 hours,
      or straight away with *Resend invite*. Demo, suspended, inactive and archived profiles are skipped.
    - **Self sign-up** at `/join` with their email.
@@ -41,9 +41,16 @@ privacy and security tasks. Deployment is in DEPLOYMENT.md; the security model i
 - **Suspend a field staff member:** *Talent → person → Status → Suspended*. This signs them out, blocks portal access,
   and stops them accepting offers or being confirmed. *Inactive* only means "not taking work"; they can still see
   their schedule and pay.
-- **Pay classification:** each person is *unset* until Finance (or an admin) sets *contractor* or *employee*
-  (*Talent → person → Pay setup*). People who are unset can't be paid. After classifying someone with approved
-  hours, use *Payments → Refresh classifications*.
+- **Contractors, HST and tax details:** everyone in the talent pool is paid as an independent contractor. Each person's
+  *Talent → person → Pay & tax details* holds their legal name, business number (if any), mailing address and GST/HST
+  registration. Contractors can fill these in themselves under *My profile → Tax details* in the staff portal.
+  **SINs are not collected in the platform**: your accountant gathers them directly for T4A slips.
+  - **GST/HST-registered** contractors get 13% HST added on top of their pay when their hours are approved. If someone's
+    registration changes after approval, *Payments* lists those payables under *Pay details changed*; use *Refresh pay details*.
+  - **T4A:** *Payments → T4A summary* totals fees paid per contractor for a calendar year (by the date payment was recorded),
+    flags who is over the $500 threshold and who is missing details, and downloads a CSV for your accountant, with an
+    empty SIN column for them to complete. The CSV contains names, addresses and pay totals, so store it securely. Each
+    download is recorded in the audit log.
 - **Audit log** (*Settings → Audit log*): who did what and when, including sign-ins, approvals, payment batches,
   exports, downloads, setting changes and privacy actions. It can't be edited.
 - **Mail log** (*Settings → Mail log*): every email the system sent or suppressed, and delivery failures.

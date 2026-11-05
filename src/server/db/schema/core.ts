@@ -90,6 +90,8 @@ export const orgSettings = pgTable("org_settings", {
   locationRetentionDays: integer().notNull().default(90),
   // Stored copies of sent emails (mail log) have their bodies cleared after this.
   mailLogRetentionDays: integer().notNull().default(30),
+  // Company-wide default hourly rate per field role, in cents (e.g. {"BA": 2500}). Pre-fills new shifts.
+  defaultRates: jsonb().$type<Partial<Record<"BA" | "TL" | "PA" | "AM", number>>>().notNull().default({}),
   updatedAt: updatedAt(),
   updatedBy: userRef(),
 });
@@ -133,7 +135,8 @@ export const staffProfiles = pgTable(
     travelRadiusKm: integer(),
     preferredEventTypes: text().array().notNull().default(sql`'{}'::text[]`),
     preferredHours: text(),
-    classification: workerClassification().notNull().default("unset"),
+    // RGXM engages field staff as independent contractors only.
+    classification: workerClassification().notNull().default("contractor"),
     onboardingCompletedAt: tstz(),
     isDemo: boolean().notNull().default(false),
     // Set when personal details were erased on request; work and pay records are kept.
@@ -158,6 +161,11 @@ export const staffSensitive = pgTable("staff_sensitive", {
   businessNumber: text(),
   taxRegistered: boolean().notNull().default(false),
   gstHstNumber: text(),
+  // Mailing address for tax slips. SINs are deliberately not stored: RGXM's accountant collects them.
+  mailingStreet: text(),
+  mailingCity: text(),
+  mailingProvince: text(),
+  mailingPostalCode: text(),
   emergencyContactName: text(),
   emergencyContactPhone: text(),
   emergencyContactRelation: text(),

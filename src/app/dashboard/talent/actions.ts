@@ -10,6 +10,7 @@ import { canAny } from "@/server/authz/permissions";
 import { inviteStaff, SKIP_LABEL } from "@/server/domain/invitations";
 import { kickOutbox } from "@/server/notify/run";
 import * as talent from "@/server/domain/talent";
+import { saveTaxDetails, TaxDetailsError, type TaxDetailsInput } from "@/server/domain/tax-details";
 import { canSeeEmergency } from "@/server/queries/staff-detail";
 import { authorizeInternal, toActor } from "@/server/session";
 
@@ -132,20 +133,18 @@ export async function setRateAction(staffId: string, _prev: ActionResult, formDa
   });
 }
 
-export async function setClassificationAction(staffId: string, _prev: ActionResult, formData: FormData): Promise<ActionResult> {
+/** Contractor tax details (legal name, HST, SIN, mailing address). Finance and Admins. */
+export async function setTaxDetailsAction(staffId: string, _prev: ActionResult, formData: FormData): Promise<ActionResult> {
   return runAction(async () => {
     const viewer = await authorizeInternal("rates.edit");
-    const text = (k: string) => String(formData.get(k) ?? "").trim() || null;
-    const input = {
-      classification: z.enum(["unset", "contractor", "employee"]).parse(formData.get("classification")),
-      taxRegistered: formData.get("taxRegistered") === "on",
-      gstHstNumber: text("gstHstNumber"),
-      legalName: text("legalName"),
-      businessName: text("businessName"),
-    };
-    await guard(() => talent.setClassification(viewer.userId, uuid.parse(staffId), input));
+    try {
+      await saveTaxDetails(viewer.userId, uuid.parse(staffId), Object.fromEntries(formData) as TaxDetailsInput);
+    } catch (err) {
+      if (err instanceof TaxDetailsError) throw new UserFacingError(err.message);
+      throw err;
+    }
     revalidatePath(`/dashboard/talent/${staffId}`);
-    return { ok: true, message: "Pay setup saved." };
+    return { ok: true, message: "Tax details saved." };
   });
 }
 
@@ -215,7 +214,7 @@ export async function removeFromListAction(listId: string, staffIds: string[]): 
 
 // ─── Portal invitations ─────────────────────────────────────────────────────
 
-/** Emails "Set up your RGXM profile" links. People who can't be invited are skipped with a reason. */
+/** Emails "You've been invited to join RGXM Crew" links. People who can't be invited are skipped with a reason. */
 export async function inviteStaffAction(staffIds: string[], resend = false): Promise<ActionResult> {
   return runAction(async () => {
     const viewer = await authorizeInternal("talent.edit");

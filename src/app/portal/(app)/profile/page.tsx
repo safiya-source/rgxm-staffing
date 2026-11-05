@@ -21,6 +21,9 @@ export default async function ProfilePage() {
         <Link href="/portal/availability" className="font-medium hover:underline">
           Set my availability →
         </Link>
+        <Link href="/portal/profile/tax" className="font-medium hover:underline">
+          Tax details (for pay and T4A) →
+        </Link>
         <section aria-labelledby="my-data" className="grid gap-2">
           <h2 id="my-data" className="font-medium">
             Your data

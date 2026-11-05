@@ -8,7 +8,8 @@ import type { ActionResult } from "@/lib/action-result";
 import { PROVINCE_CODES } from "@/lib/provinces";
 import { FIELD_ROLES } from "@/lib/roles";
 import { recordAudit } from "@/server/audit";
-import { runAction } from "@/server/actions";
+import { runAction, UserFacingError } from "@/server/actions";
+import { saveTaxDetails, TaxDetailsError, type TaxDetailsInput } from "@/server/domain/tax-details";
 import { db } from "@/server/db";
 import { bookings as bookingsTable, messageThreads, notifications, shifts as shiftsTable, staffProfiles, staffRoles, users } from "@/server/db/schema";
 import * as attendance from "@/server/domain/attendance";
@@ -94,6 +95,24 @@ export async function saveStaffProfile(_prev: ActionResult, formData: FormData):
   });
   if (result.ok && mode === "onboarding") redirect("/portal");
   return result;
+}
+
+// ─── Tax details ─────────────────────────────────────────────────────────────
+
+/** A contractor's own tax details (SIN, HST registration, mailing address) for pay and T4A slips. */
+export async function saveMyTaxDetailsAction(_prev: ActionResult, formData: FormData): Promise<ActionResult> {
+  return runAction(async () => {
+    const me = await requireStaffViewer();
+    await rateLimit("tax.self_update", me.userId);
+    try {
+      await saveTaxDetails(me.userId, me.staffId, Object.fromEntries(formData) as TaxDetailsInput, { bySelf: true });
+    } catch (err) {
+      if (err instanceof TaxDetailsError) throw new UserFacingError(err.message);
+      throw err;
+    }
+    revalidatePath("/portal/profile/tax");
+    return { ok: true, message: "Tax details saved." };
+  });
 }
 
 // ─── Availability ───────────────────────────────────────────────────────────

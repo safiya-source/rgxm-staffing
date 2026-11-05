@@ -20,7 +20,7 @@ export default async function DashboardLayout({ children }: LayoutProps<"/dashbo
     <div className="min-h-dvh lg:grid lg:grid-cols-[240px_1fr]">
       <aside className="sticky top-0 hidden h-dvh flex-col border-r border-sidebar-border bg-sidebar px-3 py-5 lg:flex">
         <Link href="/dashboard" className="mb-7 px-2.5">
-          <Logo suffix="Staffing" />
+          <Logo suffix="Crew" />
         </Link>
         <SidebarNav allowed={allowed} />
         <div className="mt-auto px-2.5 text-xs text-muted-foreground">

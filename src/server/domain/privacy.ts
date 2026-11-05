@@ -118,7 +118,16 @@ export async function exportStaffData(staffId: string) {
     note: "Your RGXM staff record. Internal notes and evaluations are available on request from RGXM's privacy officer.",
     profile: profileFields,
     payDetails: sensitive
-      ? { legalName: sensitive.legalName, businessName: sensitive.businessName, taxRegistered: sensitive.taxRegistered, gstHstNumber: sensitive.gstHstNumber, emergencyContactName: sensitive.emergencyContactName, emergencyContactPhone: sensitive.emergencyContactPhone }
+      ? {
+          legalName: sensitive.legalName,
+          businessName: sensitive.businessName,
+          businessNumber: sensitive.businessNumber,
+          taxRegistered: sensitive.taxRegistered,
+          gstHstNumber: sensitive.gstHstNumber,
+          mailingAddress: [sensitive.mailingStreet, sensitive.mailingCity, sensitive.mailingProvince, sensitive.mailingPostalCode].filter(Boolean).join(", ") || null,
+          emergencyContactName: sensitive.emergencyContactName,
+          emergencyContactPhone: sensitive.emergencyContactPhone,
+        }
       : null,
     roles,
     skills,

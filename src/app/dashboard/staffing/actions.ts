@@ -260,9 +260,10 @@ export async function createStaffingRequestAction(input: unknown): Promise<Actio
     revalidatePath("/dashboard/projects", "layout");
     revalidatePath("/dashboard/schedule");
     const n = res.shiftIds.length;
+    const roles = res.roles > 1 ? ` across ${res.roles} roles` : "";
     return {
       ok: true,
-      message: `Created ${n} shift${n === 1 ? "" : "s"}. Now choose who to offer them to.`,
+      message: `Created ${n} shift${n === 1 ? "" : "s"}${roles}. Now choose who to offer them to.`,
       data: { url: `/dashboard/staffing/${res.projectId}?group=${encodeURIComponent(res.group)}` },
     };
   });

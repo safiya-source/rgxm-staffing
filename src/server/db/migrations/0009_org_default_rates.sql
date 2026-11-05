@@ -1,0 +1,1 @@
+ALTER TABLE "org_settings" ADD COLUMN "default_rates" jsonb DEFAULT '{}'::jsonb NOT NULL;

@@ -201,9 +201,9 @@ export function ReadyToPay({ rows, periods, canManage }: { rows: Row[]; periods:
         <Card className="overflow-hidden border-warning/40">
           <CardHeader className="flex flex-row flex-wrap items-end justify-between gap-3">
             <div>
-              <CardTitle>Needs a pay classification</CardTitle>
+              <CardTitle>Pay details changed</CardTitle>
               <CardDescription>
-                These people are unset or were reclassified after approval. Set contractor or employee on their profile, then refresh.
+                These were approved before the person&apos;s pay details changed (for example, GST/HST registration). Refresh to recalculate them.
               </CardDescription>
             </div>
             <Button
@@ -219,7 +219,7 @@ export function ReadyToPay({ rows, periods, canManage }: { rows: Row[]; periods:
                 })
               }
             >
-              Refresh classifications
+              Refresh pay details
             </Button>
           </CardHeader>
           <PayableTable rows={unclassified} showClassificationLink />

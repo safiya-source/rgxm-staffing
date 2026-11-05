@@ -45,7 +45,7 @@ export async function refreshClassificationsAction(): Promise<ActionResult> {
     const viewer = await authorizeInternal("payments.manage");
     const n = await guard(() => pay.refreshClassifications(viewer.userId));
     refresh();
-    return { ok: true, message: n ? `Updated ${n} payable${n === 1 ? "" : "s"} to the current classification.` : "Everything already matches." };
+    return { ok: true, message: n ? `Recalculated ${n} payable${n === 1 ? "" : "s"} with current pay details.` : "Everything already matches." };
   });
 }
 
