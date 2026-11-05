@@ -9,7 +9,7 @@ const schema = z.object({
   BETTER_AUTH_SECRET: z.string().min(32, "BETTER_AUTH_SECRET must be at least 32 characters"),
   // "log" stores outgoing mail in notification_deliveries and never sends it.
   MAIL_TRANSPORT: z.enum(["log", "resend"]).default("log"),
-  MAIL_FROM: z.string().default("RGXM Staffing <staffing@example.com>"),
+  MAIL_FROM: z.string().default("RGXM Crew <staffing@example.com>"),
   RESEND_API_KEY: z.string().optional(),
   STORAGE_DRIVER: z.enum(["local", "supabase"]).default("local"),
   STORAGE_LOCAL_DIR: z.string().default("./storage"),

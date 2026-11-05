@@ -7,9 +7,9 @@ import "./globals.css";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: { default: "RGXM Staffing", template: "%s · RGXM Staffing" },
+  title: { default: "RGXM Crew", template: "%s · RGXM Crew" },
   description: "Staffing, scheduling, attendance and payments for RGXM activations.",
-  applicationName: "RGXM Staffing",
+  applicationName: "RGXM Crew",
   appleWebApp: { capable: true, title: "RGXM", statusBarStyle: "default" },
   robots: { index: false, follow: false },
   icons: { icon: "/icons/icon-192.png", apple: "/icons/apple-touch-icon.png" },

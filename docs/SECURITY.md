@@ -1,6 +1,6 @@
 # Security & privacy
 
-How RGXM Staffing protects people's data and money, what was reviewed in M6, and what still needs
+How RGXM Crew protects people's data and money, what was reviewed in M6, and what still needs
 RGXM's own review before real data goes in. **This is not a certification.** The platform has not
 had an external penetration test or a legal/privacy review.
 

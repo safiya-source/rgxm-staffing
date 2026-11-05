@@ -90,7 +90,7 @@ export async function buildExport(format: ExportFormat, batch: ExportBatch, rows
     return { data: Buffer.from(`﻿${toCsv(headers, data)}`, "utf8"), fileName: `${base}.csv`, contentType: "text/csv; charset=utf-8", rowCount: data.length };
   }
   const wb = new ExcelJS.Workbook();
-  wb.creator = "RGXM Staffing";
+  wb.creator = "RGXM Crew";
   // Fixed timestamps keep the file (and its fingerprint) reproducible for the same batch.
   wb.created = wb.modified = new Date(`${billDate}T00:00:00Z`);
   const ws = wb.addWorksheet(batch.isDemo ? "DEMO - DO NOT PAY" : batch.reference);

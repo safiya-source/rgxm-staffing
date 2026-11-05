@@ -1,4 +1,4 @@
-# RGXM Staffing Platform
+# RGXM Crew Platform
 
 Staffing, scheduling, attendance and payments for RGXM's experiential activations.
 
