@@ -13,6 +13,7 @@ import { canAny } from "@/server/authz/permissions";
 import { latestInvitations } from "@/server/domain/invitations";
 import { getTalentLookups } from "@/server/domain/talent";
 import { getStaffDetail } from "@/server/queries/staff-detail";
+import { taxIdStorageReady } from "@/server/crypto/tax-id";
 import { requireInternal, toActor } from "@/server/session";
 import { updateStaffAction } from "../actions";
 import { StaffForm } from "../staff-form";
@@ -276,10 +277,10 @@ export default async function StaffProfilePage({ params }: PageProps<"/dashboard
           {detail.pay ? (
             <Card>
               <CardHeader>
-                <CardTitle>Pay setup</CardTitle>
+                <CardTitle>Pay & tax details</CardTitle>
               </CardHeader>
               <CardContent>
-                <PaySetup staffId={p.id} pay={detail.pay} canEdit={can.editRates} />
+                <PaySetup staffId={p.id} pay={detail.pay} canEdit={can.editRates} sinAvailable={taxIdStorageReady()} />
               </CardContent>
             </Card>
           ) : null}

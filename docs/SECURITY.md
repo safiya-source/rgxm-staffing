@@ -76,6 +76,16 @@ had an external penetration test or a legal/privacy review.
   - uploads;
   - payment, talent and personal-data exports.
 
+### Tax identifiers (SIN)
+- SINs are encrypted with AES-256-GCM using a dedicated key (`TAX_ID_ENCRYPTION_KEY`), separate from the database,
+  so a database copy or backup alone doesn't reveal them. Only the last 3 digits are stored readable, for display.
+- SINs are write-only in the app: forms never receive them back. The only place the full number appears is the year-end
+  T4A CSV, which only Finance/Admins can download; every download is rate-limited and audited.
+- SINs, tax numbers and addresses are never written to the audit log (only that they changed).
+- **Never change or lose `TAX_ID_ENCRYPTION_KEY`** once SINs are stored: they couldn't be decrypted. Keep a copy in your
+  password manager.
+- Erasure keeps the legal name, SIN/business number and mailing address, because tax records must be kept for six years.
+
 ### Privacy (PIPEDA)
 - Location is captured only at the moment of check-in/out, only where the venue requires it. It's never tracked in the background.
 - **Retention** (configurable in Settings): check-in coordinates are cleared after 90 days, and stored email bodies after
@@ -131,9 +141,10 @@ Accepted for now:
 
 - [ ] **Privacy officer:** legal/privacy review of the privacy notice (`/privacy`, marked draft), retention periods and the
       erasure scope. Appoint a privacy officer and publish their contact.
-- [ ] **Accountant:** confirm worker classification (contractor vs employee) per person. Confirm the payroll and
-      QuickBooks-style export layouts, and the ESA review points (3-hour rule, overtime, public holidays).
-      GST/HST and self-billing are not implemented.
+- [ ] **Accountant:** confirm that RGXM's field staff qualify as independent contractors (CRA and the Ontario
+      Ministry of Labour look at how the work is actually done, not the label). Confirm the QuickBooks-style export
+      layout and tax codes, the 13% HST treatment for registered contractors (including any who supply from other
+      provinces), and the T4A summary boxes.
 - [ ] **Hosting:** production deployment in a Canadian region (see DEPLOYMENT.md), with `NODE_ENV=production`,
       `MAIL_TRANSPORT=resend` and a verified sending domain.
 - [ ] **Backups:** daily backups with point-in-time recovery enabled, and a restore drill performed and recorded.

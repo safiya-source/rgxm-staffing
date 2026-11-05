@@ -1,7 +1,7 @@
 // Read models for Payments (dashboard) and the staff payment view.
 import { and, asc, desc, eq, inArray, ne, sql } from "drizzle-orm";
 import { db } from "@/server/db";
-import { payableItems, paymentBatches, paymentBatchItems, paymentExports, payPeriods, projects, staffProfiles, users } from "@/server/db/schema";
+import { payableItems, paymentBatches, paymentBatchItems, paymentExports, payPeriods, projects, staffProfiles, staffSensitive, users } from "@/server/db/schema";
 import { batchTypeFor, esaHints, type Classification, type EsaHint } from "@/server/domain/pay-rules";
 
 const staffName = sql<string>`coalesce(${staffProfiles.preferredName}, ${staffProfiles.firstName}) || ' ' || ${staffProfiles.lastName}`;
@@ -16,6 +16,7 @@ export async function getReadyPayables(scope: string[] | null) {
       staffName,
       currentClassification: staffProfiles.classification,
       classification: payableItems.classification,
+      hstChanged: sql<boolean>`((${payableItems.taxCents} > 0) <> coalesce(${staffSensitive.taxRegistered}, false))`,
       projectId: payableItems.projectId,
       projectCode: projects.code,
       projectName: projects.name,
@@ -33,13 +34,14 @@ export async function getReadyPayables(scope: string[] | null) {
     })
     .from(payableItems)
     .innerJoin(staffProfiles, eq(staffProfiles.id, payableItems.staffId))
+    .leftJoin(staffSensitive, eq(staffSensitive.staffId, payableItems.staffId))
     .innerJoin(projects, eq(projects.id, payableItems.projectId))
     .where(and(inArray(payableItems.status, ["pending", "failed"]), scope ? inArray(payableItems.projectId, scope) : undefined))
     .orderBy(asc(payableItems.serviceDate), asc(staffProfiles.lastName));
   return rows.map((r) => ({
     ...r,
-    batchType: r.classification === r.currentClassification ? batchTypeFor(r.classification as Classification) : null,
-    needsClassification: r.classification === "unset" || r.classification !== r.currentClassification,
+    batchType: r.classification === r.currentClassification && !r.hstChanged ? batchTypeFor(r.classification as Classification) : null,
+    needsClassification: r.classification === "unset" || r.classification !== r.currentClassification || r.hstChanged,
     hints: esaHints({ classification: r.classification as Classification, payableMinutes: r.payableMinutes, weekMinutes: r.weekMinutes }) as EsaHint[],
   }));
 }

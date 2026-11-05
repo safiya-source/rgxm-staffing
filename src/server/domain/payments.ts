@@ -26,6 +26,8 @@ import { storage } from "@/server/storage";
 import { buildExport, type ExportFormat, type ExportRow } from "./payment-exports";
 import {
   basePayCents,
+  HST_RATE_BP,
+  hstCents,
   batchTypeFor,
   CALC_VERSION,
   canMoveBatch,
@@ -58,17 +60,23 @@ export async function createPayableForTimesheet(tx: Tx, timesheetId: string, act
       startsAt: shifts.startsAt,
       timezone: shifts.timezone,
       classification: staffProfiles.classification,
+      taxRegistered: staffSensitive.taxRegistered,
+      gstHstNumber: staffSensitive.gstHstNumber,
     })
     .from(timesheets)
     .innerJoin(bookings, eq(bookings.id, timesheets.bookingId))
     .innerJoin(shifts, eq(shifts.id, timesheets.shiftId))
     .innerJoin(staffProfiles, eq(staffProfiles.id, timesheets.staffId))
+    .leftJoin(staffSensitive, eq(staffSensitive.staffId, timesheets.staffId))
     .where(eq(timesheets.id, timesheetId));
   if (!row) throw new PaymentError("Timesheet not found.");
   const { t } = row;
   if (t.payableMinutes == null) throw new PaymentError("Approved minutes are missing.");
   if (row.agreedRateCents == null) throw new PaymentError("This booking has no agreed rate, so pay can't be calculated.");
   const base = basePayCents(t.payableMinutes, row.agreedRateCents);
+  // GST/HST-registered contractors charge HST on top, snapshotted with their number at approval.
+  const hst = row.taxRegistered ? { rateBp: HST_RATE_BP, number: row.gstHstNumber, cents: hstCents(base) } : null;
+  const total = base + (hst?.cents ?? 0);
   const serviceDate = utcToZoned(row.startsAt, row.timezone).date;
   const [p] = await tx
     .insert(payableItems)
@@ -81,14 +89,22 @@ export async function createPayableForTimesheet(tx: Tx, timesheetId: string, act
       payableMinutes: t.payableMinutes,
       rateCents: row.agreedRateCents,
       baseCents: base,
-      totalCents: base,
+      taxCents: hst?.cents ?? 0,
+      totalCents: total,
       currency: row.currency,
       calcVersion: CALC_VERSION,
-      calcInputs: { payableMinutes: t.payableMinutes, rateCents: row.agreedRateCents, rounding: "half_up_cent", timesheetVersion: t.version, role: row.role },
+      calcInputs: {
+        payableMinutes: t.payableMinutes,
+        rateCents: row.agreedRateCents,
+        rounding: "half_up_cent",
+        timesheetVersion: t.version,
+        role: row.role,
+        hst: hst ? { rateBp: hst.rateBp, number: hst.number } : null,
+      },
       createdBy: actorId,
     })
     .returning();
-  await recordAudit({ actorId, action: "payable.create", entityType: "payable", entityId: p!.id, projectId: t.projectId, after: { totalCents: base, payableMinutes: t.payableMinutes, rateCents: row.agreedRateCents, classification: row.classification } }, tx);
+  await recordAudit({ actorId, action: "payable.create", entityType: "payable", entityId: p!.id, projectId: t.projectId, after: { totalCents: total, hstCents: hst?.cents ?? 0, payableMinutes: t.payableMinutes, rateCents: row.agreedRateCents, classification: row.classification } }, tx);
   return p!;
 }
 
@@ -105,9 +121,12 @@ export async function replacePayableAfterCorrection(tx: Tx, timesheetId: string,
   return createPayableForTimesheet(tx, timesheetId, actorId);
 }
 
+/** True when a payable's HST no longer matches the person's current GST/HST registration. */
+const hstStale = sql<boolean>`((${payableItems.taxCents} > 0) <> coalesce(${staffSensitive.taxRegistered}, false))`;
+
 /**
- * Re-snapshots the classification on payables that aren't in a batch yet, for people whose pay
- * classification has since been set or changed. Each one is voided and recreated (amounts unchanged).
+ * Recalculates payables that aren't in a batch yet for people whose pay details changed after
+ * approval (classification, or GST/HST registration). Each one is voided and recreated.
  */
 export async function refreshClassifications(actorId: string) {
   return db.transaction(async (tx) => {
@@ -115,10 +134,11 @@ export async function refreshClassifications(actorId: string) {
       .select({ p: payableItems })
       .from(payableItems)
       .innerJoin(staffProfiles, eq(staffProfiles.id, payableItems.staffId))
-      .where(and(inArray(payableItems.status, ["pending", "failed"]), sql`${payableItems.classification} <> ${staffProfiles.classification}`))
+      .leftJoin(staffSensitive, eq(staffSensitive.staffId, payableItems.staffId))
+      .where(and(inArray(payableItems.status, ["pending", "failed"]), sql`(${payableItems.classification} <> ${staffProfiles.classification} or ${hstStale})`))
       .for("update", { of: payableItems });
     for (const { p } of stale) {
-      await voidPayable(tx, p, actorId, "Pay classification updated");
+      await voidPayable(tx, p, actorId, "Pay details updated");
       await createPayableForTimesheet(tx, p.timesheetId, actorId);
     }
     return stale.length;
@@ -188,10 +208,11 @@ export async function createBatch(actorId: string, input: { type: BatchType; pay
   assertUuids(input.payableIds);
   return db.transaction(async (tx) => {
     const rows = await tx
-      .select({ p: payableItems, projectDemo: projects.isDemo, staffDemo: staffProfiles.isDemo, staffClassification: staffProfiles.classification })
+      .select({ p: payableItems, projectDemo: projects.isDemo, staffDemo: staffProfiles.isDemo, staffClassification: staffProfiles.classification, hstChanged: hstStale })
       .from(payableItems)
       .innerJoin(projects, eq(projects.id, payableItems.projectId))
       .innerJoin(staffProfiles, eq(staffProfiles.id, payableItems.staffId))
+      .leftJoin(staffSensitive, eq(staffSensitive.staffId, payableItems.staffId))
       .where(inArray(payableItems.id, input.payableIds))
       .orderBy(asc(payableItems.id))
       .for("update", { of: payableItems });
@@ -204,12 +225,12 @@ export async function createBatch(actorId: string, input: { type: BatchType; pay
     }
     const demo = new Set(rows.map((r) => r.projectDemo || r.staffDemo));
     if (demo.size > 1) throw new PaymentError("Demo and real payables can't be in the same batch.");
-    for (const { p, staffClassification } of rows) {
+    for (const { p, staffClassification, hstChanged } of rows) {
       if (p.status !== "pending" && p.status !== "failed") throw new PaymentError("Some payables are already in a batch or paid.");
       if (p.classification === "unset" || batchTypeFor(p.classification) !== input.type) {
         throw new PaymentError(p.classification === "unset" ? "Some people don't have a pay classification yet." : "Contractors and employees are paid in separate batches.");
       }
-      if (staffClassification !== p.classification) throw new PaymentError("Someone's pay classification changed since approval. Refresh classifications first.");
+      if (staffClassification !== p.classification || hstChanged) throw new PaymentError("Someone's pay details changed since approval. Use Refresh pay details first.");
       if (period && p.serviceDate > period.endsOn) throw new PaymentError("Some shifts are after the end of this pay period.");
     }
     const total = rows.reduce((n, r) => n + r.p.totalCents, 0);
@@ -281,6 +302,9 @@ async function exportRows(tx: Tx | typeof db, batchId: string): Promise<ExportRo
       role: sql<string>`(${payableItems.calcInputs} ->> 'role')`,
       payableMinutes: payableItems.payableMinutes,
       rateCents: payableItems.rateCents,
+      subtotalCents: payableItems.baseCents,
+      hstCents: payableItems.taxCents,
+      gstHstNumber: sql<string | null>`(${payableItems.calcInputs} -> 'hst' ->> 'number')`,
       totalCents: payableItems.totalCents,
       currency: payableItems.currency,
     })

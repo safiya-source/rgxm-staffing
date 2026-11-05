@@ -135,7 +135,8 @@ export const staffProfiles = pgTable(
     travelRadiusKm: integer(),
     preferredEventTypes: text().array().notNull().default(sql`'{}'::text[]`),
     preferredHours: text(),
-    classification: workerClassification().notNull().default("unset"),
+    // RGXM engages field staff as independent contractors only.
+    classification: workerClassification().notNull().default("contractor"),
     onboardingCompletedAt: tstz(),
     isDemo: boolean().notNull().default(false),
     // Set when personal details were erased on request; work and pay records are kept.
@@ -160,6 +161,15 @@ export const staffSensitive = pgTable("staff_sensitive", {
   businessNumber: text(),
   taxRegistered: boolean().notNull().default(false),
   gstHstNumber: text(),
+  // Social Insurance Number for T4A slips: AES-256-GCM ciphertext (see server/crypto/tax-id.ts),
+  // never stored or logged in plain text. Only the last 3 digits are kept readable for display.
+  sinEncrypted: text(),
+  sinLast3: text(),
+  // Mailing address for tax slips.
+  mailingStreet: text(),
+  mailingCity: text(),
+  mailingProvince: text(),
+  mailingPostalCode: text(),
   emergencyContactName: text(),
   emergencyContactPhone: text(),
   emergencyContactRelation: text(),

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildExport, type ExportRow } from "@/server/domain/payment-exports";
-import { basePayCents, batchTypeFor, canMoveBatch, canMovePayable, centsToDecimal, esaHints, minutesToDecimalHours, payPeriodFor } from "@/server/domain/pay-rules";
+import { basePayCents, batchTypeFor, canMoveBatch, canMovePayable, centsToDecimal, esaHints, hstCents, minutesToDecimalHours, payPeriodFor } from "@/server/domain/pay-rules";
 
 describe("base pay", () => {
   it("is minutes × rate, rounded half up to the cent", () => {
@@ -48,6 +48,12 @@ describe("classification and state machines", () => {
     expect(esaHints({ classification: "employee", payableMinutes: 480, weekMinutes: 45 * 60 })).toEqual(["weekly_over_44"]);
     expect(esaHints({ classification: "contractor", payableMinutes: 150, weekMinutes: 50 * 60 })).toEqual([]);
   });
+  it("calculates 13% HST rounded half up", () => {
+    expect(hstCents(20000)).toBe(2600);
+    expect(hstCents(1234)).toBe(160); // 160.42
+    expect(hstCents(1250)).toBe(163); // 162.5 → 163
+    expect(hstCents(0)).toBe(0);
+  });
   it("formats export numbers without locale", () => {
     expect(centsToDecimal(123456)).toBe("1234.56");
     expect(centsToDecimal(5)).toBe("0.05");
@@ -68,6 +74,9 @@ describe("export files", () => {
     role: "BA",
     payableMinutes: 480,
     rateCents: 2500,
+    subtotalCents: 20000,
+    hstCents: 0,
+    gstHstNumber: null,
     totalCents: 20000,
     currency: "CAD",
   };
@@ -77,13 +86,21 @@ describe("export files", () => {
     expect(f.fileName).toBe("DEMO-CON-20261101-1.csv");
     expect(text).toContain("'=HYPERLINK");
     expect(text).toContain("DEMO - DO NOT PAY");
-    expect(text).toContain("8.00,25.00,200.00,CAD");
+    expect(text).toContain("8.00,25.00,200.00,0.00,200.00,,CAD");
     expect(f.rowCount).toBe(1);
   });
   it("only offers the QuickBooks bills format for contractors", async () => {
     await expect(buildExport("csv_qbo", { reference: "PAY-1", type: "payroll", periodLabel: null, isDemo: false }, [row], "2026-11-20")).rejects.toThrow(/contractor/);
     const f = await buildExport("csv_qbo", { reference: "CON-1", type: "contractor", periodLabel: null, isDemo: false }, [row, { ...row, payableId: "p2" }], "2026-11-20");
     expect(f.data.toString("utf8")).toContain("CON-1-1");
+  });
+  it("puts HST in its own columns for registered contractors", async () => {
+    const hst = { ...row, hstCents: 2600, totalCents: 22600, gstHstNumber: "123456789RT0001" };
+    const generic = (await buildExport("csv_generic", { reference: "CON-2", type: "contractor", periodLabel: null, isDemo: false }, [hst], "2026-11-20")).data.toString("utf8");
+    expect(generic).toContain("200.00,26.00,226.00,123456789RT0001,CAD");
+    const qbo = (await buildExport("csv_qbo", { reference: "CON-2", type: "contractor", periodLabel: null, isDemo: false }, [hst, row], "2026-11-20")).data.toString("utf8");
+    expect(qbo).toContain("200.00,HST ON,26.00,CAD");
+    expect(qbo).toContain("200.00,Out of Scope,0.00,CAD");
   });
   it("writes an xlsx workbook", async () => {
     const f = await buildExport("xlsx", { reference: "CON-1", type: "contractor", periodLabel: null, isDemo: false }, [row], "2026-11-20");

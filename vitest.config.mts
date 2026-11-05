@@ -16,6 +16,8 @@ export default defineConfig({
       STORAGE_DRIVER: "local",
       STORAGE_LOCAL_DIR: "./test-results/storage",
       AUTH_RATE_LIMIT: "on",
+      // Test-only key (not a secret).
+      TAX_ID_ENCRYPTION_KEY: "ykUajL6AM7M01553sfNv1n9wVK5BOto1snDlnK8x/Ro=",
     },
     fileParallelism: false,
   },

@@ -172,46 +172,6 @@ export async function setStaffRate(actorId: string, staffId: string, role: Field
   return tx ? run(tx) : db.transaction(run);
 }
 
-export async function setClassification(
-  actorId: string,
-  staffId: string,
-  input: { classification: "unset" | "contractor" | "employee"; taxRegistered: boolean; gstHstNumber: string | null; legalName: string | null; businessName: string | null },
-) {
-  if (input.taxRegistered && !input.gstHstNumber) throw new TalentError("Enter the GST/HST number for a tax-registered contractor.");
-  if (input.gstHstNumber && !/^\d{9}\s?RT\s?\d{4}$/i.test(input.gstHstNumber.trim())) {
-    throw new TalentError("GST/HST numbers look like 123456789 RT0001.");
-  }
-  await db.transaction(async (tx) => {
-    const [before] = await tx
-      .select({ classification: staffProfiles.classification })
-      .from(staffProfiles)
-      .where(eq(staffProfiles.id, staffId));
-    await tx.update(staffProfiles).set({ classification: input.classification }).where(eq(staffProfiles.id, staffId));
-    const sensitive = {
-      taxRegistered: input.taxRegistered,
-      gstHstNumber: input.gstHstNumber,
-      legalName: input.legalName,
-      businessName: input.businessName,
-    };
-    await tx
-      .insert(staffSensitive)
-      .values({ staffId, ...sensitive })
-      .onConflictDoUpdate({ target: staffSensitive.staffId, set: sensitive });
-    // Tax numbers are not copied into the audit log.
-    await recordAudit(
-      {
-        actorId,
-        action: "staff.classification",
-        entityType: "staff_profile",
-        entityId: staffId,
-        before,
-        after: { classification: input.classification, taxRegistered: input.taxRegistered },
-      },
-      tx,
-    );
-  });
-}
-
 export async function setEmergencyContact(actorId: string, staffId: string, input: { name: string | null; phone: string | null; relation: string | null }) {
   await db.transaction(async (tx) => {
     const values = { emergencyContactName: input.name, emergencyContactPhone: input.phone, emergencyContactRelation: input.relation };
