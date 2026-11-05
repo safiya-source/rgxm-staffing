@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { canAny, canOnProject } from "@/server/authz/permissions";
 import { getShifts, listBreakPolicies, listTemplates } from "@/server/domain/shifts";
 import { getProjectSetup } from "@/server/queries/projects";
+import { getOrgSettings } from "@/server/settings";
 import { loadProjectScopes, requireInternal, toActor } from "@/server/session";
 import { ShiftBoard } from "./shift-board";
 
@@ -21,12 +22,14 @@ export default async function ProjectShiftsPage({ params, searchParams }: PagePr
     listBreakPolicies(),
   ]);
   const showRates = canAny(actor, "rates.view");
+  const defaultRates = showRates ? (await getOrgSettings()).defaultRates : {};
 
   return (
     <ShiftBoard
       projectId={id}
       canManage={canOnProject(actor, "shift.manage", scope)}
       showRates={showRates}
+      defaultRates={defaultRates}
       includeCancelled={includeCancelled}
       locations={setup.locations.map((l) => ({ id: l.id, name: l.name, timezone: l.timezone }))}
       requirements={setup.requirements.map((r) => ({

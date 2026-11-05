@@ -1,10 +1,10 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { db } from "@/server/db";
-import { createStaffingRequest, suggestProjectCode } from "@/server/domain/staffing-request";
+import { createStaffingRequest, staffingRequestSchema, suggestProjectCode } from "@/server/domain/staffing-request";
 import { makeProject, makeUser, one, pool } from "./fixtures";
 
 let pm: { id: string };
-const shifts = { role: "BA" as const, startDate: "2027-03-10", endDate: "2027-03-12", weekdays: [], startTime: "10:00", endTime: "18:00", headcount: 2 };
+const shifts = { roles: [{ role: "BA" as const, headcount: 2 }], startDate: "2027-03-10", endDate: "2027-03-12", weekdays: [], startTime: "10:00", endTime: "18:00" };
 
 beforeAll(async () => {
   pm = await makeUser();
@@ -39,10 +39,30 @@ describe("new staffing request shortcut", () => {
     const res = await createStaffingRequest(pm.id, {
       project: { mode: "existing", projectId: p.projectId },
       location: { mode: "existing", locationId: p.locationId },
-      shifts: { ...shifts, role: "TL", weekdays: [3] }, // Wednesdays only: Mar 10
+      shifts: { ...shifts, roles: [{ role: "TL", headcount: 1 }], weekdays: [3] }, // Wednesdays only: Mar 10
     });
     expect(res.shiftIds).toHaveLength(1);
     expect(res.projectId).toBe(p.projectId);
+  });
+
+  it("creates shifts for several roles on the same days, each with its own headcount and rate", async () => {
+    const p = await makeProject();
+    // Rates arrive from the form in dollars.
+    const input = staffingRequestSchema.parse({
+      project: { mode: "existing", projectId: p.projectId },
+      location: { mode: "existing", locationId: p.locationId },
+      shifts: { ...shifts, roles: [{ role: "BA", headcount: 10, rateCents: "25.00" }, { role: "TL", headcount: 1, rateCents: "32" }] },
+    });
+    const res = await createStaffingRequest(pm.id, input);
+    expect(res.shiftIds).toHaveLength(6);
+    expect(res.roles).toBe(2);
+    const rows = (await pool.query("select role, count(*)::int n, min(headcount) headcount, min(rate_cents) rate from shifts where project_id = $1 group by role order by role", [p.projectId])).rows;
+    expect(rows).toEqual([
+      { role: "BA", n: 3, headcount: 10, rate: 2500 },
+      { role: "TL", n: 3, headcount: 1, rate: 3200 },
+    ]);
+    // A role can't be listed twice.
+    expect(() => staffingRequestSchema.parse({ project: { mode: "existing", projectId: p.projectId }, location: { mode: "existing", locationId: p.locationId }, shifts: { ...shifts, roles: [{ role: "BA", headcount: 1 }, { role: "BA", headcount: 2 }] } })).toThrow(/listed twice/);
   });
 
   it("creates nothing when any part fails", async () => {

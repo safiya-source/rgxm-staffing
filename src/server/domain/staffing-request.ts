@@ -2,6 +2,7 @@
 // and the published shifts, all in one transaction, so a failure never leaves a half-made project.
 import { eq, sql } from "drizzle-orm";
 import { z } from "zod";
+import { FIELD_ROLE_NAMES } from "@/lib/roles";
 import { recordAudit } from "@/server/audit";
 import { db } from "@/server/db";
 import { projects } from "@/server/db/schema";
@@ -10,8 +11,28 @@ import { bulkShiftSchema, createShifts } from "./shifts";
 
 const blankToNull = (v: unknown) => (typeof v === "string" && v.trim() === "" ? null : v);
 
-/** The shift part of the request: everything in a bulk shift except where it happens. */
-export const requestShiftsSchema = bulkShiftSchema.omit({ locationId: true, publish: true, requirementId: true, breakPolicyId: true });
+/** One role in the request, e.g. 10 Brand Ambassadors at $25. */
+export const requestRoleSchema = bulkShiftSchema.pick({ role: true, headcount: true, rateCents: true });
+
+/**
+ * The shift part of the request: the shared days, times and details, plus one or more roles.
+ * Each role gets its own shifts on the same days and times.
+ */
+export const requestShiftsSchema = bulkShiftSchema
+  .omit({ locationId: true, publish: true, requirementId: true, breakPolicyId: true, role: true, headcount: true, rateCents: true })
+  .extend({
+    roles: z
+      .array(requestRoleSchema)
+      .min(1, "Add at least one role")
+      .max(8)
+      .superRefine((roles, ctx) => {
+        const seen = new Set<string>();
+        for (const r of roles) {
+          if (seen.has(r.role)) ctx.addIssue({ code: "custom", message: `${FIELD_ROLE_NAMES[r.role]} is listed twice. Combine them into one line.` });
+          seen.add(r.role);
+        }
+      }),
+  });
 
 export const staffingRequestSchema = z.object({
   project: z.discriminatedUnion("mode", [
@@ -60,7 +81,8 @@ export async function suggestProjectCode(name: string, startDate: string) {
  * can go out straight away. Returns where to send offers from.
  */
 export async function createStaffingRequest(actorId: string, input: StaffingRequestInput) {
-  const shifts = requestShiftsSchema.parse(input.shifts);
+  // `input` is already parsed (rates are in cents). Parsing again would convert the rates a second time.
+  const shifts = input.shifts;
   const newProject =
     input.project.mode === "new"
       ? projectSchema.parse({
@@ -88,7 +110,11 @@ export async function createStaffingRequest(actorId: string, input: StaffingRequ
       if (p.status === "closed" || p.status === "cancelled") throw new ProjectError(`This project is ${p.status}. Reopen it or start a new one.`);
     }
     const locationId = newLocation ? await saveLocation(actorId, projectId, null, newLocation, tx) : (input.location as { locationId: string }).locationId;
-    const shiftIds = await createShifts(actorId, projectId, { ...shifts, locationId, publish: true }, tx);
-    return { projectId, locationId, shiftIds, group: `${shifts.role}:${locationId}` };
+    const { roles, ...common } = shifts;
+    const shiftIds: string[] = [];
+    for (const r of roles) {
+      shiftIds.push(...(await createShifts(actorId, projectId, { ...common, ...r, locationId, publish: true }, tx)));
+    }
+    return { projectId, locationId, shiftIds, roles: roles.length, group: `${roles[0]!.role}:${locationId}` };
   });
 }
