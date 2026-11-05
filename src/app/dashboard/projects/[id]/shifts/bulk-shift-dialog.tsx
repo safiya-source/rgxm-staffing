@@ -28,6 +28,7 @@ export function BulkShiftDialog({
   templates,
   breakPolicies,
   showRates,
+  defaultRates,
   onClose,
 }: {
   projectId: string;
@@ -36,8 +37,11 @@ export function BulkShiftDialog({
   templates: TemplateOption[];
   breakPolicies: BreakPolicyOption[];
   showRates: boolean;
+  defaultRates: Partial<Record<FieldRole, number>>;
   onClose: () => void;
 }) {
+  // Company default for a role (Settings → Default hourly rates), when the viewer can see rates.
+  const defaultRate = (role: FieldRole) => (showRates && defaultRates[role] != null ? dollars(defaultRates[role]!) : "");
   const router = useRouter();
   const [pending, start] = useTransition();
   const [error, setError] = useState<string>();
@@ -51,7 +55,7 @@ export function BulkShiftDialog({
     startTime: "10:00",
     endTime: "18:00",
     headcount: "1",
-    rate: "",
+    rate: defaultRate("BA"),
     breakPolicyId: "",
     reportingLocation: "",
     onsiteContact: "",
@@ -71,7 +75,7 @@ export function BulkShiftDialog({
       requirementId: id,
       role: r.role,
       headcount: String(r.quantity),
-      rate: showRates ? dollars(r.defaultRateCents) : f.rate,
+      rate: showRates ? dollars(r.defaultRateCents) || defaultRate(r.role) : f.rate,
       startDate: r.startDate ?? f.startDate,
       endDate: r.endDate ?? f.endDate,
     });
@@ -204,7 +208,11 @@ export function BulkShiftDialog({
 
           <div className="grid gap-4 sm:grid-cols-3">
             <Field label="Role" htmlFor="b-role">
-              <NativeSelect id="b-role" value={f.role} onChange={(e) => set({ role: e.target.value as FieldRole })}>
+              <NativeSelect id="b-role" value={f.role} onChange={(e) => {
+                  const role = e.target.value as FieldRole;
+                  // Follow the new role's default unless a different rate was typed.
+                  set({ role, ...(f.rate === "" || f.rate === defaultRate(f.role) ? { rate: defaultRate(role) } : {}) });
+                }}>
                 {FIELD_ROLES.map((r) => (
                   <option key={r} value={r}>
                     {FIELD_ROLE_NAMES[r]}

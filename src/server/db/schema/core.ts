@@ -90,6 +90,8 @@ export const orgSettings = pgTable("org_settings", {
   locationRetentionDays: integer().notNull().default(90),
   // Stored copies of sent emails (mail log) have their bodies cleared after this.
   mailLogRetentionDays: integer().notNull().default(30),
+  // Company-wide default hourly rate per field role, in cents (e.g. {"BA": 2500}). Pre-fills new shifts.
+  defaultRates: jsonb().$type<Partial<Record<"BA" | "TL" | "PA" | "AM", number>>>().notNull().default({}),
   updatedAt: updatedAt(),
   updatedBy: userRef(),
 });

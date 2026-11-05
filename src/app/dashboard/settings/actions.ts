@@ -7,6 +7,8 @@ import { recordAudit } from "@/server/audit";
 import { runAction, UserFacingError } from "@/server/actions";
 import { auth } from "@/server/auth";
 import { INTERNAL_ROLES, type InternalRole } from "@/server/authz/permissions";
+import { FIELD_ROLES } from "@/lib/roles";
+import { moneyToCents } from "@/server/domain/projects";
 import { db } from "@/server/db";
 import { orgSettings, sessions, twoFactors, userRoles, users } from "@/server/db/schema";
 import { HEX_COLOR } from "@/server/settings";
@@ -40,6 +42,29 @@ export async function updateOrgSettings(_prev: ActionResult, formData: FormData)
     });
     revalidatePath("/", "layout");
     return { ok: true, message: "Settings saved." };
+  });
+}
+
+// ─── Default hourly rates ──────────────────────────────────────────────────────
+
+const defaultRatesSchema = z.record(z.enum(FIELD_ROLES), moneyToCents.refine((v) => v == null || (v > 0 && v <= 100_000), "Enter an hourly rate up to $1,000"));
+
+/** Company-wide default hourly rate per role. Pre-fills new shifts; each shift can still be changed. */
+export async function updateDefaultRates(_prev: ActionResult, formData: FormData): Promise<ActionResult> {
+  return runAction(async () => {
+    const viewer = await authorizeInternal("rates.edit");
+    const parsed = defaultRatesSchema.parse(Object.fromEntries(FIELD_ROLES.map((r) => [r, formData.get(r) ?? ""])));
+    const rates = Object.fromEntries(Object.entries(parsed).filter(([, v]) => v != null)) as Record<string, number>;
+    await db.transaction(async (tx) => {
+      const [before] = await tx.select({ defaultRates: orgSettings.defaultRates }).from(orgSettings).where(eq(orgSettings.id, 1));
+      await tx
+        .insert(orgSettings)
+        .values({ id: 1, defaultRates: rates, updatedBy: viewer.userId })
+        .onConflictDoUpdate({ target: orgSettings.id, set: { defaultRates: rates, updatedBy: viewer.userId } });
+      await recordAudit({ actorId: viewer.userId, action: "settings.default_rates", entityType: "org_settings", entityId: "1", before: before?.defaultRates ?? {}, after: rates }, tx);
+    });
+    revalidatePath("/dashboard", "layout");
+    return { ok: true, message: "Default rates saved." };
   });
 }
 

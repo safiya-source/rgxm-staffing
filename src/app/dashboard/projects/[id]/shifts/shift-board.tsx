@@ -25,6 +25,7 @@ export function ShiftBoard(props: {
   projectId: string;
   canManage: boolean;
   showRates: boolean;
+  defaultRates: Partial<Record<FieldRole, number>>;
   includeCancelled: boolean;
   locations: LocationOption[];
   requirements: RequirementOption[];
@@ -206,6 +207,7 @@ export function ShiftBoard(props: {
           templates={props.templates}
           breakPolicies={props.breakPolicies}
           showRates={props.showRates}
+          defaultRates={props.defaultRates}
           onClose={() => setCreating(false)}
         />
       ) : null}

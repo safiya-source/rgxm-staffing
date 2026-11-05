@@ -64,6 +64,13 @@
       "when": 1793825986473,
       "tag": "0008_staff_invitations",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1793907136577,
+      "tag": "0009_org_default_rates",
+      "breakpoints": true
     }
   ]
 }
