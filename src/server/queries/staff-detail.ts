@@ -182,8 +182,7 @@ export async function getStaffDetail(
       ? {
           classification: profile.classification,
           taxRegistered: sensitive?.taxRegistered ?? false,
-          hasSin: Boolean(sensitive?.sinLast3),
-          // Tax and legal identity details only for people who can edit pay setup. Never the SIN itself.
+          // Tax and legal identity details only for people who can edit pay setup.
           tax: can.editRates
             ? {
                 legalName: sensitive?.legalName ?? null,
@@ -191,7 +190,6 @@ export async function getStaffDetail(
                 businessNumber: sensitive?.businessNumber ?? null,
                 taxRegistered: sensitive?.taxRegistered ?? false,
                 gstHstNumber: sensitive?.gstHstNumber ?? null,
-                sinLast3: sensitive?.sinLast3 ?? null,
                 mailingStreet: sensitive?.mailingStreet ?? null,
                 mailingCity: sensitive?.mailingCity ?? null,
                 mailingProvince: sensitive?.mailingProvince ?? null,

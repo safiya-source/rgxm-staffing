@@ -15,30 +15,24 @@ export type TaxDetailsValues = {
   businessNumber: string | null;
   taxRegistered: boolean;
   gstHstNumber: string | null;
-  sinLast3: string | null;
   mailingStreet: string | null;
   mailingCity: string | null;
   mailingProvince: string | null;
   mailingPostalCode: string | null;
 };
 
-/**
- * Contractor tax details (used on the talent profile and in the staff portal). The SIN is write-only:
- * the form never receives it, only whether one is on file.
- */
+/** Contractor tax details (used on the talent profile and in the staff portal). No SIN: see tax-details.ts. */
 export function TaxDetailsForm({
   initial,
   action,
   onDone,
   onCancel,
-  sinAvailable,
   selfService = false,
 }: {
   initial: TaxDetailsValues;
   action: (prev: ActionResult, fd: FormData) => Promise<ActionResult>;
   onDone?: () => void;
   onCancel?: () => void;
-  sinAvailable: boolean;
   selfService?: boolean;
 }) {
   const [registered, setRegistered] = useState(initial.taxRegistered);
@@ -62,25 +56,9 @@ export function TaxDetailsForm({
           </Field>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field
-            label="Social Insurance Number"
-            htmlFor="sin"
-            error={e?.sin}
-            hint={
-              !sinAvailable
-                ? "SIN storage isn't set up yet."
-                : initial.sinLast3
-                  ? `On file (ends in ${initial.sinLast3}). Leave blank to keep it.`
-                  : "Needed for T4A tax slips. Stored encrypted."
-            }
-          >
-            <Input id="sin" name="sin" inputMode="numeric" autoComplete="off" placeholder={initial.sinLast3 ? `••• ••• ${initial.sinLast3}` : "123 456 789"} disabled={!sinAvailable} />
-          </Field>
-          <Field label="Business number (if any)" htmlFor="businessNumber" error={e?.businessNumber} hint="9 digits, for incorporated or registered businesses">
-            <Input id="businessNumber" name="businessNumber" inputMode="numeric" defaultValue={initial.businessNumber ?? ""} />
-          </Field>
-        </div>
+        <Field label="Business number (if any)" htmlFor="businessNumber" error={e?.businessNumber} hint="9 digits, for incorporated or registered businesses">
+          <Input id="businessNumber" name="businessNumber" inputMode="numeric" defaultValue={initial.businessNumber ?? ""} className="sm:max-w-xs" />
+        </Field>
 
         <div className="grid gap-3 rounded-lg border p-3">
           <label className="flex items-start gap-2 text-sm">

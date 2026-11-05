@@ -1,12 +1,12 @@
 // Year-end T4A summary: fees paid to each contractor in a calendar year (by the date payment was
-// recorded), with the identity and address details a T4A slip needs. RGXM's accountant prepares
-// and files the slips; this report gives them the figures. Demo data is never included.
+// recorded), with the name, business number and address a T4A slip needs. RGXM's accountant
+// prepares and files the slips and collects SINs directly (the platform deliberately doesn't store
+// them); the CSV leaves a SIN column for them to fill in. Demo data is never included.
 import { and, eq, sql } from "drizzle-orm";
 import { toCsv } from "@/lib/csv";
 import { recordAudit } from "@/server/audit";
 import { db } from "@/server/db";
 import { payableItems, paymentBatches, paymentBatchItems, staffProfiles, staffSensitive } from "@/server/db/schema";
-import { decryptSin, formatSin } from "@/server/crypto/tax-id";
 import { centsToDecimal } from "./pay-rules";
 
 /** CRA requires a T4A for fees for services when the year's total is over $500. */
@@ -25,8 +25,6 @@ export async function getT4aSummary(year: number) {
       businessName: staffSensitive.businessName,
       businessNumber: staffSensitive.businessNumber,
       gstHstNumber: staffSensitive.gstHstNumber,
-      sinEncrypted: staffSensitive.sinEncrypted,
-      sinLast3: staffSensitive.sinLast3,
       mailingStreet: staffSensitive.mailingStreet,
       mailingCity: staffSensitive.mailingCity,
       mailingProvince: staffSensitive.mailingProvince,
@@ -56,7 +54,6 @@ export async function getT4aSummary(year: number) {
   return rows.map((r) => {
     const missing = [
       !r.legalName && "legal name",
-      !r.sinLast3 && !r.businessNumber && "SIN or business number",
       !(r.mailingStreet && r.mailingCity && r.mailingProvince && r.mailingPostalCode) && "mailing address",
     ].filter((x): x is string => Boolean(x));
     return { ...r, slipRequired: r.feesCents > T4A_THRESHOLD_CENTS, missing };
@@ -64,13 +61,13 @@ export async function getT4aSummary(year: number) {
 }
 export type T4aRow = Awaited<ReturnType<typeof getT4aSummary>>[number];
 
-/** The CSV for the accountant, with full SINs. Every download is audited. */
+/** The CSV for the accountant (they add SINs). Every download is audited. */
 export async function buildT4aCsv(actorId: string, year: number) {
   const rows = await getT4aSummary(year);
   const headers = [
     "Recipient legal name",
     "Business name",
-    "SIN",
+    "SIN (accountant to add)",
     "Business number",
     "Street",
     "City",
@@ -88,7 +85,7 @@ export async function buildT4aCsv(actorId: string, year: number) {
   const data = rows.map((r) => [
     r.legalName ?? `${r.firstName} ${r.lastName}`,
     r.businessName ?? "",
-    r.sinEncrypted ? formatSin(decryptSin(r.sinEncrypted)) : "",
+    "",
     r.businessNumber ?? "",
     r.mailingStreet ?? "",
     r.mailingCity ?? "",
@@ -103,6 +100,6 @@ export async function buildT4aCsv(actorId: string, year: number) {
     r.missing.join("; "),
     r.email,
   ]);
-  await recordAudit({ actorId, action: "t4a.export", entityType: "report", entityId: `t4a-${year}`, after: { year, recipients: rows.length, withSin: rows.filter((r) => r.sinEncrypted).length } });
+  await recordAudit({ actorId, action: "t4a.export", entityType: "report", entityId: `t4a-${year}`, after: { year, recipients: rows.length } });
   return { csv: `﻿${toCsv(headers, data)}`, fileName: `RGXM-T4A-summary-${year}.csv`, count: rows.length };
 }

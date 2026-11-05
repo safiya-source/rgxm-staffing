@@ -1,7 +1,6 @@
-// Year-end T4A summary download (Finance/admin only). Contains full SINs, so it is rate-limited,
-// audited, never cached, and only reachable by people who manage payments.
+// Year-end T4A summary download (Finance/admin only). Contains names, addresses and pay totals, so it
+// is rate-limited, audited, never cached, and only reachable by people who manage payments.
 import { RateLimitError, rateLimit } from "@/server/rate-limit";
-import { TaxIdError } from "@/server/crypto/tax-id";
 import { buildT4aCsv } from "@/server/domain/t4a";
 import { authorizeInternalRoute } from "@/server/session";
 
@@ -18,18 +17,13 @@ export async function GET(request: Request) {
     if (err instanceof RateLimitError) return new Response(err.message, { status: 429, headers: { "Retry-After": String(err.retryAfterSeconds) } });
     throw err;
   }
-  try {
-    const file = await buildT4aCsv(viewer.userId, year);
-    return new Response(file.csv, {
-      headers: {
-        "Content-Type": "text/csv; charset=utf-8",
-        "Content-Disposition": `attachment; filename="${file.fileName}"`,
-        "Cache-Control": "private, no-store",
-        "X-Content-Type-Options": "nosniff",
-      },
-    });
-  } catch (err) {
-    if (err instanceof TaxIdError) return new Response(err.message, { status: 503 });
-    throw err;
-  }
+  const file = await buildT4aCsv(viewer.userId, year);
+  return new Response(file.csv, {
+    headers: {
+      "Content-Type": "text/csv; charset=utf-8",
+      "Content-Disposition": `attachment; filename="${file.fileName}"`,
+      "Cache-Control": "private, no-store",
+      "X-Content-Type-Options": "nosniff",
+    },
+  });
 }

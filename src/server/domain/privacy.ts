@@ -124,8 +124,6 @@ export async function exportStaffData(staffId: string) {
           businessNumber: sensitive.businessNumber,
           taxRegistered: sensitive.taxRegistered,
           gstHstNumber: sensitive.gstHstNumber,
-          // The SIN itself is never exported; only that one is on file.
-          sin: sensitive.sinLast3 ? `on file, ending in ${sensitive.sinLast3}` : null,
           mailingAddress: [sensitive.mailingStreet, sensitive.mailingCity, sensitive.mailingProvince, sensitive.mailingPostalCode].filter(Boolean).join(", ") || null,
           emergencyContactName: sensitive.emergencyContactName,
           emergencyContactPhone: sensitive.emergencyContactPhone,

@@ -96,7 +96,6 @@ and to the Supabase, Vercel and GitHub accounts.
 | `SUPABASE_SERVICE_ROLE_KEY` | the `sb_secret_…` key |
 | `SUPABASE_STORAGE_BUCKET` | `rgxm-private` |
 | `CRON_SECRET` | the same value as `PRODUCTION_CRON_SECRET` |
-| `TAX_ID_ENCRYPTION_KEY` | a new value from `openssl rand -base64 32`. It encrypts SINs: **save it in your password manager and never change it** |
 | `AUTH_IP_HEADERS` | `x-vercel-forwarded-for` |
 | `AUTH_RATE_LIMIT` | `on` |
 

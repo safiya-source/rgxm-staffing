@@ -8,7 +8,6 @@ import { getTaxDetails, saveTaxDetails } from "@/server/domain/tax-details";
 import { book, makeProject, makeShift, makeUser, one, pool } from "./fixtures";
 
 const MIN = 60_000;
-const VALID_SIN = "130 692 544"; // the standard documentation example; passes the Luhn check
 let finance: { id: string };
 let finance2: { id: string };
 let pm: { id: string };
@@ -55,26 +54,23 @@ describe("tax details", () => {
     const { staffId } = await contractor();
     await expect(saveTaxDetails(finance.id, staffId, { taxRegistered: true })).rejects.toThrow(/GST\/HST number/);
     await expect(saveTaxDetails(finance.id, staffId, { taxRegistered: true, gstHstNumber: "12345" })).rejects.toThrow(/look like/);
-    await expect(saveTaxDetails(finance.id, staffId, { taxRegistered: false, sin: "123 456 789" })).rejects.toThrow(/isn't valid/);
     await expect(saveTaxDetails(finance.id, staffId, { taxRegistered: false, mailingPostalCode: "90210" })).rejects.toThrow(/postal code/);
   });
 
-  it("store the SIN encrypted and write-only, and keep it when left blank", async () => {
+  it("save details by staff or Finance, keep no SIN, and leave tax numbers out of the audit log", async () => {
     const { userId, staffId } = await contractor();
-    await saveTaxDetails(userId, staffId, { ...registered, sin: VALID_SIN, mailingStreet: "1 Front St W", mailingCity: "Toronto", mailingProvince: "ON", mailingPostalCode: "m5j 1a1" }, { bySelf: true });
-    const row = await one<{ sin_encrypted: string; sin_last3: string; gst_hst_number: string; mailing_postal_code: string }>("select sin_encrypted, sin_last3, gst_hst_number, mailing_postal_code from staff_sensitive where staff_id = $1", [staffId]);
-    expect(row.sin_encrypted).toMatch(/^v1:/);
-    expect(row.sin_encrypted).not.toContain("130692544");
-    expect(row).toMatchObject({ sin_last3: "544", gst_hst_number: "123456789RT0001", mailing_postal_code: "M5J1A1" });
-    // Saving again without a SIN keeps it; the read model never includes it.
+    // A SIN sent anyway (e.g. a tampered form) is ignored: there is nowhere to store it.
+    const tampered = { ...registered, sin: "130 692 544", mailingStreet: "1 Front St W", mailingCity: "Toronto", mailingProvince: "ON", mailingPostalCode: "m5j 1a1" };
+    await saveTaxDetails(userId, staffId, tampered as Parameters<typeof saveTaxDetails>[2], { bySelf: true });
+    const row = await one<Record<string, unknown>>("select * from staff_sensitive where staff_id = $1", [staffId]);
+    expect(row).toMatchObject({ gst_hst_number: "123456789RT0001", mailing_postal_code: "M5J1A1" });
+    expect(Object.keys(row).filter((k) => k.startsWith("sin"))).toEqual([]);
+    expect(JSON.stringify(row)).not.toContain("130");
     await saveTaxDetails(finance.id, staffId, { ...registered, legalName: "Tia T. Taxpayer" });
-    const details = await getTaxDetails(staffId);
-    expect(details).toMatchObject({ legalName: "Tia T. Taxpayer", sinLast3: "544" });
-    expect(JSON.stringify(details)).not.toContain("130692544");
-    // The audit log records that it changed, never the number.
+    expect(await getTaxDetails(staffId)).toMatchObject({ legalName: "Tia T. Taxpayer", mailingStreet: null });
     const audits = (await pool.query("select action, after::text from audit_log where entity_id = $1 order by created_at", [staffId])).rows;
     expect(audits.map((r) => r.action)).toEqual(["staff.tax_details_self", "staff.tax_details"]);
-    expect(audits.map((r) => r.after).join()).not.toMatch(/130692|RT0001|Front St/);
+    expect(audits.map((r) => r.after).join()).not.toMatch(/RT0001|Front St/);
   });
 });
 
@@ -104,9 +100,9 @@ describe("HST", () => {
 });
 
 describe("T4A summary", () => {
-  it("totals fees paid in the year per contractor, with the decrypted SIN only in the CSV", async () => {
+  it("totals fees paid in the year per contractor, leaving the SIN for the accountant", async () => {
     const who = await contractor();
-    await saveTaxDetails(who.userId, who.staffId, { ...registered, sin: VALID_SIN }, { bySelf: true });
+    await saveTaxDetails(who.userId, who.staffId, registered, { bySelf: true });
     const items = [await approved(who.staffId, 2), await approved(who.staffId, 3), await approved(who.staffId, 4)];
     const batch = await pay.createBatch(finance.id, { type: "contractor", payPeriodId: null, payableIds: items.map((i) => i.id) });
     await pay.approveBatch(finance2.id, batch.id);
@@ -117,10 +113,9 @@ describe("T4A summary", () => {
 
     const row = (await getT4aSummary(year)).find((r) => r.staffId === who.staffId)!;
     expect(row).toMatchObject({ feesCents: 60000, hstCents: 7800, totalCents: 67800, payments: 3, slipRequired: true, missing: ["mailing address"] });
-    expect(JSON.stringify(row)).not.toContain("130692544");
 
     const csv = await buildT4aCsv(finance.id, year);
-    expect(csv.csv).toContain("130 692 544");
+    expect(csv.csv).toContain("SIN (accountant to add)");
     expect(csv.csv).toContain("600.00,78.00,678.00,123456789RT0001,3,Yes,mailing address");
     expect((await one<{ n: number }>("select count(*)::int n from audit_log where action = 't4a.export' and actor_id = $1", [finance.id])).n).toBeGreaterThanOrEqual(1);
     // Nothing for a year with no payments.

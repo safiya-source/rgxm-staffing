@@ -77,14 +77,11 @@ had an external penetration test or a legal/privacy review.
   - payment, talent and personal-data exports.
 
 ### Tax identifiers (SIN)
-- SINs are encrypted with AES-256-GCM using a dedicated key (`TAX_ID_ENCRYPTION_KEY`), separate from the database,
-  so a database copy or backup alone doesn't reveal them. Only the last 3 digits are stored readable, for display.
-- SINs are write-only in the app: forms never receive them back. The only place the full number appears is the year-end
-  T4A CSV, which only Finance/Admins can download; every download is rate-limited and audited.
-- SINs, tax numbers and addresses are never written to the audit log (only that they changed).
-- **Never change or lose `TAX_ID_ENCRYPTION_KEY`** once SINs are stored: they couldn't be decrypted. Keep a copy in your
-  password manager.
-- Erasure keeps the legal name, SIN/business number and mailing address, because tax records must be kept for six years.
+- **The platform does not collect or store Social Insurance Numbers.** RGXM's accountant collects them directly
+  when preparing T4A slips; the T4A summary CSV has an empty SIN column for them to complete.
+- Legal name, business number, GST/HST number and mailing address are kept in the restricted `staff_sensitive` table
+  (Finance/Admins only) and are never written to the audit log (only that they changed).
+- Erasure keeps legal name, business number and mailing address, because tax records must be kept for six years.
 
 ### Privacy (PIPEDA)
 - Location is captured only at the moment of check-in/out, only where the venue requires it. It's never tracked in the background.
