@@ -149,13 +149,17 @@ export async function exportStaffData(staffId: string) {
  * payables and their legal/tax identity (needed for tax records) are kept against the anonymised
  * profile; messages they exchanged with RGXM are kept as business correspondence.
  */
-export async function anonymizeStaff(actorId: string, staffId: string, reason: string) {
+export async function anonymizeStaff(actorId: string | null, staffId: string, reason: string) {
   if (reason.trim().length < 5) throw new PrivacyError("Record why (e.g. the date and channel of their request).");
   const storageKeys: string[] = [];
   await db.transaction(async (tx) => {
     const [p] = await tx.select().from(staffProfiles).where(eq(staffProfiles.id, staffId)).for("update");
     if (!p) throw new PrivacyError("Profile not found.");
     if (p.anonymizedAt) throw new PrivacyError("This profile has already been anonymised.");
+    const { rows: held } = await tx.execute<{ held: boolean }>(sql`
+      select exists (select 1 from legal_holds h where h.released_at is null and (h.staff_id = ${staffId}
+        or h.project_id in (select b.project_id from bookings b where b.staff_id = ${staffId}))) as held`);
+    if (held[0]?.held) throw new PrivacyError("This person (or a project they worked on) is under a legal hold, so their details can't be erased yet.");
     const [upcoming] = await tx
       .select({ n: sql<number>`count(*)::int` })
       .from(bookings)

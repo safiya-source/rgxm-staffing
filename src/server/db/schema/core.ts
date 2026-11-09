@@ -15,6 +15,7 @@ import {
   index,
   integer,
   jsonb,
+  numeric,
   pgTable,
   primaryKey,
   smallint,
@@ -92,6 +93,35 @@ export const orgSettings = pgTable("org_settings", {
   mailLogRetentionDays: integer().notNull().default(30),
   // Company-wide default hourly rate per field role, in cents (e.g. {"BA": 2500}). Pre-fills new shifts.
   defaultRates: jsonb().$type<Partial<Record<"BA" | "TL" | "PA" | "AM", number>>>().notNull().default({}),
+  // Privacy Officer contact, shown on the privacy notice and in the staff portal.
+  privacyOfficerName: text(),
+  privacyOfficerEmail: text(),
+  privacyOfficerPhone: text(),
+  // All RGXM staff accounts (not only Admin/Finance) must enrol in two-step verification.
+  requireMfaForStaff: boolean().notNull().default(true),
+  // Contractors need a recorded contractor-process approval before a booking can be confirmed.
+  requireContractorApproval: boolean().notNull().default(true),
+  // Automatic GST/HST/QST calculation stays off until RGXM's accountant approves the rules.
+  autoTaxEnabled: boolean().notNull().default(false),
+  autoTaxApprovedBy: userRef(),
+  autoTaxApprovedAt: tstz(),
+  autoTaxApprovalReference: text(),
+  // Per tax component: "recoverable" (input tax credit) | "non_recoverable" | "unconfirmed".
+  taxRecoverability: jsonb().$type<Record<string, "recoverable" | "non_recoverable" | "unconfirmed">>().notNull().default({}),
+  // RGXM-approved payment terms; due dates and cutoffs are only shown as "approved" once set.
+  paymentTerms: jsonb()
+    .$type<{ cutoffDaysAfterPeriodEnd?: number | null; dueDaysAfterBillDate?: number | null; description?: string | null; approvedBy?: string | null; approvedAt?: string | null; approvalReference?: string | null }>()
+    .notNull()
+    .default({}),
+  // Accounting export configuration (accounts, tax codes, currency); validated with RGXM's system.
+  accountingConfig: jsonb()
+    .$type<{ system?: string | null; accounts?: Record<string, string>; taxCodes?: Record<string, string>; currency?: string; validatedAt?: string | null; validatedBy?: string | null }>()
+    .notNull()
+    .default({}),
+  // Days to respond to privacy requests, as set by RGXM (no default is assumed).
+  privacyRequestResponseDays: integer(),
+  // Year-end slip threshold to flag (accountant to confirm).
+  yearEndThresholdCents: integer().notNull().default(50000),
   updatedAt: updatedAt(),
   updatedBy: userRef(),
 });
@@ -159,8 +189,17 @@ export const staffSensitive = pgTable("staff_sensitive", {
   legalName: text(),
   businessName: text(),
   businessNumber: text(),
+  // Kept equal to (gstRegistrationStatus = 'yes') for older reports.
   taxRegistered: boolean().notNull().default(false),
   gstHstNumber: text(),
+  // Contractor's answer to "Are you registered for GST/HST?": yes | no | unsure | unknown (not answered).
+  gstRegistrationStatus: text().notNull().default("unknown"),
+  gstRegistrationEffectiveDate: date(),
+  // Finance verification of the registration: unverified | verified | rejected, with evidence.
+  gstVerificationStatus: text().notNull().default("unverified"),
+  gstVerifiedBy: userRef(),
+  gstVerifiedAt: tstz(),
+  gstVerificationReference: text(),
   // Mailing address for tax slips. SINs are deliberately not stored: RGXM's accountant collects them.
   mailingStreet: text(),
   mailingCity: text(),
@@ -364,6 +403,12 @@ export const projects = pgTable(
     status: projectStatus().notNull().default("draft"),
     budgetCents: cents(),
     currency: currency(),
+    // Where the event takes place (province code) and the approved service category; these drive
+    // automatic sales-tax calculation for qualifying onsite services.
+    eventProvince: text(),
+    serviceCategory: text(),
+    // onsite | offsite | mixed | multi_province. Anything but onsite is routed to Finance.
+    supplyType: text().notNull().default("onsite"),
     internalNotes: text(),
     clientNotes: text(),
     isDemo: boolean().notNull().default(false),
@@ -901,9 +946,8 @@ export const payableItems = pgTable(
   "payable_items",
   {
     id: id(),
-    timesheetId: uuid()
-      .notNull()
-      .references(() => timesheets.id),
+    // Set for hourly fee lines; null for allowances, mileage, bonuses and adjustments.
+    timesheetId: uuid().references(() => timesheets.id),
     staffId: uuid()
       .notNull()
       .references(() => staffProfiles.id),
@@ -911,6 +955,22 @@ export const payableItems = pgTable(
       .notNull()
       .references(() => projects.id),
     serviceDate: date().notNull(),
+    // fee | meal_breakfast | meal_lunch | meal_dinner | per_diem | mileage | bonus | adjustment
+    category: text().notNull().default("fee"),
+    compensationItemId: uuid(),
+    // Adjustment/credit lines point at the original line they correct.
+    adjustsPayableId: uuid(),
+    description: text(),
+    quantity: numeric({ precision: 12, scale: 2 }),
+    unit: text(),
+    unitRate: numeric({ precision: 12, scale: 4 }),
+    // calculated | no_tax | review_required | finance_override | legacy_hst | legacy_none
+    taxStatus: text().notNull().default("calculated"),
+    taxBasis: text(),
+    // Contractor's GST/HST status when calculated, e.g. "yes:verified", to detect later changes.
+    registrationSnapshot: text(),
+    // The bill this line belongs to (set once, when the batch is approved).
+    billId: uuid(),
     classification: workerClassification().notNull(),
     payableMinutes: integer().notNull(),
     rateCents: integer().notNull(),
@@ -933,6 +993,10 @@ export const payableItems = pgTable(
   },
   (t) => [
     uniqueIndex("payable_items_timesheet_uq").on(t.timesheetId).where(sql`${t.status} <> 'void'`),
+    uniqueIndex("payable_items_compensation_uq").on(t.compensationItemId).where(sql`${t.status} <> 'void'`),
+    index("payable_items_bill_idx").on(t.billId),
+    index("payable_items_project_idx").on(t.projectId),
+    check("payable_items_fee_timesheet", sql`${t.category} <> 'fee' or ${t.timesheetId} is not null`),
     index("payable_items_staff_idx").on(t.staffId),
     index("payable_items_status_idx").on(t.status),
   ],
@@ -974,6 +1038,12 @@ export const paymentBatches = pgTable(
     createdBy: userRef().notNull(),
     approvedBy: userRef(),
     approvedAt: tstz(),
+    // Fingerprint of recipients, amounts, payment details and included payables at approval.
+    approvalFingerprint: text(),
+    // Recorded when Finance submits the file to the bank (after export, before settlement).
+    submittedAt: tstz(),
+    submittedBy: userRef(),
+    bankReference: text(),
     paidAt: tstz(),
     voidedAt: tstz(),
     voidReason: text(),
@@ -995,8 +1065,17 @@ export const paymentBatchItems = pgTable(
     amountCents: cents().notNull(),
     // Cleared when the batch is voided so the item can be re-batched.
     active: boolean().notNull().default(true),
+    // The bank payment attempt: included | exported | submitted | settled | failed | returned |
+    // bank_cancelled | removed | voided. Exporting never settles; settlement needs evidence.
+    state: text().notNull().default("included"),
+    // Settlement date (when the bank confirmed the payment).
     paidAt: tstz(),
     failureReason: text(),
+    bankReference: text(),
+    evidence: text(),
+    reconciledBy: userRef(),
+    reconciledAt: tstz(),
+    returnedAt: tstz(),
   },
   (t) => [
     uniqueIndex("payment_batch_items_active_uq").on(t.payableItemId).where(sql`${t.active}`),
@@ -1011,7 +1090,9 @@ export const paymentExports = pgTable(
     batchId: uuid()
       .notNull()
       .references(() => paymentBatches.id),
-    format: text().notNull(), // csv_generic | csv_qbo | xlsx
+    format: text().notNull(), // csv_generic | csv_qbo (legacy) | xlsx
+    // bank (payment file) | accounting_legacy (QuickBooks bills generated from a batch, before accounting exports existed)
+    purpose: text().notNull().default("bank"),
     storageKey: text(),
     sha256: text().notNull(),
     rowCount: integer().notNull(),

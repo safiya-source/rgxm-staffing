@@ -5,7 +5,7 @@ import type { ActionResult } from "@/lib/action-result";
 import { SeparationOfDutiesError } from "@/server/authz/permissions";
 import { logError } from "@/server/observability";
 import { RateLimitError } from "@/server/rate-limit";
-import { ForbiddenError } from "@/server/session";
+import { ForbiddenError, StepUpRequiredError } from "@/server/session";
 
 export class UserFacingError extends Error {}
 
@@ -16,6 +16,8 @@ export async function runAction<T>(fn: () => Promise<ActionResult<T>>): Promise<
     if (err instanceof ZodError) {
       return { ok: false, error: "Please check the highlighted fields.", fieldErrors: err.flatten().fieldErrors as Record<string, string[]> };
     }
+    // The client shows a code prompt and retries when it sees this marker.
+    if (err instanceof StepUpRequiredError) return { ok: false, error: err.message, fieldErrors: { stepUp: ["required"] } };
     if (err instanceof ForbiddenError || err instanceof SeparationOfDutiesError || err instanceof UserFacingError || err instanceof RateLimitError) {
       return { ok: false, error: err.message };
     }

@@ -1,7 +1,7 @@
 // Pure payment rules (no database). Unit-tested in tests/unit/pay-rules.test.ts.
 
 /** Bumped whenever the calculation changes; stored on every payable with its inputs. */
-export const CALC_VERSION = "base-hst-v2";
+export const CALC_VERSION = "base-hst-v2"; // legacy; new lines use LINE_CALC_VERSION in payments.ts
 
 /** Base pay in cents: payable minutes × hourly rate, rounded half up to the cent. */
 export function basePayCents(payableMinutes: number, rateCentsPerHour: number) {
@@ -69,10 +69,11 @@ export type BatchStatus = "draft" | "approved" | "exported" | "paid" | "void";
 const PAYABLE: Record<PayableStatus, PayableStatus[]> = {
   pending: ["batched", "void"],
   // Back to pending when removed from a draft batch or the batch is voided.
-  batched: ["pending", "exported"],
+  batched: ["pending", "exported", "failed"],
   exported: ["paid", "failed", "pending"],
   failed: ["batched", "void"],
-  paid: ["disputed"],
+  // A settled payment the bank later returns goes back to failed (retry against the same bill).
+  paid: ["disputed", "failed"],
   disputed: [],
   void: [],
 };
@@ -82,7 +83,7 @@ export function canMovePayable(from: PayableStatus, to: PayableStatus) {
 
 const BATCH: Record<BatchStatus, BatchStatus[]> = {
   draft: ["approved", "void"],
-  approved: ["exported", "void"],
+  approved: ["exported", "void", "draft"],
   exported: ["paid", "void"],
   paid: [],
   void: [],
@@ -104,7 +105,7 @@ export const BATCH_STATUS_LABEL: Record<BatchStatus, string> = {
   draft: "Draft",
   approved: "Approved",
   exported: "Exported",
-  paid: "Paid",
+  paid: "Reconciled",
   void: "Void",
 };
 

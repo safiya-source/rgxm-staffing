@@ -1,30 +1,36 @@
-// Export file builders (pure apart from ExcelJS). Each format is a plain file Finance imports
-// elsewhere; nothing here sends money. Demo batches are marked on every row and in the file name.
+// Bank payment file builders (pure apart from ExcelJS). Each format is a plain file Finance
+// uploads to the bank; nothing here sends money, and generating a file never settles a payment.
+// Accounting (bill) exports are separate: see accounting-exports.ts.
 import ExcelJS from "exceljs";
 import { toCsv } from "@/lib/csv";
 import { centsToDecimal, minutesToDecimalHours, type BatchType } from "./pay-rules";
+import { CATEGORY_LABEL } from "./tax-engine";
 
-export const EXPORT_FORMATS = ["csv_generic", "csv_qbo", "xlsx"] as const;
+export const EXPORT_FORMATS = ["csv_generic", "xlsx"] as const;
 export type ExportFormat = (typeof EXPORT_FORMATS)[number];
 
-export const EXPORT_FORMAT_LABEL: Record<ExportFormat, string> = {
-  csv_generic: "CSV (generic)",
-  csv_qbo: "CSV (QuickBooks-style bills)",
-  xlsx: "Excel (.xlsx)",
+export const EXPORT_FORMAT_LABEL: Record<string, string> = {
+  csv_generic: "Bank file (CSV)",
+  xlsx: "Bank file (Excel)",
+  // Older batches exported QuickBooks bills from the batch; kept for display only.
+  csv_qbo: "QuickBooks-style bills (legacy)",
 };
 
 export type ExportRow = {
   payableId: string;
+  billNumber: string | null;
   staffName: string;
   legalName: string | null;
   email: string | null;
   projectCode: string;
   projectName: string;
   serviceDate: string;
+  category: string;
+  description: string | null;
   role: string;
   payableMinutes: number;
   rateCents: number;
-  /** Before HST. */
+  /** Before tax. */
   subtotalCents: number;
   hstCents: number;
   gstHstNumber: string | null;
@@ -37,10 +43,10 @@ export type ExportBatch = { reference: string; type: BatchType; periodLabel: str
 const DEMO_NOTE = "DEMO - DO NOT PAY";
 
 function genericRows(batch: ExportBatch, rows: ExportRow[]) {
-  const headers = ["Batch", "Type", "Pay period", "Payee", "Legal/business name", "Email", "Project code", "Project", "Service date", "Role", "Hours", "Rate", "Subtotal", "HST", "Amount", "GST/HST number", "Currency", "Payable ID", "Note"];
+  const headers = ["Batch", "Bill number", "Pay period", "Payee", "Legal/business name", "Email", "Project code", "Project", "Service date", "Category", "Description", "Hours", "Rate", "Subtotal", "Tax", "Amount", "GST/HST number", "Currency", "Line ID", "Note"];
   const data = rows.map((r) => [
     batch.reference,
-    batch.type === "contractor" ? "Contractor" : "Employee",
+    r.billNumber ?? "",
     batch.periodLabel ?? "",
     r.staffName,
     r.legalName ?? "",
@@ -48,9 +54,10 @@ function genericRows(batch: ExportBatch, rows: ExportRow[]) {
     r.projectCode,
     r.projectName,
     r.serviceDate,
-    r.role,
-    minutesToDecimalHours(r.payableMinutes),
-    centsToDecimal(r.rateCents),
+    CATEGORY_LABEL[r.category] ?? r.category,
+    r.description ?? "",
+    r.category === "fee" ? minutesToDecimalHours(r.payableMinutes) : "",
+    r.category === "fee" ? centsToDecimal(r.rateCents) : "",
     centsToDecimal(r.subtotalCents),
     centsToDecimal(r.hstCents),
     centsToDecimal(r.totalCents),
@@ -62,52 +69,24 @@ function genericRows(batch: ExportBatch, rows: ExportRow[]) {
   return { headers, data };
 }
 
-/**
- * One bill line per shift, grouped into one bill per payee via "Bill No". Column names follow
- * QuickBooks Online's bill import. Line Amount is before tax; HST is in the tax columns. RGXM's
- * accountant should confirm the expense account and tax code names.
- */
-function qboRows(batch: ExportBatch, rows: ExportRow[], billDate: string) {
-  const headers = ["Bill No", "Supplier", "Bill Date", "Due Date", "Account", "Line Description", "Line Amount", "Line Tax Code", "Line Tax Amount", "Currency"];
-  const payees = [...new Set(rows.map((r) => r.legalName || r.staffName))].sort();
-  const data = rows.map((r) => {
-    const payee = r.legalName || r.staffName;
-    return [
-      `${batch.reference}-${payees.indexOf(payee) + 1}`,
-      payee,
-      billDate,
-      billDate,
-      "Field staff - contractors",
-      `${batch.isDemo ? `${DEMO_NOTE} · ` : ""}${r.projectCode} ${r.serviceDate} ${r.role} ${minutesToDecimalHours(r.payableMinutes)} h @ ${centsToDecimal(r.rateCents)}`,
-      centsToDecimal(r.subtotalCents),
-      r.hstCents > 0 ? "HST ON" : "Out of Scope",
-      centsToDecimal(r.hstCents),
-      r.currency,
-    ];
-  });
-  return { headers, data };
-}
+const NUMERIC_COLUMNS = new Set([11, 12, 13, 14, 15]);
 
-export async function buildExport(format: ExportFormat, batch: ExportBatch, rows: ExportRow[], billDate: string) {
-  if (format === "csv_qbo" && batch.type !== "contractor") throw new Error("The QuickBooks bills format is for contractor batches.");
+export async function buildExport(format: ExportFormat, batch: ExportBatch, rows: ExportRow[], fileDate: string) {
   const base = `${batch.isDemo ? "DEMO-" : ""}${batch.reference}`;
-  if (format === "csv_qbo") {
-    const { headers, data } = qboRows(batch, rows, billDate);
-    return { data: Buffer.from(`﻿${toCsv(headers, data)}`, "utf8"), fileName: `${base}-qbo.csv`, contentType: "text/csv; charset=utf-8", rowCount: data.length };
-  }
   const { headers, data } = genericRows(batch, rows);
   if (format === "csv_generic") {
     return { data: Buffer.from(`﻿${toCsv(headers, data)}`, "utf8"), fileName: `${base}.csv`, contentType: "text/csv; charset=utf-8", rowCount: data.length };
   }
+  if (format !== "xlsx") throw new Error(`Unsupported bank file format ${format}`);
   const wb = new ExcelJS.Workbook();
   wb.creator = "RGXM Crew";
   // Fixed timestamps keep the file (and its fingerprint) reproducible for the same batch.
-  wb.created = wb.modified = new Date(`${billDate}T00:00:00Z`);
+  wb.created = wb.modified = new Date(`${fileDate}T00:00:00Z`);
   const ws = wb.addWorksheet(batch.isDemo ? "DEMO - DO NOT PAY" : batch.reference);
   ws.addRow(headers).font = { bold: true };
   for (const r of data) {
     // Numbers as numbers so totals work in Excel; text cells are written as text (no formulas).
-    ws.addRow(r.map((v, i) => ([10, 11, 12, 13, 14].includes(i) ? Number(v) : v)));
+    ws.addRow(r.map((v, i) => (NUMERIC_COLUMNS.has(i) && v !== "" ? Number(v) : v)));
   }
   ws.columns.forEach((c) => (c.width = 16));
   const buf = Buffer.from(await wb.xlsx.writeBuffer());

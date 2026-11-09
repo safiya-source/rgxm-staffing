@@ -5,6 +5,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { cache } from "react";
 import { auth } from "@/server/auth";
+import { hasFreshStepUp } from "@/server/auth/step-up";
 import {
   canAny,
   canOnProject,
@@ -26,6 +27,7 @@ export class ForbiddenError extends Error {
 
 export type Viewer = {
   userId: string;
+  sessionId: string;
   name: string;
   email: string;
   kind: "internal" | "staff";
@@ -68,6 +70,7 @@ export const getViewer = cache(async (): Promise<Viewer | null> => {
 
   return {
     userId: user.id,
+    sessionId: session.session.id,
     name: user.name,
     email: user.email,
     kind: user.kind,
@@ -99,11 +102,15 @@ export function homeFor(viewer: Viewer) {
 export const PRIVILEGED_ROLES: readonly InternalRole[] = ["admin", "finance"];
 export const MFA_SETUP_PATH = "/dashboard/settings/security?required=1";
 
-/** True when this person must turn on two-step verification before doing anything else. */
+/**
+ * True when this person must turn on two-step verification before doing anything else. Every RGXM
+ * staff account must enrol (contractors are out of scope); Admin and Finance always must.
+ */
 export async function needsMfaSetup(viewer: Viewer) {
   if (viewer.kind !== "internal" || viewer.twoFactorEnabled) return false;
-  if (!viewer.roles.some((r) => PRIVILEGED_ROLES.includes(r))) return false;
-  return (await getOrgSettings()).requireMfaForPrivileged;
+  const settings = await getOrgSettings();
+  if (settings.requireMfaForStaff) return true;
+  return viewer.roles.some((r) => PRIVILEGED_ROLES.includes(r)) && settings.requireMfaForPrivileged;
 }
 
 /**
@@ -128,6 +135,19 @@ export async function requireStaff(opts: { allowIncompleteOnboarding?: boolean }
 }
 
 // ─── Action guards (throw) ────────────────────────────────────────────────────────
+
+/** The action needs a two-step code entered in the last few minutes (STEP_UP_MAX_AGE_MS). */
+export class StepUpRequiredError extends ForbiddenError {
+  constructor() {
+    super("For your security, enter your two-step verification code to continue.");
+    this.name = "StepUpRequiredError";
+  }
+}
+
+/** Fresh authentication for payment approval and sensitive payment-detail changes. */
+export async function requireFreshAuth(viewer: Viewer) {
+  if (!(await hasFreshStepUp(viewer.sessionId))) throw new StepUpRequiredError();
+}
 
 export async function authorizeInternal(permission: Permission): Promise<Viewer> {
   const viewer = await getViewer();

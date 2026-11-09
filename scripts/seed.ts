@@ -31,6 +31,7 @@ import {
   staffRates,
   staffRoles,
   staffSensitive,
+  contractorApprovals,
   staffSkills,
   userRoles,
   users,
@@ -155,8 +156,23 @@ async function main() {
       const staffId = p!.id;
       staff.push({ id: staffId, roles, city, langs });
 
-      // Every sixth demo contractor is GST/HST-registered (fictional numbers), so HST shows up in pay.
-      await tx.insert(staffSensitive).values({ staffId, taxRegistered: i % 6 === 0, gstHstNumber: i % 6 === 0 ? `${String(800000000 + i * 7919).slice(0, 9)}RT0001` : null });
+      // Every sixth demo contractor is GST/HST-registered (fictional numbers). Demo answers are marked
+      // verified so demo pay flows can be batched; real contractors are verified by Finance.
+      const reg = i % 6 === 0;
+      await tx.insert(staffSensitive).values({
+        staffId,
+        taxRegistered: reg,
+        gstRegistrationStatus: reg ? "yes" : "no",
+        gstRegistrationEffectiveDate: reg ? "2024-01-01" : null,
+        gstVerificationStatus: "verified",
+        gstVerifiedAt: new Date("2026-09-01T14:00:00Z"),
+        gstVerificationReference: "Demo data (fictional)",
+        legalName: reg ? `Demo Contractor ${i}` : null,
+        businessName: reg ? `Demo Services ${i}` : null,
+        gstHstNumber: reg ? `${String(800000000 + i * 7919).slice(0, 9)}RT0001` : null,
+      });
+      // Demo contractors are pre-approved for the contractor process (fictional approval).
+      await tx.insert(contractorApprovals).values({ staffId, approvedBy: internalIds.admin!, approvedOn: "2026-09-01", assessmentReference: "Demo data (fictional)" });
       await tx.insert(staffRoles).values(roles.map((role) => ({ staffId, role })));
       await tx.insert(staffRates).values(
         roles.map((role) => ({
@@ -325,7 +341,10 @@ async function main() {
   const payables = await seedCompletedProject(DEMO_DOMAIN);
   // Demo databases only: let the shared demo admin/finance logins work without an authenticator.
   // Production databases are never seeded, so the requirement stays on there.
-  await db.insert(orgSettings).values({ id: 1, requireMfaForPrivileged: false }).onConflictDoUpdate({ target: orgSettings.id, set: { requireMfaForPrivileged: false } });
+  await db
+    .insert(orgSettings)
+    .values({ id: 1, requireMfaForPrivileged: false, requireMfaForStaff: false })
+    .onConflictDoUpdate({ target: orgSettings.id, set: { requireMfaForPrivileged: false, requireMfaForStaff: false } });
 
   console.log(`Demo data seeded (${payables} approved demo payables on the finished Oreo project).
   Team sign-in (password: ${DEMO_PASSWORD}):
