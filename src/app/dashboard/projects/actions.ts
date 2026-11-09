@@ -40,6 +40,9 @@ function projectFromForm(fd: FormData) {
     currency: fd.get("currency") || "CAD",
     internalNotes: fd.get("internalNotes"),
     clientNotes: fd.get("clientNotes"),
+    eventProvince: fd.get("eventProvince"),
+    serviceCategory: fd.get("serviceCategory"),
+    supplyType: fd.get("supplyType") || "onsite",
   });
 }
 

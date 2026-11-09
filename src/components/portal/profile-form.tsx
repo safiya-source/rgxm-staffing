@@ -23,7 +23,14 @@ export type ProfileDefaults = {
   roles: FieldRole[];
 };
 
-export function ProfileForm({ mode, defaults }: { mode: "onboarding" | "profile"; defaults: ProfileDefaults }) {
+/** Current approved documents and optional consent purposes, shown during onboarding. */
+export type OnboardingAgreements = {
+  privacy: { title: string; version: string } | null;
+  terms: { title: string; version: string } | null;
+  consents: { key: string; label: string; description: string }[];
+};
+
+export function ProfileForm({ mode, defaults, agreements }: { mode: "onboarding" | "profile"; defaults: ProfileDefaults; agreements?: OnboardingAgreements }) {
   const [state, onSubmit, pending] = useFormAction(async (prev: ActionResult, formData: FormData) => {
     const result = await saveStaffProfile(prev, formData);
     if (result.ok && result.message) toast.success(result.message);
@@ -76,18 +83,50 @@ export function ProfileForm({ mode, defaults }: { mode: "onboarding" | "profile"
         {errors?.roles ? <p className="text-[13px] text-destructive">{errors.roles[0]}</p> : null}
       </fieldset>
       {mode === "onboarding" ? (
-        <div className="grid gap-2">
-          <div className="flex items-start gap-3">
-            <Checkbox id="consent" name="consent" className="mt-0.5" />
-            <Label htmlFor="consent" className="leading-snug font-normal">
-              I&apos;ve read the{" "}
-              <Link href="/privacy" target="_blank" className="underline underline-offset-2">
-                privacy notice
-              </Link>{" "}
-              and agree to RGXM using my information to offer and manage event work.
-            </Label>
+        <div className="grid gap-4">
+          <div className="grid gap-2">
+            <div className="flex items-start gap-3">
+              <Checkbox id="consent" name="consent" className="mt-0.5" />
+              <Label htmlFor="consent" className="leading-snug font-normal">
+                I&apos;ve read the{" "}
+                <Link href="/privacy" target="_blank" className="underline underline-offset-2">
+                  privacy notice{agreements?.privacy ? ` (version ${agreements.privacy.version})` : ""}
+                </Link>{" "}
+                and understand how RGXM uses my information to offer and manage event work.
+              </Label>
+            </div>
+            {errors?.consent ? <p className="text-[13px] text-destructive">Please confirm to continue.</p> : null}
           </div>
-          {errors?.consent ? <p className="text-[13px] text-destructive">Please confirm to continue.</p> : null}
+          {agreements?.terms ? (
+            <div className="grid gap-2">
+              <div className="flex items-start gap-3">
+                <Checkbox id="termsAccept" name="termsAccept" className="mt-0.5" />
+                <Label htmlFor="termsAccept" className="leading-snug font-normal">
+                  I accept the{" "}
+                  <Link href="/portal/terms" target="_blank" className="underline underline-offset-2">
+                    {agreements.terms.title} (version {agreements.terms.version})
+                  </Link>
+                  .
+                </Label>
+              </div>
+              {errors?.termsAccept ? <p className="text-[13px] text-destructive">Please accept the terms to continue.</p> : null}
+            </div>
+          ) : null}
+          {agreements?.consents.length ? (
+            <fieldset className="grid gap-2 rounded-lg border p-3">
+              <legend className="px-1 text-sm font-medium">Optional choices</legend>
+              <p className="text-[13px] text-muted-foreground">These are up to you and don&apos;t affect the shifts you&apos;re offered. You can change them any time in your profile.</p>
+              {agreements.consents.map((c) => (
+                <div key={c.key} className="flex items-start gap-3">
+                  <Checkbox id={`consent_${c.key}`} name={`consent_${c.key}`} className="mt-0.5" />
+                  <Label htmlFor={`consent_${c.key}`} className="leading-snug font-normal">
+                    {c.label} <span className="text-muted-foreground">(optional)</span>
+                    <span className="block text-[13px] text-muted-foreground">{c.description}</span>
+                  </Label>
+                </div>
+              ))}
+            </fieldset>
+          ) : null}
         </div>
       ) : null}
       {!state.ok ? <FormMessage>{state.error}</FormMessage> : null}

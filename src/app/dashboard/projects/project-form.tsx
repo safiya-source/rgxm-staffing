@@ -7,7 +7,9 @@ import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
 import type { ActionResult } from "@/lib/action-result";
+import { PROVINCES } from "@/lib/provinces";
 import { useFormAction } from "@/lib/use-form-action";
+import { SUPPLY_TYPE_LABEL, SUPPLY_TYPES } from "@/server/domain/project-status";
 
 export type ProjectFormValues = {
   name: string;
@@ -23,13 +25,19 @@ export type ProjectFormValues = {
   currency: string;
   internalNotes: string | null;
   clientNotes: string | null;
+  eventProvince: string | null;
+  serviceCategory: string | null;
+  supplyType: string;
 };
+
+export type ServiceCategoryOption = { key: string; label: string; approved: boolean };
 
 export function ProjectForm({
   action,
   values,
   clients,
   team,
+  serviceCategories,
   submitLabel,
   canSeeBudget,
 }: {
@@ -37,6 +45,7 @@ export function ProjectForm({
   values: ProjectFormValues;
   clients: { id: string; name: string }[];
   team: { id: string; name: string }[];
+  serviceCategories: ServiceCategoryOption[];
   submitLabel: string;
   canSeeBudget: boolean;
 }) {
@@ -139,6 +148,45 @@ export function ProjectForm({
           <input type="hidden" name="currency" value={values.currency} />
         </>
       )}
+      <fieldset className="grid gap-4 rounded-lg border p-4">
+        <legend className="px-1 text-sm font-medium">Tax setup</legend>
+        <p className="-mt-1 text-[13px] text-muted-foreground">
+          Sales tax on contractors&apos; work is based on where the event takes place, never on where the contractor lives. Anything Crew can&apos;t calculate under the
+          accountant-approved rules goes to Finance for review.
+        </p>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Event province" htmlFor="eventProvince" error={e?.eventProvince}>
+            <NativeSelect id="eventProvince" name="eventProvince" defaultValue={values.eventProvince ?? ""}>
+              <option value="">Not set</option>
+              {PROVINCES.map(([code, name]) => (
+                <option key={code} value={code}>
+                  {name}
+                </option>
+              ))}
+            </NativeSelect>
+          </Field>
+          <Field label="Service category" htmlFor="serviceCategory" error={e?.serviceCategory} hint="Categories not yet approved by the accountant always go to Finance review.">
+            <NativeSelect id="serviceCategory" name="serviceCategory" defaultValue={values.serviceCategory ?? ""}>
+              <option value="">Not set</option>
+              {serviceCategories.map((c) => (
+                <option key={c.key} value={c.key}>
+                  {c.label}
+                  {c.approved ? "" : " (not approved yet)"}
+                </option>
+              ))}
+            </NativeSelect>
+          </Field>
+        </div>
+        <Field label="Where is the work done?" htmlFor="supplyType" error={e?.supplyType} hint="Only onsite work at the venue is calculated automatically. Offsite, mixed and multi-province work goes to Finance.">
+          <NativeSelect id="supplyType" name="supplyType" defaultValue={values.supplyType}>
+            {SUPPLY_TYPES.map((t) => (
+              <option key={t} value={t}>
+                {SUPPLY_TYPE_LABEL[t]}
+              </option>
+            ))}
+          </NativeSelect>
+        </Field>
+      </fieldset>
       <Field label="Description" htmlFor="description" error={e?.description}>
         <Textarea id="description" name="description" defaultValue={values.description ?? ""} rows={3} />
       </Field>

@@ -1,7 +1,7 @@
 import { and, asc, desc, eq, ilike, inArray, ne, or, sql, type SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { db } from "@/server/db";
-import { bookings, clients, projectLocations, projectMembers, projects, shifts, staffingRequirements, users } from "@/server/db/schema";
+import { bookings, clients, orgSettings, projectLocations, projectMembers, projects, serviceCategories, shifts, staffingRequirements, taxRules, users } from "@/server/db/schema";
 
 const owner = alias(users, "owner");
 const coordinator = alias(users, "coordinator");
@@ -134,4 +134,33 @@ export async function getProjectsForSelect(opts: { includeClosed?: boolean } = {
 
 export async function getClients() {
   return db.select({ id: clients.id, name: clients.name }).from(clients).where(sql`${clients.archivedAt} is null`).orderBy(asc(clients.name));
+}
+
+/** Service categories for the project form (approved or not; unapproved ones go to Finance review). */
+export async function getServiceCategoryOptions() {
+  const rows = await db.select().from(serviceCategories).where(eq(serviceCategories.active, true)).orderBy(asc(serviceCategories.label));
+  return rows.map((r) => ({ key: r.key, label: r.label, approved: Boolean(r.approvedAt), placeOfSupplyRule: r.placeOfSupplyRule }));
+}
+
+/**
+ * Why tax on this project won't be calculated automatically (empty = it can be, once the contractor
+ * is verified). Mirrors the project-level checks in tax-engine.ts.
+ */
+export async function projectTaxWarnings(project: { eventProvince: string | null; serviceCategory: string | null; supplyType: string }) {
+  const warnings: string[] = [];
+  const [settings] = await db.select({ auto: orgSettings.autoTaxEnabled }).from(orgSettings).where(eq(orgSettings.id, 1));
+  if (!settings?.auto) warnings.push("Automatic tax calculation is off until RGXM's accountant approves the tax rules.");
+  if (project.supplyType !== "onsite") warnings.push("The project isn't set as onsite work at the event venue.");
+  if (!project.eventProvince) warnings.push("No event province is set.");
+  if (!project.serviceCategory) warnings.push("No service category is set.");
+  else {
+    const [sc] = await db.select().from(serviceCategories).where(eq(serviceCategories.key, project.serviceCategory));
+    if (!sc?.approvedAt) warnings.push(`The service category "${sc?.label ?? project.serviceCategory}" isn't approved by the accountant.`);
+    else if (sc.placeOfSupplyRule !== "event_province") warnings.push(`"${sc.label}" is always reviewed by Finance.`);
+  }
+  if (project.eventProvince) {
+    const [rule] = await db.select({ id: taxRules.id }).from(taxRules).where(and(eq(taxRules.jurisdiction, project.eventProvince), eq(taxRules.status, "approved"))).limit(1);
+    if (!rule) warnings.push(`There's no approved tax rule for ${project.eventProvince} yet.`);
+  }
+  return warnings;
 }

@@ -17,6 +17,7 @@ import { requireInternal, toActor } from "@/server/session";
 import { updateStaffAction } from "../actions";
 import { StaffForm } from "../staff-form";
 import { InviteButton } from "./invite-button";
+import { OnboardingCard } from "./onboarding-card";
 import { PrivacyCard } from "./privacy-card";
 import { CertificationsEditor, EmergencyContact, NotesCard, PaySetup, RatesCard, RolesEditor, StatusControl, TagsEditor } from "./sections";
 
@@ -35,6 +36,7 @@ export default async function StaffProfilePage({ params }: PageProps<"/dashboard
     editRates: canAny(actor, "rates.edit"),
     notes: canAny(actor, "talent.notes.view"),
     privacy: canAny(actor, "privacy.manage"),
+    onboarding: canAny(actor, "talent.edit") || canAny(actor, "contractor.approve"),
   };
   const detail = await getStaffDetail(id, actor, can);
   if (!detail) notFound();
@@ -243,6 +245,14 @@ export default async function StaffProfilePage({ params }: PageProps<"/dashboard
 
         <div className="grid content-start gap-6">
           {can.privacy && !p.isDemo ? <PrivacyCard staffId={p.id} anonymized={Boolean(p.anonymizedAt)} /> : null}
+          {can.onboarding ? (
+            <OnboardingCard
+              staffId={p.id}
+              canApprove={canAny(actor, "contractor.approve")}
+              canVerifyGst={canAny(actor, "tax.verify_registration")}
+              gst={detail.pay?.gst && detail.pay.tax ? { ...detail.pay.gst, number: detail.pay.tax.gstHstNumber, effectiveDate: detail.pay.tax.gstRegistrationEffectiveDate } : null}
+            />
+          ) : null}
           <Card>
             <CardHeader>
               <CardTitle>Qualified roles</CardTitle>
