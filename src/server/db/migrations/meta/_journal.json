@@ -99,6 +99,13 @@
       "when": 1794255494252,
       "tag": "0013_legal_documents",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1794261591831,
+      "tag": "0014_self_billing_invoices",
+      "breakpoints": true
     }
   ]
 }

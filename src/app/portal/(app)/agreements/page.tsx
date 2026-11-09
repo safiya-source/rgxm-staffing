@@ -6,7 +6,7 @@ import { ContractingPartyFields } from "@/components/portal/contracting-party-fi
 import { LegalText } from "@/components/portal/legal-text";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
-import { acceptanceHistory, LEGAL_KIND_ACCEPT, LEGAL_KIND_LABEL, LEGAL_KIND_PATH, pendingAcceptances, type LegalKind } from "@/server/domain/onboarding";
+import { acceptanceHistory, acceptLabel, LEGAL_KIND_LABEL, LEGAL_KIND_PATH, pendingAcceptances, type LegalKind } from "@/server/domain/onboarding";
 import { getTaxDetails } from "@/server/domain/tax-details";
 import { requireStaff } from "@/server/session";
 import { acceptAgreementsAction } from "../../actions";
@@ -50,7 +50,7 @@ export default async function AgreementsPage() {
               <div key={d.id} className="flex items-start gap-3">
                 <Checkbox id={`accept_${d.id}`} name={`accept_${d.id}`} className="mt-0.5" />
                 <Label htmlFor={`accept_${d.id}`} className="leading-snug font-normal">
-                  {LEGAL_KIND_ACCEPT[d.kind as LegalKind]} (version {d.version})
+                  {acceptLabel(d)} (version {d.version})
                 </Label>
               </div>
             ))}

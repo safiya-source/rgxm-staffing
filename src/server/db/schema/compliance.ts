@@ -56,6 +56,8 @@ export const legalDocuments = pgTable(
     title: text().notNull(),
     body: text().notNull(),
     summaryOfChanges: text(),
+    // Contractor agreement versions that authorize RGXM to prepare invoices on the contractor's behalf.
+    selfBilling: boolean().notNull().default(false),
     status: text().notNull().default("draft"),
     effectiveAt: tstz(),
     approvedBy: userRef(),
@@ -414,6 +416,13 @@ export const bills = pgTable(
     totalCents: cents().notNull(),
     isDemo: boolean().notNull().default(false),
     status: text().notNull().default("open"),
+    // self_billed: a "Contractor Invoice — Prepared by RGXM on behalf of" the contractor, under the
+    // self-billing arrangement they accepted; rgxm_bill: RGXM's internal record (contractor invoices separately).
+    invoiceKind: text().notNull().default("rgxm_bill"),
+    selfBillingAcceptanceId: uuid(),
+    // Everything printed on the document, frozen at issue (supplier, customer, lines, tax, terms).
+    document: jsonb().notNull().default({}),
+    contractorConfirmedAt: tstz(),
     createdFromBatchId: uuid().references(() => paymentBatches.id),
     finalizedBy: userRef().notNull(),
     finalizedAt: createdAt(),
@@ -423,6 +432,8 @@ export const bills = pgTable(
     check("bills_kind", oneOf("kind", ["bill", "credit"])),
     check("bills_status", oneOf("status", BILL_STATUSES)),
     check("bills_total", sql`${t.totalCents} = ${t.subtotalCents} + ${t.taxCents}`),
+    check("bills_invoice_kind", oneOf("invoice_kind", ["self_billed", "rgxm_bill"])),
+    check("bills_self_billing_basis", sql`${t.invoiceKind} <> 'self_billed' or ${t.selfBillingAcceptanceId} is not null`),
   ],
 );
 

@@ -181,6 +181,22 @@ rounding method (Crew rounds each component half-up to the cent per line). Then 
 - **Cutoffs and due dates** come from RGXM-approved payment terms (Settings → Contractors & legal).
   - **Until terms are approved**, a bill's due date equals its bill date and is flagged "terms not approved".
 
+### Contractor invoices (self-billing, from Contractor Agreement v1.0.1)
+
+- **What the clause does:** section 7 of the Contractor Agreement v1.0.1 authorizes RGXM to prepare invoices on the contractor's behalf.
+- **Created on approval:** when RGXM approves a contractor's timesheet, or an allowance, mileage claim or bonus, Crew immediately creates their invoice for that work.
+  - It's titled "Contractor Invoice — Prepared by RGXM on behalf of [Contractor]".
+  - It carries every required detail: number, issue and service dates, the supplier's name, address and registration numbers, RGXM Inc. as customer, project, event location, each line separately, tax, total, payment terms, due date, and the self-billing statement.
+- **Record only:** nobody issues, sends, approves or confirms an invoice, and payment never waits for one. Contractors can view and print their invoices under *Payments → My invoices* and report a discrepancy.
+- **Frozen once issued:** a correction, such as hours changed after approval, becomes a linked adjustment on a new invoice, or a credit note if it's negative.
+- **When an invoice waits:**
+  - lines waiting for a Finance tax decision get their invoice once Finance decides;
+  - contractors missing a mailing address (or a GST/HST number if they're registered) get theirs as soon as the details are saved;
+  - contractors who accept v1.0.1 later get invoices for approved work that hasn't been paid yet.
+- **Contractors who haven't accepted v1.0.1** keep the previous behaviour: RGXM's internal bill when they're paid, and they send their own invoice, which Crew compares with the bill.
+- **No duplicates:** recording a contractor's own invoice against a self-billed one is refused as a duplicate.
+- **Accountant approval needed:** the accountant should approve this document and workflow (CRA's books-and-records and input-tax-credit requirements) before RGXM relies on it.
+
 ## 5. Accounting exports and reports
 
 - **Separate from bank files.** Accounting exports (Payments → Accounting) are separate from bank files.

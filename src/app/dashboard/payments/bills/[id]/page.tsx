@@ -43,6 +43,9 @@ export default async function BillPage({ params }: PageProps<"/dashboard/payment
         <Badge tone={b.status === "paid" ? "success" : b.status === "void" ? "outline" : "info"}>{b.status === "paid" ? "Paid" : b.status === "void" ? "Void" : "Open"}</Badge>
         {b.kind === "credit" ? <Badge tone="warning">Credit</Badge> : null}
         {b.isDemo ? <DemoBadge /> : null}
+        <Link href={`/dashboard/payments/bills/${b.id}/invoice`} className="text-sm font-medium underline underline-offset-2">
+          {b.invoiceKind === "self_billed" ? "View contractor invoice" : "View bill document"}
+        </Link>
       </div>
       <dl className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-6">
         <div>

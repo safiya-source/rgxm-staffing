@@ -99,7 +99,19 @@ Crew does not collect Social Insurance Numbers. Where needed for reporting, the 
 
 Tax and payment questions should be directed to safiya@rgxmagency.com. Social Insurance Numbers and sensitive banking information must not be sent by ordinary email.
 
-## 7. Independent business relationship
+## 7. Invoices prepared through Crew
+
+The Contractor authorizes RGXM Inc. to prepare and issue invoices on the Contractor’s behalf for services supplied to RGXM under this Agreement, using agreed assignment terms, approved work records, authorized additional compensation and applicable tax information.
+
+RGXM will make each invoice available to the Contractor electronically. The Contractor will review the invoice and promptly report any discrepancy to safiya@rgxmagency.com. RGXM will investigate reported discrepancies and issue an appropriate correction or linked adjustment where required.
+
+The Contractor does not need to prepare a separate invoice for services covered by this arrangement and will not issue a duplicate invoice for the same supply. Any exception must be agreed with RGXM Finance.
+
+The Contractor must provide accurate business and tax-registration information and promptly notify RGXM of changes. Preparing an invoice on the Contractor’s behalf does not transfer the Contractor’s tax reporting or remittance obligations to RGXM.
+
+An invoice records the amount payable and does not itself confirm payment. Invoice review or a correction request does not waive either party’s rights or justify withholding an undisputed amount beyond its agreed payment deadline.
+
+## 8. Independent business relationship
 
 The parties intend a contract for services rather than an employment relationship. The Contractor has no authority to bind RGXM or its clients unless expressly authorized.
 
@@ -107,7 +119,7 @@ This intention does not override the actual relationship or applicable law. Noth
 
 If the arrangement requires a different legal treatment, the parties will cooperate to correct the process and records.
 
-## 8. Safety, conduct and coverage
+## 9. Safety, conduct and coverage
 
 Both parties will comply with their applicable legal duties.
 
@@ -119,7 +131,7 @@ Before an assignment, RGXM will identify any required insurance, workers’ comp
 
 The Contractor will notify RGXM of material changes affecting their ability to lawfully or safely perform accepted services.
 
-## 9. Cancellation and inability to perform
+## 10. Cancellation and inability to perform
 
 A party unable to proceed will notify the other promptly and take reasonable steps to reduce disruption.
 
@@ -131,7 +143,7 @@ Unless expressly agreed in an accepted assignment confirmation, cancelling an as
 
 No automatic deduction or forfeiture of earned fees applies because of a cancellation, complaint or alleged loss.
 
-## 10. Confidentiality and personal information
+## 11. Confidentiality and personal information
 
 The Contractor will protect non-public client, campaign, event, business and personal information obtained through the engagement and use it only to perform the services.
 
@@ -149,7 +161,7 @@ Unit A - 6975 Pacific Circle
 Mississauga, ON L5T 2H3
 safiya@rgxmagency.com
 
-## 11. Materials, content and publicity
+## 12. Materials, content and publicity
 
 Each party retains ownership of materials and intellectual property it owned before the assignment.
 
@@ -161,7 +173,7 @@ This Agreement does not authorize promotional use of the Contractor’s image, v
 
 The Contractor may not publish confidential campaign content or use RGXM/client branding without permission.
 
-## 12. Ending the relationship
+## 13. Ending the relationship
 
 Either party may end this framework Agreement by written notice. Notices to RGXM may be sent to staffing@rgxmagency.com.
 
@@ -173,7 +185,7 @@ Ending access does not remove payment obligations for services already performed
 
 Confidentiality, accrued payment obligations and provisions intended to continue survive termination.
 
-## 13. Responsibility for losses
+## 14. Responsibility for losses
 
 Each party remains responsible for losses caused by its own breach, negligence or wilful misconduct to the extent established under applicable law.
 
@@ -181,7 +193,7 @@ RGXM may not deduct an alleged loss from earned fees without a lawful basis and 
 
 Neither party assumes the other’s statutory obligations merely by signing this Agreement.
 
-## 14. Disputes and governing law
+## 15. Disputes and governing law
 
 The parties will first attempt to resolve service or assignment disputes through staffing@rgxmagency.com, and financial disputes through safiya@rgxmagency.com.
 
@@ -191,7 +203,7 @@ Subject to mandatory laws and jurisdictional rights, this Agreement is governed 
 
 No mandatory arbitration or class-action waiver is created by this Agreement.
 
-## 15. General terms and electronic acceptance
+## 16. General terms and electronic acceptance
 
 This Agreement, accepted assignment confirmations and expressly incorporated documents form the agreement for the services.
 

@@ -17,11 +17,9 @@ import { recordAudit } from "@/server/audit";
 import { assertDifferentApprover } from "@/server/authz/permissions";
 import { db, type Tx } from "@/server/db";
 import {
-  accountingSuppliers,
   bills,
   bookings,
   compensationItems,
-  orgSettings,
   payableItems,
   payableTaxLines,
   paymentBatches,
@@ -39,12 +37,13 @@ import { utcToZoned } from "@/lib/time";
 import { enqueue } from "@/server/notify/outbox";
 import { getOrgSettings } from "@/server/settings";
 import { storage } from "@/server/storage";
+import { autoInvoice, createBill, torontoToday } from "./invoices";
 import { dollarsToCents, taxOnCents } from "./money";
+import { currentRegSnapshot, staleLine } from "./payable-sql";
 import { buildExport, type ExportFormat, type ExportRow } from "./payment-exports";
 import {
   basePayCents,
   batchTypeFor,
-  dueDateFor,
   canMoveBatch,
   canMovePayable,
   payPeriodFor,
@@ -54,6 +53,8 @@ import {
   type PayPeriodRule,
 } from "./pay-rules";
 import { loadTaxContext } from "./tax-config";
+
+export { approvedPaymentTerms, torontoToday } from "./invoices";
 import { CATEGORY_LABEL, decideTax, mirrorTaxLines, registrationSnapshot, type TaxDecision, type TaxLine } from "./tax-engine";
 
 export class PaymentError extends Error {}
@@ -123,6 +124,8 @@ async function insertLine(tx: Tx, line: NewLine, decision: Omit<TaxDecision, "st
   if (decision.lines.length) {
     await tx.insert(payableTaxLines).values(decision.lines.map((l) => ({ payableItemId: p!.id, component: l.component, jurisdiction: l.jurisdiction, ratePpm: l.ratePpm, taxableCents: l.taxableCents, taxCents: l.taxCents, taxRuleId: l.taxRuleId, serviceCategory: l.serviceCategory, basis: l.basis })));
   }
+  // Self-billing contractors get their invoice as soon as the work is approved (record only).
+  await autoInvoice(tx, p!, actorId);
   await recordAudit(
     { actorId, action: "payable.create", entityType: "payable", entityId: p!.id, projectId: line.projectId, after: { category: line.category, baseCents: line.baseCents, taxCents: decision.taxCents, taxStatus: decision.status, payableMinutes: line.payableMinutes, rateCents: line.rateCents } },
     tx,
@@ -255,6 +258,12 @@ async function recreate(tx: Tx, p: Payable, actorId: string, override?: TaxOverr
 /** After a post-approval correction (timesheet still approved, so the line isn't batched yet). */
 export async function replacePayableAfterCorrection(tx: Tx, timesheetId: string, actorId: string, reason: string) {
   const [current] = await tx.select().from(payableItems).where(and(eq(payableItems.timesheetId, timesheetId), sql`${payableItems.status} <> 'void'`)).for("update");
+  // Already on a (self-billed) invoice: the invoice stands; the difference becomes a linked adjustment.
+  if (current?.billId) {
+    const [t] = await tx.select({ minutes: timesheets.payableMinutes }).from(timesheets).where(eq(timesheets.id, timesheetId));
+    const delta = basePayCents(t?.minutes ?? 0, current.rateCents) - current.baseCents;
+    return delta === 0 ? current : adjustInTx(tx, actorId, { payableId: current.id, amountCents: delta, reason: `Hours corrected after approval: ${reason}` });
+  }
   if (current) await voidPayable(tx, current, actorId, `Hours corrected: ${reason}`);
   return createPayableForTimesheet(tx, timesheetId, actorId);
 }
@@ -275,14 +284,6 @@ export async function overrideLineTax(actorId: string, payableId: string, overri
   });
 }
 
-/** Current GST/HST snapshot per person, compared with the one stored on each line. */
-const currentRegSnapshot = sql<string>`coalesce(${staffSensitive.gstRegistrationStatus}, 'unknown') || ':' || coalesce(${staffSensitive.gstVerificationStatus}, 'unverified')`;
-/** Lines whose basis no longer matches the person's pay details (classification or GST/HST). */
-const staleLine = sql<boolean>`(
-  ${payableItems.classification} <> ${staffProfiles.classification}
-  or (${payableItems.taxStatus} in ('legacy_hst', 'legacy_none') and ((${payableItems.taxCents} > 0) <> coalesce(${staffSensitive.taxRegistered}, false)))
-  or (${payableItems.taxStatus} in ('calculated', 'no_tax', 'review_required') and ${payableItems.registrationSnapshot} is distinct from ${currentRegSnapshot})
-)`;
 
 /**
  * Recalculates unbatched, unbilled lines whose basis changed (classification, GST/HST answer or
@@ -315,9 +316,13 @@ export async function refreshClassifications(actorId: string) {
  * line and its bill are untouched. Tax mirrors the original line's components and rates.
  */
 export async function createAdjustment(actorId: string, input: { payableId: string; amountCents: number; reason: string }) {
+  return db.transaction((tx) => adjustInTx(tx, actorId, input));
+}
+
+async function adjustInTx(tx: Tx, actorId: string, input: { payableId: string; amountCents: number; reason: string }) {
   if (!Number.isInteger(input.amountCents) || input.amountCents === 0) throw new PaymentError("Enter a non-zero amount in cents.");
   if (input.reason.trim().length < 5) throw new PaymentError("Explain the adjustment.");
-  return db.transaction(async (tx) => {
+  {
     const [orig] = await tx.select({ p: payableItems, billNumber: bills.billNumber }).from(payableItems).leftJoin(bills, eq(bills.id, payableItems.billId)).where(eq(payableItems.id, input.payableId)).for("update", { of: payableItems });
     if (!orig) throw new PaymentError("Line not found.");
     const p = orig.p;
@@ -352,7 +357,7 @@ export async function createAdjustment(actorId: string, input: { payableId: stri
     );
     await recordAudit({ actorId, action: "payable.adjust", entityType: "payable", entityId: line.id, projectId: p.projectId, before: { adjusts: p.id }, after: { amountCents: input.amountCents, taxCents }, reason: input.reason.trim() }, tx);
     return line;
-  });
+  }
 }
 
 // ─── Pay periods ────────────────────────────────────────────────────────────────
@@ -535,75 +540,24 @@ export async function approveBatch(actorId: string, batchId: string) {
 
 // ─── Bills ──────────────────────────────────────────────────────────────────────
 
-export function torontoToday(now = new Date()) {
-  return utcToZoned(now, "America/Toronto").date;
-}
 
-/** RGXM-approved terms, or null when none are approved (due date then equals the bill date and is flagged). */
-export async function approvedPaymentTerms(tx: Tx | typeof db) {
-  const [s] = await tx.select({ terms: orgSettings.paymentTerms }).from(orgSettings).where(eq(orgSettings.id, 1));
-  const t = s?.terms ?? {};
-  if (!t.approvedAt) return null;
-  if ((t.dueRule ?? "days_after_bill") === "days_after_bill" && t.dueDaysAfterBillDate == null) return null;
-  return t;
-}
 
-async function ensureSupplier(tx: Tx, staffId: string) {
-  const [existing] = await tx.select().from(accountingSuppliers).where(eq(accountingSuppliers.staffId, staffId));
-  if (existing) return existing;
-  const [person] = await tx
-    .select({ name: sql<string>`coalesce(${staffSensitive.businessName}, ${staffSensitive.legalName}, ${staffProfiles.firstName} || ' ' || ${staffProfiles.lastName})` })
-    .from(staffProfiles)
-    .leftJoin(staffSensitive, eq(staffSensitive.staffId, staffProfiles.id))
-    .where(eq(staffProfiles.id, staffId));
-  const [{ n }] = (await tx.execute<{ n: string }>(sql`select nextval('supplier_ref_seq')::text as n`)).rows as [{ n: string }];
-  const [row] = await tx.insert(accountingSuppliers).values({ staffId, supplierRef: `CRW-S-${n.padStart(6, "0")}`, displayName: person!.name }).returning();
-  return row!;
-}
 
-/** Finalizes one bill per contractor for the batch's lines that aren't billed yet. */
+/**
+ * Finalizes a bill per contractor for the batch's lines that aren't billed yet (normally Finance
+ * issues invoices before batching; this is the fallback). Contractors who accepted the self-billing
+ * arrangement get a Contractor Invoice; others an internal bill.
+ */
 async function finalizeBills(tx: Tx, b: Batch, actorId: string) {
   const lines = await tx
-    .select({ id: payableItems.id, staffId: payableItems.staffId, serviceDate: payableItems.serviceDate, baseCents: payableItems.baseCents, taxCents: payableItems.taxCents, totalCents: payableItems.totalCents })
+    .select({ id: payableItems.id, staffId: payableItems.staffId })
     .from(paymentBatchItems)
     .innerJoin(payableItems, eq(payableItems.id, paymentBatchItems.payableItemId))
     .where(and(eq(paymentBatchItems.batchId, b.id), eq(paymentBatchItems.active, true), isNull(payableItems.billId)));
-  if (!lines.length) return [];
-  const terms = await approvedPaymentTerms(tx);
-  const billDate = torontoToday();
-  const byStaff = new Map<string, typeof lines>();
-  for (const l of lines) byStaff.set(l.staffId, [...(byStaff.get(l.staffId) ?? []), l]);
+  const byStaff = new Map<string, string[]>();
+  for (const l of lines) byStaff.set(l.staffId, [...(byStaff.get(l.staffId) ?? []), l.id]);
   const created: string[] = [];
-  for (const [staffId, ls] of byStaff) {
-    const supplier = await ensureSupplier(tx, staffId);
-    const [{ n }] = (await tx.execute<{ n: string }>(sql`select nextval('bill_number_seq')::text as n`)).rows as [{ n: string }];
-    const earliest = ls.map((l) => l.serviceDate).sort()[0]!;
-    const dueDate = terms ? dueDateFor(terms.dueRule ?? "days_after_bill", { billDate, earliestServiceDate: earliest, days: terms.dueDaysAfterBillDate }) : billDate;
-    const subtotal = ls.reduce((s, l) => s + l.baseCents, 0);
-    const tax = ls.reduce((s, l) => s + l.taxCents, 0);
-    const [bill] = await tx
-      .insert(bills)
-      .values({
-        billNumber: `CRW-B-${n.padStart(6, "0")}`,
-        staffId,
-        supplierId: supplier.id,
-        kind: subtotal + tax >= 0 ? "bill" : "credit",
-        billDate,
-        dueDate,
-        termsSnapshot: terms ? { approved: true, dueRule: terms.dueRule ?? "days_after_bill", dueDaysAfterBillDate: terms.dueDaysAfterBillDate ?? null, description: terms.description ?? null, approvalReference: terms.approvalReference ?? null } : { approved: false, note: "No RGXM-approved payment terms; due date set to the bill date." },
-        currency: b.currency,
-        subtotalCents: subtotal,
-        taxCents: tax,
-        totalCents: subtotal + tax,
-        isDemo: b.isDemo,
-        createdFromBatchId: b.id,
-        finalizedBy: actorId,
-      })
-      .returning();
-    await tx.update(payableItems).set({ billId: bill!.id }).where(inArray(payableItems.id, ls.map((l) => l.id)));
-    await recordAudit({ actorId, action: "bill.finalize", entityType: "bill", entityId: bill!.id, after: { billNumber: bill!.billNumber, lines: ls.length, totalCents: bill!.totalCents, batchId: b.id } }, tx);
-    created.push(bill!.id);
-  }
+  for (const [staffId, ids] of byStaff) created.push((await createBill(tx, { staffId, lineIds: ids, actorId, batch: { id: b.id, currency: b.currency, isDemo: b.isDemo } })).id);
   return created;
 }
 

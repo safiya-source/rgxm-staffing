@@ -26,6 +26,8 @@ export const getOrgSettings = cache(async () => {
       privacyOfficerEmail: null,
       privacyOfficerPhone: null,
       privacyOfficerAddress: null,
+      legalEntityName: null,
+      legalEntityAddress: null,
       supportEmail: null,
       financeEmail: null,
       requireMfaForStaff: true,

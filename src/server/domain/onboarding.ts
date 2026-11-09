@@ -21,6 +21,7 @@ import {
   staffEmailPreferences,
   staffProfiles,
 } from "@/server/db/schema";
+import { invoicePendingLines } from "./invoices";
 
 export class OnboardingError extends Error {}
 
@@ -39,6 +40,12 @@ export const LEGAL_KIND_ACCEPT: Record<LegalKind, string> = {
   contractor_terms: "I accept the RGXM Independent Contractor Agreement",
   platform_terms: "I agree to the Platform Terms of Use",
 };
+
+/** The tick-box wording, made explicit when the agreement includes the self-billing clause. */
+export function acceptLabel(doc: { kind: string; selfBilling?: boolean }) {
+  if (doc.kind === "contractor_terms" && doc.selfBilling) return "I accept the RGXM Independent Contractor Agreement, including section 7: RGXM prepares and issues invoices on my behalf through Crew";
+  return LEGAL_KIND_ACCEPT[doc.kind as LegalKind];
+}
 
 /** Who the contractor agreement is with: the person themselves, or a business they're authorized to bind. */
 export type ContractingParty = { actingFor: "self"; legalName: string } | { actingFor: "business"; businessName: string; representative: string };
@@ -75,6 +82,7 @@ const draftSchema = z.object({
   title: z.string().trim().min(3).max(120),
   body: z.string().trim().min(50, "Paste the full approved text").max(100_000),
   summaryOfChanges: z.string().trim().max(500).optional().nullable(),
+  selfBilling: z.boolean().default(false),
 });
 
 export async function saveDraftDocument(actorId: string, raw: z.input<typeof draftSchema>, documentId?: string) {
@@ -83,11 +91,11 @@ export async function saveDraftDocument(actorId: string, raw: z.input<typeof dra
     if (documentId) {
       const [d] = await tx.select().from(legalDocuments).where(eq(legalDocuments.id, documentId)).for("update");
       if (!d || d.status !== "draft") throw new OnboardingError("Only drafts can be edited.");
-      await tx.update(legalDocuments).set({ ...v, summaryOfChanges: v.summaryOfChanges ?? null }).where(eq(legalDocuments.id, documentId));
+      await tx.update(legalDocuments).set({ ...v, selfBilling: v.kind === "contractor_terms" && v.selfBilling, summaryOfChanges: v.summaryOfChanges ?? null }).where(eq(legalDocuments.id, documentId));
       await recordAudit({ actorId, action: "legal.draft_update", entityType: "legal_document", entityId: documentId, after: { kind: v.kind, version: v.version } }, tx);
       return documentId;
     }
-    const [d] = await tx.insert(legalDocuments).values({ ...v, summaryOfChanges: v.summaryOfChanges ?? null, createdBy: actorId }).returning();
+    const [d] = await tx.insert(legalDocuments).values({ ...v, selfBilling: v.kind === "contractor_terms" && v.selfBilling, summaryOfChanges: v.summaryOfChanges ?? null, createdBy: actorId }).returning();
     await recordAudit({ actorId, action: "legal.draft_create", entityType: "legal_document", entityId: d!.id, after: { kind: v.kind, version: v.version } }, tx);
     return d!.id;
   });
@@ -147,6 +155,10 @@ export async function acceptDocuments(user: { userId: string; staffId: string },
       .values(docs.map((d) => ({ staffId: user.staffId, documentId: d.id, kind: d.kind, version: d.version, userId: user.userId, method, ...partyFields(d.kind) })))
       .onConflictDoNothing();
     await recordAudit({ actorId: user.userId, action: "legal.accept", entityType: "staff", entityId: user.staffId, after: docs.map((d) => ({ kind: d.kind, version: d.version })) }, tx);
+    return docs.some((d) => d.selfBilling);
+  }).then(async (selfBilling) => {
+    // Approved work from before they accepted the self-billing clause gets its invoice now.
+    if (selfBilling) await invoicePendingLines(user.staffId, user.userId);
   });
 }
 
