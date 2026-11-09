@@ -75,7 +75,7 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/dashboa
             </Link>
           ))}
           {[
-            ["/dashboard/payments/bills", "Bills"],
+            ["/dashboard/payments/bills", "Bills & invoices"],
             ["/dashboard/payments/accounting", "Accounting exports"],
             ["/dashboard/payments/reviews", "Pay reviews"],
             ["/dashboard/payments/t4a", "Year-end"],

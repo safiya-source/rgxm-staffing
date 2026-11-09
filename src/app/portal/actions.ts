@@ -507,8 +507,9 @@ export async function requestPayReviewAction(fd: FormData): Promise<ActionResult
     const me = await requireStaffViewer();
     await rateLimit("tax.self_update", me.userId); // shares the pay-details limit (10 an hour)
     const payableId = String(fd.get("payableId") ?? "") || null;
+    const billId = String(fd.get("billId") ?? "") || null;
     try {
-      await requestPayReview(me, { payableId, kind: String(fd.get("kind") ?? "other") as "tax", message: String(fd.get("message") ?? "") });
+      await requestPayReview(me, { payableId, billId, kind: String(fd.get("kind") ?? "other") as "tax", message: String(fd.get("message") ?? "") });
     } catch (err) {
       if (err instanceof BillingError) throw new UserFacingError(err.message);
       throw err;

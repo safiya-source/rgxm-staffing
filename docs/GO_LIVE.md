@@ -181,3 +181,13 @@ This release changes day-to-day work, so plan it with the team. Full details are
 3. **Bank files and accounting files are now separate.** Batches produce the bank file. QuickBooks bills come
    from Payments → **Accounting**. Record the bank submission and each payment's outcome, with bank evidence;
    exporting a file no longer counts as paid.
+
+## Releasing self-billed contractor invoices (migration 0014)
+
+1. Run **Actions → Production database** (boxes empty). It loads Contractor Agreement v1.0.1 (adds section 7,
+   invoices prepared through Crew) as a draft and sets RGXM Inc.'s customer details. If v1.0.0 was never
+   approved, it's replaced; if it was, v1.0.1 sits beside it as the next version.
+2. Merge the release PR.
+3. After your accountant has approved the invoice document and workflow, approve v1.0.1 in
+   **Settings → Contractors & legal**. Contractors accept it once. From then on, every approved timesheet
+   creates their invoice automatically.

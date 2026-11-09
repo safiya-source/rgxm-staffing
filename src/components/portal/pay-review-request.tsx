@@ -6,7 +6,7 @@ import { NativeSelect } from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
 
 /** A contractor asks RGXM Finance to review a payment line (or pay in general). */
-export function PayReviewRequest({ payableId, label, kind, showKinds = false }: { payableId: string | null; label: string; kind: "tax" | "amount" | "hours" | "other"; showKinds?: boolean }) {
+export function PayReviewRequest({ payableId, billId, label, kind, showKinds = false }: { payableId: string | null; billId?: string; label: string; kind: "tax" | "amount" | "hours" | "other"; showKinds?: boolean }) {
   const [open, setOpen] = useState(false);
   if (!open) {
     return (
@@ -16,7 +16,7 @@ export function PayReviewRequest({ payableId, label, kind, showKinds = false }: 
     );
   }
   return (
-    <ActionForm action={requestPayReviewAction} hidden={{ payableId: payableId ?? "", ...(showKinds ? {} : { kind }) }} submitLabel="Send to RGXM Finance" className="grid w-full gap-2">
+    <ActionForm action={requestPayReviewAction} hidden={{ payableId: payableId ?? "", billId: billId ?? "", ...(showKinds ? {} : { kind }) }} submitLabel="Send to RGXM Finance" className="grid w-full gap-2">
       {showKinds ? (
         <NativeSelect name="kind" defaultValue="other" aria-label="What's it about?">
           <option value="tax">Tax or GST/HST</option>

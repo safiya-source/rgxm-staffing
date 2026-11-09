@@ -27,7 +27,7 @@ export type ProfileDefaults = {
 /** Current approved documents and optional consent purposes, shown during onboarding. */
 export type OnboardingAgreements = {
   privacy: { title: string; version: string } | null;
-  terms: { title: string; version: string } | null;
+  terms: { title: string; version: string; selfBilling?: boolean } | null;
   platform: { title: string; version: string } | null;
   party: { legalName: string; businessName: string };
   consents: { key: string; label: string; description: string }[];
@@ -124,6 +124,7 @@ export function ProfileForm({ mode, defaults, agreements }: { mode: "onboarding"
                   <Link href="/contractor-agreement" target="_blank" className="underline underline-offset-2">
                     RGXM Independent Contractor Agreement (version {agreements.terms.version})
                   </Link>
+                  {agreements.terms.selfBilling ? ", including section 7: RGXM prepares and issues invoices on my behalf through Crew" : ""}
                 </Label>
               </div>
               {errors?.termsAccept ? <p className="text-[13px] text-destructive">{errors.termsAccept[0] === "Required" ? "Please accept the Independent Contractor Agreement to continue." : errors.termsAccept[0]}</p> : null}

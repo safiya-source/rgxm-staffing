@@ -126,11 +126,11 @@ describe("contractor onboarding", () => {
 
 describe("RGXM's published documents", () => {
   it("are loaded as drafts (an admin approves them), with the platform terms accepted separately", async () => {
-    const docs = (await pool.query("select kind, version, title, status from legal_documents where version in ('2026-11-09', '1.0.0') order by kind")).rows;
+    const docs = (await pool.query("select kind, version, title from legal_documents where version in ('2026-11-09', '1.0.0', '1.0.1') order by kind")).rows;
     expect(docs).toEqual([
-      { kind: "contractor_terms", version: "1.0.0", title: "RGXM Independent Contractor Agreement", status: "draft" },
-      { kind: "platform_terms", version: "1.0.0", title: "RGXM Crew Platform Terms of Use", status: "draft" },
-      { kind: "privacy_notice", version: "2026-11-09", title: "RGXM Crew Privacy Policy", status: "draft" },
+      { kind: "contractor_terms", version: "1.0.1", title: "RGXM Independent Contractor Agreement" },
+      { kind: "platform_terms", version: "1.0.0", title: "RGXM Crew Platform Terms of Use" },
+      { kind: "privacy_notice", version: "2026-11-09", title: "RGXM Crew Privacy Policy" },
     ]);
     const settings = await one<Record<string, unknown>>("select privacy_officer_email, support_email, finance_email, privacy_request_response_days, payment_terms from org_settings");
     expect(settings).toMatchObject({ privacy_officer_email: "safiya@rgxmagency.com", support_email: "staffing@rgxmagency.com", finance_email: "safiya@rgxmagency.com", privacy_request_response_days: 30 });

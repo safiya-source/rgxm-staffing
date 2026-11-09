@@ -121,6 +121,7 @@ export default async function CompliancePage() {
                         {d.title} · v{d.version}
                       </span>
                       <Badge tone={d.status === "approved" ? "success" : d.status === "draft" ? "warning" : "neutral"}>{d.status === "approved" ? "Current" : d.status === "draft" ? "Draft" : "Retired"}</Badge>
+                      {d.selfBilling ? <Badge tone="info">Includes self-billing</Badge> : null}
                     </div>
                     {d.status !== "draft" ? (
                       <p className="text-sm text-muted-foreground">
@@ -280,7 +281,7 @@ export default async function CompliancePage() {
   );
 }
 
-function DocumentForm({ doc }: { doc?: { id: string; kind: string; version: string; title: string; body: string; summaryOfChanges: string | null } }) {
+function DocumentForm({ doc }: { doc?: { id: string; kind: string; version: string; title: string; body: string; summaryOfChanges: string | null; selfBilling?: boolean } }) {
   const p = doc?.id ?? "new";
   return (
     <ActionForm action={saveDocumentAction} hidden={doc ? { documentId: doc.id } : undefined} submitLabel={doc ? "Save draft" : "Create draft"} className="mt-3">
@@ -304,6 +305,13 @@ function DocumentForm({ doc }: { doc?: { id: string; kind: string; version: stri
         <Field label="What changed (optional)" htmlFor={`doc-summary-${p}`} className="sm:col-span-3">
           <Input id={`doc-summary-${p}`} name="summaryOfChanges" defaultValue={doc?.summaryOfChanges ?? ""} />
         </Field>
+        <label className="flex items-start gap-2 text-sm sm:col-span-3">
+          <input type="checkbox" name="selfBilling" defaultChecked={doc?.selfBilling ?? false} className="mt-0.5 size-4 accent-brand" />
+          <span>
+            Contractor Agreement only: this version includes the self-billing clause (RGXM prepares invoices on the contractor&apos;s behalf). Contractors who accept it get
+            Contractor Invoices issued in Crew.
+          </span>
+        </label>
       </div>
     </ActionForm>
   );

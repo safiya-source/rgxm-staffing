@@ -50,7 +50,7 @@ export default async function CompensationPage({ params }: PageProps<"/dashboard
                 projectId={id}
                 enabled={enabled}
                 bookings={bookings.map((b) => ({ value: `${b.bookingId}:${b.staffId}`, label: `${b.name} · ${b.role} · ${b.workDate}` }))}
-                rates={{ breakfast: settings.breakfastCents, lunch: settings.lunchCents, dinner: settings.dinnerCents, perDiem: settings.perDiemCents, mileage: settings.mileageRate }}
+                rates={{ breakfast: settings.breakfastCents, lunch: settings.lunchCents, dinner: settings.dinnerCents, perDiem: settings.perDiemCents, mileage: settings.mileageRate, eligibleMeals: settings.eligibleMeals, bonusCents: settings.bonusCents, bonusConditions: settings.bonusConditions }}
               />
             ) : (
               <p className="text-sm text-muted-foreground">Nothing is switched on for this project yet. Turn categories on under Setup → Allowances, mileage &amp; bonuses.</p>

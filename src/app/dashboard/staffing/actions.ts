@@ -20,6 +20,7 @@ import { parseTalentFilters } from "@/server/domain/talent-search";
 import { kickOutbox } from "@/server/notify/run";
 import { getCandidates, type Candidate } from "@/server/queries/staffing";
 import { getOrgSettings } from "@/server/settings";
+import { canAny } from "@/server/authz/permissions";
 import { authorizeInternal, authorizeProject, ForbiddenError, loadProjectScopes, toActor } from "@/server/session";
 
 const uuid = z.string().uuid();
@@ -247,6 +248,11 @@ export async function createStaffingRequestAction(input: unknown): Promise<Actio
     } else {
       viewer = await authorizeProject("shift.manage", parsed.project.projectId);
       if (parsed.location.mode === "new") await authorizeProject("project.edit", parsed.project.projectId);
+    }
+    // Allowances, mileage and bonuses are set by people who may configure project compensation.
+    if (parsed.compensation) {
+      if (parsed.project.mode === "existing") await authorizeProject("compensation.configure", parsed.project.projectId);
+      else if (!canAny(toActor(viewer), "compensation.configure")) throw new ForbiddenError("You can't set allowances or bonuses. Leave that section for a Project Manager or Admin.");
     }
     let res;
     try {

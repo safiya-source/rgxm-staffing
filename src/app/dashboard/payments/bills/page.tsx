@@ -76,6 +76,11 @@ export default async function BillsPage({ searchParams }: PageProps<"/dashboard/
                     </Link>{" "}
                     {b.kind === "credit" ? <Badge tone="warning">Credit</Badge> : null} {b.isDemo ? <DemoBadge /> : null}
                     {b.openInvoices ? <Badge tone="warning">Invoice differs</Badge> : null}
+                    {b.invoiceKind === "self_billed" ? (
+                      <span className="block text-xs text-muted-foreground">Contractor invoice (self-billed, issued on approval)</span>
+                    ) : (
+                      <span className="block text-xs text-muted-foreground">Internal bill · contractor sends their own invoice</span>
+                    )}
                   </TableCell>
                   <TableCell className="text-sm">
                     {b.supplier}

@@ -1,5 +1,6 @@
 import { WalletIcon } from "lucide-react";
 import type { Metadata } from "next";
+import Link from "next/link";
 import { EmptyState } from "@/components/app/empty-state";
 import { PayReviewRequest } from "@/components/portal/pay-review-request";
 import { Badge } from "@/components/ui/badge";
@@ -44,6 +45,9 @@ export default async function Page() {
         <h1 className="text-[22px] font-semibold">Payments</h1>
         <p className="mt-1 text-sm text-muted-foreground">Each approved shift, allowance or bonus appears here with its fee, any tax and the total you&apos;re paid.</p>
         {terms?.description ? <p className="mt-2 text-sm text-muted-foreground">When you&apos;re paid: {terms.description}</p> : null}
+        <Link href="/portal/invoices" className="mt-2 inline-block text-sm font-medium underline underline-offset-2">
+          My invoices →
+        </Link>
       </div>
       {lines.length === 0 ? (
         <EmptyState icon={WalletIcon} title="No payments yet" description="After your first shift is approved, you'll see the amount and when it's paid." />

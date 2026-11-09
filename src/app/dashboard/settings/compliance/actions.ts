@@ -74,7 +74,7 @@ export async function saveDocumentAction(fd: FormData): Promise<ActionResult> {
     await guard(() =>
       onboarding.saveDraftDocument(
         viewer.userId,
-        { kind: str(fd, "kind") as onboarding.LegalKind, version: str(fd, "version"), title: str(fd, "title"), body: str(fd, "body"), summaryOfChanges: optional(str(fd, "summaryOfChanges")) },
+        { kind: str(fd, "kind") as onboarding.LegalKind, version: str(fd, "version"), title: str(fd, "title"), body: str(fd, "body"), summaryOfChanges: optional(str(fd, "summaryOfChanges")), selfBilling: fd.get("selfBilling") === "on" },
         id,
       ),
     );
