@@ -7,7 +7,7 @@ import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { utcToZoned } from "@/lib/time";
 import { recordAudit } from "@/server/audit";
-import { db } from "@/server/db";
+import { db, type Tx } from "@/server/db";
 import { bookings, compensationItems, payableItems, projectCompensationSettings, projects, shifts, staffProfiles } from "@/server/db/schema";
 import { dollarsToCents, multiplyToCents, normalizeKm } from "./money";
 import { createPayableForCompensation, PaymentError } from "./payments";
@@ -20,26 +20,55 @@ export type CompensationCategory = (typeof MEALS)[number] | "per_diem" | "mileag
 
 export async function getCompensationSettings(projectId: string) {
   const [row] = await db.select().from(projectCompensationSettings).where(eq(projectCompensationSettings.projectId, projectId));
-  return row ?? { projectId, mealsEnabled: false, perDiemEnabled: false, mileageEnabled: false, bonusEnabled: false, ...COMPENSATION_DEFAULTS, updatedBy: null, updatedAt: null };
+  return (
+    row ?? {
+      projectId,
+      mealsEnabled: false,
+      perDiemEnabled: false,
+      mileageEnabled: false,
+      bonusEnabled: false,
+      ...COMPENSATION_DEFAULTS,
+      eligibleMeals: [...MEALS] as string[],
+      bonusCents: null as number | null,
+      bonusConditions: null as string | null,
+      notes: null as string | null,
+      updatedBy: null,
+      updatedAt: null,
+    }
+  );
 }
 export type CompensationSettings = Awaited<ReturnType<typeof getCompensationSettings>>;
 
 const money = z.string().trim().regex(/^\d{1,5}(\.\d{1,2})?$/, "Enter an amount like 25 or 25.00");
 const rate = z.string().trim().regex(/^\d{1,2}(\.\d{1,4})?$/, "Enter a rate like 0.73");
-const settingsSchema = z.object({
-  mealsEnabled: z.boolean(),
-  perDiemEnabled: z.boolean(),
-  mileageEnabled: z.boolean(),
-  bonusEnabled: z.boolean(),
-  breakfast: money,
-  lunch: money,
-  dinner: money,
-  perDiem: money,
-  mileageRate: rate,
-});
+const optText = (max: number) => z.preprocess((v) => (typeof v === "string" && !v.trim() ? null : v), z.string().trim().max(max).nullable().optional());
+export const compensationSettingsSchema = z
+  .object({
+    mealsEnabled: z.boolean(),
+    perDiemEnabled: z.boolean(),
+    mileageEnabled: z.boolean(),
+    bonusEnabled: z.boolean(),
+    breakfast: money,
+    lunch: money,
+    dinner: money,
+    perDiem: money,
+    mileageRate: rate,
+    // Defaults to all three meals when not given (older forms).
+    eligibleMeals: z.array(z.enum(MEALS)).optional(),
+    bonusAmount: z.preprocess((v) => (typeof v === "string" && !v.trim() ? null : v), money.nullable().optional()),
+    bonusConditions: optText(500),
+    notes: optText(1000),
+  })
+  .superRefine((v, ctx) => {
+    if (v.mealsEnabled && v.eligibleMeals && !v.eligibleMeals.length) ctx.addIssue({ code: "custom", path: ["eligibleMeals"], message: "Choose at least one eligible meal, or switch meal allowances off." });
+    // The agreement: a bonus applies only when its amount (or calculation) and conditions are communicated.
+    if (v.bonusEnabled && !v.bonusConditions) ctx.addIssue({ code: "custom", path: ["bonusConditions"], message: "Describe when the bonus is earned (and how it's calculated, if not a fixed amount)." });
+  });
+const settingsSchema = compensationSettingsSchema;
+export type CompensationSettingsInput = z.input<typeof compensationSettingsSchema>;
 
 /** Saves a project's switches and rates. Items already recorded keep the rates they were recorded with. */
-export async function saveCompensationSettings(actorId: string, projectId: string, raw: z.input<typeof settingsSchema>) {
+export async function saveCompensationSettings(actorId: string, projectId: string, raw: z.input<typeof settingsSchema>, outerTx?: Tx) {
   const v = settingsSchema.parse(raw);
   const values = {
     mealsEnabled: v.mealsEnabled,
@@ -51,14 +80,20 @@ export async function saveCompensationSettings(actorId: string, projectId: strin
     dinnerCents: dollarsToCents(v.dinner),
     perDiemCents: dollarsToCents(v.perDiem),
     mileageRate: v.mileageRate,
+    eligibleMeals: v.eligibleMeals ?? [...MEALS],
+    bonusCents: v.bonusEnabled && v.bonusAmount ? dollarsToCents(v.bonusAmount) : null,
+    bonusConditions: v.bonusEnabled ? (v.bonusConditions ?? null) : null,
+    notes: v.notes ?? null,
     updatedBy: actorId,
   };
-  await db.transaction(async (tx) => {
+  const run = async (tx: Tx) => {
     const [before] = await tx.select().from(projectCompensationSettings).where(eq(projectCompensationSettings.projectId, projectId));
     await tx.insert(projectCompensationSettings).values({ projectId, ...values }).onConflictDoUpdate({ target: projectCompensationSettings.projectId, set: values });
     const after = { ...values, updatedBy: undefined };
     await recordAudit({ actorId, action: "project.compensation_settings", entityType: "project", entityId: projectId, projectId, before: before ?? null, after }, tx);
-  });
+  };
+  if (outerTx) await run(outerTx);
+  else await db.transaction(run);
 }
 
 const recordSchema = z.discriminatedUnion("category", [
@@ -98,6 +133,7 @@ export async function recordCompensation(actorId: string, projectId: string, raw
   const v = recordSchema.parse(raw);
   const settings = await getCompensationSettings(projectId);
   if (!settings[ENABLED[v.category]]) throw new CompensationError("This kind of compensation isn't switched on for this project.");
+  if ((MEALS as readonly string[]).includes(v.category) && !settings.eligibleMeals.includes(v.category)) throw new CompensationError("That meal isn't eligible on this project (for example, it's provided on site).");
   const [b] = await db
     .select({ staffId: bookings.staffId, projectId: bookings.projectId, status: bookings.status, shiftId: bookings.shiftId, startsAt: shifts.startsAt, timezone: shifts.timezone, isDemo: projects.isDemo })
     .from(bookings)

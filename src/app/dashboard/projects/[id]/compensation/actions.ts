@@ -1,5 +1,6 @@
 "use server";
 // Project compensation: settings (switches and rates), recording items, approval and voiding.
+import { readCompensationForm } from "@/lib/compensation-form";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import type { ActionResult } from "@/lib/action-result";
@@ -34,17 +35,7 @@ export async function saveCompensationSettingsAction(fd: FormData): Promise<Acti
     const projectId = uuid.parse(fd.get("projectId"));
     const viewer = await authorizeProject("compensation.configure", projectId);
     await guard(() =>
-      comp.saveCompensationSettings(viewer.userId, projectId, {
-        mealsEnabled: fd.get("mealsEnabled") === "on",
-        perDiemEnabled: fd.get("perDiemEnabled") === "on",
-        mileageEnabled: fd.get("mileageEnabled") === "on",
-        bonusEnabled: fd.get("bonusEnabled") === "on",
-        breakfast: str(fd, "breakfast"),
-        lunch: str(fd, "lunch"),
-        dinner: str(fd, "dinner"),
-        perDiem: str(fd, "perDiem"),
-        mileageRate: str(fd, "mileageRate"),
-      }),
+      comp.saveCompensationSettings(viewer.userId, projectId, readCompensationForm(fd)),
     );
     revalidatePath(`/dashboard/projects/${projectId}`, "layout");
     return { ok: true, message: "Compensation settings saved. Items already recorded keep their rates." };

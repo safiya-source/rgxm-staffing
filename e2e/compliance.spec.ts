@@ -56,7 +56,7 @@ test("once RGXM publishes its documents, a contractor accepts each one and keeps
   test.setTimeout(120_000);
   // An admin approving the drafts loaded from docs/legal (done here directly for speed).
   const admin = (await pool.query("select id from users where email = 'admin@rgxm-demo.test'")).rows[0].id;
-  await pool.query("update legal_documents set status = 'approved', approved_by = $1, approved_at = now(), effective_at = now(), approval_reference = 'e2e' where version in ('2026-11-09', '1.0.0') and status = 'draft'", [admin]);
+  await pool.query("update legal_documents set status = 'approved', approved_by = $1, approved_at = now(), effective_at = now(), approval_reference = 'e2e' where version in ('2026-11-09', '1.0.0', '1.0.1') and status = 'draft'", [admin]);
   try {
     await page.goto("/terms");
     await expect(page.getByRole("heading", { name: "RGXM Crew Platform Terms of Use" })).toBeVisible();
@@ -65,6 +65,8 @@ test("once RGXM publishes its documents, a contractor accepts each one and keeps
     await expect(page.getByRole("heading", { name: "RGXM Crew Privacy Policy" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "7. How long we keep information" })).toBeVisible();
 
+    // Invoice details on file (needed for self-billed invoices).
+    await pool.query("update staff_sensitive set mailing_street = '100 Queen St W', mailing_city = 'Toronto', mailing_province = 'ON', mailing_postal_code = 'M5H2N2', business_name = 'Jordan Lee Events Inc.' where staff_id = (select id from staff_profiles where email = 'ba.demo@rgxm-demo.test')");
     await signInWithMagicLink(page, "ba.demo@rgxm-demo.test");
     await page.goto("/portal");
     await page.getByRole("link", { name: /review/i }).first().click();
@@ -82,6 +84,25 @@ test("once RGXM publishes its documents, a contractor accepts each one and keeps
     await expect(page.getByRole("heading", { name: "Acceptance record" })).toBeVisible();
     await expect(page.getByText("Jordan Lee Events Inc.")).toBeVisible();
     await expect(page.getByRole("button", { name: "Print or save a copy" })).toBeVisible();
+    // Jordan is GST/HST-registered and automatic tax is off, so their lines wait for Finance's tax
+    // decision. Once Finance decides, the invoice is created automatically (no issuing step).
+    const fin = await (await page.context().browser()!.newContext()).newPage();
+    await signInAsTeam(fin, "finance");
+    await fin.goto("/dashboard/payments");
+    const card = fin.locator("div.rounded-lg.border").filter({ hasText: "Jordan Lee" }).filter({ has: fin.getByRole("button", { name: "Record tax decision" }) }).first();
+    await card.getByRole("checkbox", { name: /HST 13% \(ON\)/ }).check();
+    await card.getByLabel("Reason").fill("Registered contractor; 13% Ontario HST confirmed");
+    await card.getByRole("button", { name: "Record tax decision" }).click();
+    await expect(fin.getByText("Tax decision recorded. The line can now be batched.")).toBeVisible();
+    await page.goto("/portal/invoices");
+    await page.getByRole("link", { name: /CRW-B-/ }).first().click();
+    await expect(page.getByRole("heading", { name: "Contractor Invoice — Prepared by RGXM on behalf of Jordan Lee Events Inc." })).toBeVisible();
+    await expect(page.getByText("Prepared by RGXM Inc. on behalf of the supplier under an agreed self-billing arrangement.")).toBeVisible();
+    await expect(page.getByText("Unit A - 6975 Pacific Circle, Mississauga, ON L5T 2H3")).toBeVisible();
+    await expect(page.getByText(/HST 13% \(ON\)/).first()).toBeVisible();
+    // Record only: nothing to approve or confirm.
+    await expect(page.getByRole("button", { name: /confirm/i })).toHaveCount(0);
+
     const rows = (await pool.query("select a.kind, a.acting_for, a.contracting_party, a.authorized_representative from staff_acceptances a join staff_profiles s on s.id = a.staff_id where s.email = 'ba.demo@rgxm-demo.test' order by a.kind")).rows;
     expect(rows).toEqual([
       { kind: "contractor_terms", acting_for: "business", contracting_party: "Jordan Lee Events Inc.", authorized_representative: "Jordan Lee" },

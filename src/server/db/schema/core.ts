@@ -98,6 +98,9 @@ export const orgSettings = pgTable("org_settings", {
   privacyOfficerEmail: text(),
   privacyOfficerPhone: text(),
   privacyOfficerAddress: text(),
+  // RGXM's legal entity as the customer on contractor invoices.
+  legalEntityName: text(),
+  legalEntityAddress: text(),
   // Contacts shown to contractors: platform support / account closure, and finance / payments.
   supportEmail: text(),
   financeEmail: text(),

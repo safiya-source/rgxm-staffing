@@ -202,6 +202,8 @@ export async function listBills(opts: { status?: string | null; limit?: number }
       id: bills.id,
       billNumber: bills.billNumber,
       kind: bills.kind,
+      invoiceKind: bills.invoiceKind,
+      contractorConfirmedAt: bills.contractorConfirmedAt,
       status: bills.status,
       billDate: bills.billDate,
       dueDate: bills.dueDate,

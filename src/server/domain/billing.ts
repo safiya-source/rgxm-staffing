@@ -223,6 +223,8 @@ export async function recordContractorInvoice(actorId: string, raw: z.input<type
   return db.transaction(async (tx) => {
     const [bill] = v.billId ? await tx.select().from(bills).where(eq(bills.id, v.billId)) : [];
     if (v.billId && (!bill || bill.staffId !== v.staffId)) throw new BillingError("That bill isn't for this contractor.");
+    // Under self-billing the contractor must not issue a duplicate invoice for the same supply (Agreement §7).
+    if (bill?.invoiceKind === "self_billed") throw new BillingError(`${bill.billNumber} is a contractor invoice RGXM prepared under the self-billing arrangement, so a separate invoice for it would be a duplicate. Record a correction request instead, or agree an exception with Finance.`);
     const status = !bill ? "unmatched" : bill.taxCents === v.taxCents && bill.subtotalCents === v.subtotalCents ? "matched" : "variance_review";
     const [row] = await tx
       .insert(contractorInvoices)
@@ -246,6 +248,7 @@ export async function resolveInvoiceVariance(actorId: string, invoiceId: string,
 
 const reviewSchema = z.object({
   payableId: z.string().uuid().nullable(),
+  billId: z.string().uuid().nullable().optional(),
   kind: z.enum(["tax", "amount", "hours", "other"]),
   message: z.string().trim().min(5, "Tell us what looks wrong").max(1000),
 });
@@ -255,12 +258,17 @@ export async function requestPayReview(staff: { userId: string; staffId: string 
   const v = reviewSchema.parse(raw);
   return db.transaction(async (tx) => {
     let billId: string | null = null;
+    if (v.billId && !v.payableId) {
+      const [b] = await tx.select({ staffId: bills.staffId }).from(bills).where(eq(bills.id, v.billId));
+      if (!b || b.staffId !== staff.staffId) throw new BillingError("Invoice not found.");
+      billId = v.billId;
+    }
     if (v.payableId) {
       const [p] = await tx.select({ staffId: payableItems.staffId, billId: payableItems.billId }).from(payableItems).where(eq(payableItems.id, v.payableId));
       if (!p || p.staffId !== staff.staffId) throw new BillingError("Payment line not found.");
       billId = p.billId;
     }
-    const [open] = await tx.select({ id: payReviewRequests.id }).from(payReviewRequests).where(and(eq(payReviewRequests.staffId, staff.staffId), eq(payReviewRequests.status, "open"), v.payableId ? eq(payReviewRequests.payableItemId, v.payableId) : isNull(payReviewRequests.payableItemId)));
+    const [open] = await tx.select({ id: payReviewRequests.id }).from(payReviewRequests).where(and(eq(payReviewRequests.staffId, staff.staffId), eq(payReviewRequests.status, "open"), v.payableId ? eq(payReviewRequests.payableItemId, v.payableId) : billId ? eq(payReviewRequests.billId, billId) : and(isNull(payReviewRequests.payableItemId), isNull(payReviewRequests.billId))));
     if (open) throw new BillingError("You already have an open review request for this. RGXM Finance will get back to you.");
     const [row] = await tx.insert(payReviewRequests).values({ staffId: staff.staffId, payableItemId: v.payableId, billId, kind: v.kind, message: v.message, createdBy: staff.userId }).returning();
     await recordAudit({ actorId: staff.userId, action: "pay_review.request", entityType: "pay_review", entityId: row!.id, after: { kind: v.kind, payableId: v.payableId } }, tx);

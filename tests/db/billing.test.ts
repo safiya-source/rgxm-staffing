@@ -68,8 +68,13 @@ describe("project compensation", () => {
     const who = await person();
     const { bookingId } = await shift(who.staffId, 30);
     await expect(comp.recordCompensation(pm.id, project.projectId, { category: "meal_lunch", staffId: who.staffId, bookingId })).rejects.toThrow(/isn't switched on/);
-    await comp.saveCompensationSettings(pm.id, project.projectId, { mealsEnabled: true, perDiemEnabled: true, mileageEnabled: true, bonusEnabled: true, breakfast: "20", lunch: "25", dinner: "40", perDiem: "85", mileageRate: "0.73" });
+    await comp.saveCompensationSettings(pm.id, project.projectId, { mealsEnabled: true, perDiemEnabled: true, mileageEnabled: true, bonusEnabled: true, bonusConditions: "Covering a no-show at short notice", breakfast: "20", lunch: "25", dinner: "40", perDiem: "85", mileageRate: "0.73" });
     const lunch = await comp.recordCompensation(pm.id, project.projectId, { category: "meal_lunch", staffId: who.staffId, bookingId });
+    // A meal that isn't eligible on the project (e.g. provided on site) can't be recorded.
+    const other = await makeProject();
+    await comp.saveCompensationSettings(pm.id, other.projectId, { mealsEnabled: true, perDiemEnabled: false, mileageEnabled: false, bonusEnabled: false, breakfast: "20", lunch: "25", dinner: "40", perDiem: "85", mileageRate: "0.73", eligibleMeals: ["meal_dinner"] });
+    const o = await shift(who.staffId, 36, { proj: other });
+    await expect(comp.recordCompensation(pm.id, other.projectId, { category: "meal_lunch", staffId: who.staffId, bookingId: o.bookingId })).rejects.toThrow(/isn't eligible/);
     expect(lunch).toMatchObject({ amountCents: 2500, unitRate: "25.0000", status: "pending" });
   });
 
@@ -116,7 +121,7 @@ describe("project compensation", () => {
     const { bookingId } = await shift(who.staffId, 35);
     const item = await comp.recordCompensation(pm.id, project.projectId, { category: "meal_breakfast", staffId: who.staffId, bookingId });
     // Rate change later doesn't touch what was recorded.
-    await comp.saveCompensationSettings(pm.id, project.projectId, { mealsEnabled: true, perDiemEnabled: true, mileageEnabled: true, bonusEnabled: true, breakfast: "22", lunch: "25", dinner: "40", perDiem: "85", mileageRate: "0.75" });
+    await comp.saveCompensationSettings(pm.id, project.projectId, { mealsEnabled: true, perDiemEnabled: true, mileageEnabled: true, bonusEnabled: true, bonusConditions: "Covering a no-show at short notice", breakfast: "22", lunch: "25", dinner: "40", perDiem: "85", mileageRate: "0.75" });
     await expect(pool.query("update compensation_items set amount_cents = 1 where id = $1", [item!.id])).rejects.toThrow(/fixed once recorded/);
     await expect(comp.decideCompensation(pm.id, item!.id, { approve: false })).rejects.toThrow(/reason/);
     const line = await comp.decideCompensation(finance.id, item!.id, { approve: true });

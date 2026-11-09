@@ -25,6 +25,13 @@ test("PM creates a staffing request with a new project and venue, then lands on 
   await page.getByLabel("First day").fill(inDays(30));
   await page.getByLabel("Last day").fill(inDays(32));
   await expect(page.getByText("3 days × 4 people (3 BA + 1 TL) = 12 positions")).toBeVisible();
+  // Allowances, mileage and a bonus, on top of the hourly rates.
+  await page.getByRole("checkbox", { name: /Meal allowances/ }).click();
+  await page.getByRole("checkbox", { name: "Lunch eligible" }).click(); // lunch is provided on site
+  await page.getByRole("checkbox", { name: /^Mileage/ }).click();
+  await page.getByRole("checkbox", { name: /^Bonus/ }).click();
+  await page.getByLabel("Amount (CAD, optional)").fill("40");
+  await page.getByLabel("When it's earned").fill("Per shift when the sampling target is met");
   await page.getByRole("button", { name: "Create & send offers" }).click();
 
   await expect(page).toHaveURL(/\/dashboard\/staffing\/[0-9a-f-]{36}\?group=BA/);
@@ -34,6 +41,8 @@ test("PM creates a staffing request with a new project and venue, then lands on 
   expect(p).toEqual({ status: "staffing", n: 6 });
   const tl = (await pool.query("select distinct s.rate_cents from shifts s join projects p on p.id = s.project_id where p.name = $1 and s.role = 'TL'", [name])).rows;
   expect(tl).toEqual([{ rate_cents: 3250 }]);
+  const comp = (await pool.query("select c.meals_enabled, c.eligible_meals, c.mileage_enabled, c.per_diem_enabled, c.bonus_cents, c.bonus_conditions from project_compensation_settings c join projects p on p.id = c.project_id where p.name = $1", [name])).rows[0];
+  expect(comp).toEqual({ meals_enabled: true, eligible_meals: ["meal_breakfast", "meal_dinner"], mileage_enabled: true, per_diem_enabled: false, bonus_cents: 4000, bonus_conditions: "Per shift when the sampling target is met" });
 });
 
 test("coordinators add shifts to their own projects but can't create projects or venues", async ({ page }) => {
@@ -42,6 +51,8 @@ test("coordinators add shifts to their own projects but can't create projects or
   await expect(page.getByRole("radio", { name: "New project" })).toHaveCount(0);
   await page.getByLabel("Project").selectOption({ label: "Cadbury Sampling Activation (DEMO-CAD-2611)" });
   await expect(page.getByLabel("Venue").locator("option", { hasText: "New venue" })).toHaveCount(0);
+  // Allowances and bonuses are set by PMs and Admins.
+  await expect(page.getByText("4. Allowances, mileage & bonus")).toHaveCount(0);
 });
 
 test("finance sets company default rates, which pre-fill new staffing requests", async ({ page, browser }) => {

@@ -20,7 +20,7 @@ export default async function OnboardingPage() {
   ]);
   const agreements = {
     privacy: docs.privacy_notice ? { title: docs.privacy_notice.title, version: docs.privacy_notice.version } : null,
-    terms: docs.contractor_terms ? { title: docs.contractor_terms.title, version: docs.contractor_terms.version } : null,
+    terms: docs.contractor_terms ? { title: docs.contractor_terms.title, version: docs.contractor_terms.version, selfBilling: docs.contractor_terms.selfBilling } : null,
     platform: docs.platform_terms ? { title: docs.platform_terms.title, version: docs.platform_terms.version } : null,
     party: { legalName: tax?.legalName ?? [defaults.firstName, defaults.lastName].filter(Boolean).join(" "), businessName: tax?.businessName ?? "" },
     consents: consents.map((c) => ({ key: c.key, label: c.label, description: c.description })),

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { PageHeader } from "@/components/app/page-header";
 import { canAny, canOnProject } from "@/server/authz/permissions";
 import { db } from "@/server/db";
-import { projectLocations, projects, staffingRequirements } from "@/server/db/schema";
+import { projectCompensationSettings, projectLocations, projects, staffingRequirements } from "@/server/db/schema";
 import { getClients } from "@/server/queries/projects";
 import { projectScope } from "@/server/queries/timesheets";
 import { getOrgSettings } from "@/server/settings";
@@ -50,12 +50,16 @@ export default async function NewStaffingRequestPage({ searchParams }: PageProps
       : Promise.resolve([]),
   ]);
 
+  // Allowances/mileage/bonus: shown to people who may configure them, prefilled per project.
+  const canSetCompensation = canAny(actor, "compensation.configure");
+  const compRows = canSetCompensation && ids.length ? await db.select().from(projectCompensationSettings).where(inArray(projectCompensationSettings.projectId, ids)) : [];
   const projectOptions = rows.map((p) => ({
     id: p.id,
     label: `${p.name} (${p.code})`,
     canAddVenue: canOnProject(actor, "project.edit", scopes.get(p.id)!),
     // The project's own rate for a role (Setup → Staffing requirements) beats the company default.
     roleRates: Object.fromEntries(requirementRates.filter((r) => r.projectId === p.id && r.rateCents != null).map((r) => [r.role, r.rateCents!])),
+    compensation: canSetCompensation && canOnProject(actor, "compensation.configure", scopes.get(p.id)!) ? (compRows.find((c) => c.projectId === p.id) ?? null) : undefined,
     locations: locations.filter((l) => l.projectId === p.id).map((l) => ({ id: l.id, label: [l.name, l.city].filter(Boolean).join(", "), timezone: l.timezone })),
   }));
   const preselect = typeof sp.project === "string" && projectOptions.some((p) => p.id === sp.project) ? sp.project : undefined;
@@ -77,6 +81,7 @@ export default async function NewStaffingRequestPage({ searchParams }: PageProps
         showRates={showRates}
         defaultRates={showRates ? settings.defaultRates : {}}
         preselectProjectId={preselect}
+        canSetCompensation={canSetCompensation}
       />
     </>
   );
