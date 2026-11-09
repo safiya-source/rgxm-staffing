@@ -160,7 +160,7 @@ export async function createAccountingExport(actorId: string, input: { billIds: 
       const isDemo = chosen[0]!.isDemo;
       const file = Buffer.from(`﻿${toCsv(headers, data)}`, "utf8");
       const sha256 = createHash("sha256").update(file).digest("hex");
-      const key = `accounting/${reference}${isDemo ? "-DEMO" : ""}.csv`;
+      const key = `accounting/${Date.now()}-${reference}${isDemo ? "-DEMO" : ""}.csv`;
       await storage().put(key, file, "text/csv; charset=utf-8");
       const [exp] = await tx
         .insert(accountingExports)
@@ -168,7 +168,7 @@ export async function createAccountingExport(actorId: string, input: { billIds: 
         .returning();
       await tx.insert(accountingExportBills).values(chosen.map((b) => ({ exportId: exp!.id, billId: b.id })));
       await recordAudit({ actorId, action: "accounting.export", entityType: "accounting_export", entityId: exp!.id, after: { reference, bills: chosen.length, rows: data.length, sha256, validatedFormat: Boolean(config.validatedAt) } }, tx);
-      return { exportId: exp!.id, reference, fileName: key.split("/").pop()!, data: file, validatedFormat: Boolean(config.validatedAt) };
+      return { exportId: exp!.id, reference, fileName: `${reference}${isDemo ? "-DEMO" : ""}.csv`, data: file, validatedFormat: Boolean(config.validatedAt) };
     });
   } catch (err) {
     const code = (err as { code?: string; cause?: { code?: string } }).code ?? (err as { cause?: { code?: string } }).cause?.code;
@@ -196,7 +196,7 @@ export async function readAccountingExport(actorId: string, exportId: string) {
   const data = await storage().get(exp.storageKey);
   if (createHash("sha256").update(data).digest("hex") !== exp.sha256) throw new BillingError("The stored file doesn't match its fingerprint. Contact an administrator.");
   await recordAudit({ actorId, action: "accounting.export_download", entityType: "accounting_export", entityId: exportId });
-  return { data, fileName: exp.storageKey.split("/").pop()!, contentType: "text/csv; charset=utf-8" };
+  return { data, fileName: `${exp.reference}${exp.isDemo ? "-DEMO" : ""}.csv`, contentType: "text/csv; charset=utf-8" };
 }
 
 export async function listAccountingExports() {

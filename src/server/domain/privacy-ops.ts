@@ -235,7 +235,7 @@ export async function createPrivacyRequest(actorId: string, raw: z.input<typeof 
 async function loadRequest(tx: Tx, id: string) {
   const [r] = await tx.select().from(privacyRequests).where(eq(privacyRequests.id, id)).for("update");
   if (!r) throw new PrivacyOpsError("Request not found.");
-  if (["closed", "refused", "withdrawn"].includes(r.status)) throw new PrivacyOpsError(`This request is ${r.status}.`);
+  if (["responded", "closed", "refused", "withdrawn"].includes(r.status)) throw new PrivacyOpsError(`This request is ${r.status}.`);
   return r;
 }
 
