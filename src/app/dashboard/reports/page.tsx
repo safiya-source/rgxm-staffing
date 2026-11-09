@@ -1,15 +1,22 @@
 import type { Metadata } from "next";
 import { PlannedSection } from "@/components/app/empty-state";
 import { PageHeader } from "@/components/app/page-header";
-import { requireInternal } from "@/server/session";
+import Link from "next/link";
+import { canAny } from "@/server/authz/permissions";
+import { requireInternal, toActor } from "@/server/session";
 
 export const metadata: Metadata = { title: "Reports" };
 
 export default async function Page() {
-  await requireInternal("reports.view");
+  const viewer = await requireInternal("reports.view");
+  const finance = canAny(toActor(viewer), "reports.finance");
   return (
     <>
-      <PageHeader title="Reports" description="Operational, financial and talent KPIs." />
+      <PageHeader
+        title="Reports"
+        description="Operational, financial and talent KPIs."
+        actions={finance ? <Link href="/dashboard/reports/finance" className="text-sm font-medium text-brand hover:underline">Finance reports →</Link> : undefined}
+      />
       <PlannedSection
         milestone="Phase 2"
         title="Reports"

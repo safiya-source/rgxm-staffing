@@ -16,6 +16,8 @@ async function person(classification: "contractor" | "employee" | "unset" = "con
     "insert into staff_profiles (user_id, first_name, last_name, email, classification, is_demo) values ($1, 'Pat', 'Payee', $2, $3, $4) returning id",
     [u.id, `p.${crypto.randomUUID()}@example.test`, classification, demo],
   );
+  // Verified as not GST/HST-registered, so lines have no tax and don't need Finance review.
+  await pool.query("insert into staff_sensitive (staff_id, gst_registration_status, gst_verification_status) values ($1, 'no', 'verified')", [p.id]);
   return { userId: u.id, staffId: p.id };
 }
 
@@ -129,7 +131,8 @@ describe("payment batches", () => {
 
     await expect(pay.supersedeExport(finance.id, first.exportId, " ")).rejects.toThrow(/Explain/);
     await pay.supersedeExport(finance.id, first.exportId, "Bank rejected the file; nothing was imported");
-    const second = await pay.exportBatch(finance.id, batch.id, "csv_qbo");
+    await expect(pay.exportBatch(finance.id, batch.id, "csv_qbo" as "xlsx")).rejects.toThrow(/Accounting exports/);
+    const second = await pay.exportBatch(finance.id, batch.id, "xlsx");
     expect(second.sha256).not.toBe(first.sha256);
   });
 
@@ -137,11 +140,11 @@ describe("payment batches", () => {
     const x = await approved();
     const y = await approved();
     const batch = await pay.createBatch(finance.id, { type: "contractor", payPeriodId: null, payableIds: [x.payable.id, y.payable.id] });
-    await expect(pay.markBatchPaid(finance.id, batch.id, { paidOn: "2026-01-01" })).rejects.toThrow(/Export/);
+    await expect(pay.markBatchPaid(finance.id, batch.id, { paidOn: "2026-01-01", evidence: "Bank statement line 4" })).rejects.toThrow(/Export/);
     await pay.approveBatch(finance2.id, batch.id);
     await pay.exportBatch(finance.id, batch.id, "csv_generic");
-    await expect(pay.markBatchPaid(finance.id, batch.id, { paidOn: "2026-01-01", failed: [{ payableId: y.payable.id, reason: "" }] })).rejects.toThrow(/reason/);
-    await pay.markBatchPaid(finance.id, batch.id, { paidOn: new Date().toISOString().slice(0, 10), failed: [{ payableId: y.payable.id, reason: "Account closed" }] });
+    await expect(pay.markBatchPaid(finance.id, batch.id, { paidOn: "2026-01-01", evidence: "x", failed: [{ payableId: y.payable.id, reason: "" }] })).rejects.toThrow(/reason/);
+    await pay.markBatchPaid(finance.id, batch.id, { paidOn: new Date().toISOString().slice(0, 10), evidence: "Bank statement, Nov batch line 1", failed: [{ payableId: y.payable.id, reason: "Account closed" }] });
 
     expect(await status("payment_batches", batch.id)).toBe("paid");
     expect(await status("payable_items", x.payable.id)).toBe("paid");
@@ -151,11 +154,16 @@ describe("payment batches", () => {
     expect(events.rows.map((r) => r.payload.staffId)).toEqual([x.staffId]);
 
     // Paid is final; the failed one goes into a new batch.
-    await expect(pay.voidBatch(finance.id, batch.id, "oops")).rejects.toThrow(/paid/);
+    await expect(pay.voidBatch(finance.id, batch.id, "oops")).rejects.toThrow(/settled|paid/);
     await expect(pool.query("update payment_batches set total_cents = 0 where id = $1", [batch.id])).rejects.toThrow(/cannot change/);
     await expect(pool.query("update payable_items set status = 'pending' where id = $1", [x.payable.id])).rejects.toThrow(/paid payables/);
+    const billsBefore = (await one<{ n: number }>("select count(*)::int n from bills where staff_id = $1", [y.staffId])).n;
     const retry = await pay.createBatch(finance.id, { type: "contractor", payPeriodId: null, payableIds: [y.payable.id] });
     expect(retry.totalCents).toBe(20000);
+    await pay.approveBatch(finance2.id, retry.id);
+    await pay.exportBatch(finance.id, retry.id, "csv_generic");
+    // Retried against the same bill: no second expense.
+    expect((await one<{ n: number }>("select count(*)::int n from bills where staff_id = $1", [y.staffId])).n).toBe(billsBefore);
   });
 
   it("can be voided before payment, returning hours to approved", async () => {

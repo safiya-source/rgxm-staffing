@@ -74,3 +74,32 @@ export async function getProjectBudget(projectId: string, now = new Date()) {
   const sorted = (m: Map<string, BudgetLine>) => [...m.values()].sort((a, b) => a.key.localeCompare(b.key));
   return { totals, byRole: sorted(lines.role), byLocation: sorted(lines.location), byDate: sorted(lines.date), unpriced };
 }
+
+/**
+ * Approved bill lines by category (fees, allowances, mileage, bonuses, adjustments) and their sales
+ * tax split by whether RGXM recovers it (Settings → Tax & accounting; "unconfirmed" until the
+ * accountant says). Budget comparisons use pre-tax cost plus non-recoverable and unconfirmed tax.
+ */
+export async function getProjectCostCategories(projectId: string) {
+  const [settings] = (await db.execute<{ r: Record<string, string> | null }>(sql`select tax_recoverability as r from org_settings where id = 1`)).rows;
+  const recoverability = settings?.r ?? {};
+  const { rows } = await db.execute<{ category: string; base: string }>(sql`
+    select category, coalesce(sum(base_cents), 0) as base from payable_items where project_id = ${projectId} and status <> 'void' group by category`);
+  const { rows: taxRows } = await db.execute<{ component: string; tax: string }>(sql`
+    select t.component, sum(t.tax_cents) as tax from payable_tax_lines t join payable_items p on p.id = t.payable_item_id
+    where p.project_id = ${projectId} and p.status <> 'void' group by t.component`);
+  const sum = (cats: string[]) => rows.filter((r) => cats.includes(r.category)).reduce((n, r) => n + Number(r.base), 0);
+  const tax = { recoverable: 0, nonRecoverable: 0, unconfirmed: 0 };
+  for (const t of taxRows) {
+    const k = recoverability[t.component] ?? "unconfirmed";
+    tax[k === "recoverable" ? "recoverable" : k === "non_recoverable" ? "nonRecoverable" : "unconfirmed"] += Number(t.tax);
+  }
+  return {
+    fees: sum(["fee"]),
+    meals: sum(["meal_breakfast", "meal_lunch", "meal_dinner", "per_diem"]),
+    mileage: sum(["mileage"]),
+    bonuses: sum(["bonus"]),
+    adjustments: sum(["adjustment"]),
+    tax,
+  };
+}

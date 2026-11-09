@@ -14,6 +14,7 @@ import { NativeSelect } from "@/components/ui/native-select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatMinutes, formatMoney } from "@/lib/format";
 import { BATCH_TYPE_LABEL, ESA_HINT_LABEL, type BatchType, type EsaHint } from "@/server/domain/pay-rules";
+import { CATEGORY_LABEL } from "@/server/domain/tax-engine";
 import { createBatchAction, refreshClassificationsAction } from "./actions";
 
 type Row = {
@@ -26,6 +27,10 @@ type Row = {
   payableMinutes: number;
   rateCents: number;
   totalCents: number;
+  taxCents: number;
+  category: string;
+  description: string | null;
+  billNumber: string | null;
   currency: string;
   status: string;
   isDemo: boolean;
@@ -53,9 +58,10 @@ function PayableTable({ rows, selected, onToggle, onToggleAll, showClassificatio
             </TableHead>
           ) : null}
           <TableHead>Person</TableHead>
-          <TableHead>Shift</TableHead>
-          <TableHead className="text-right">Hours</TableHead>
+          <TableHead>Line</TableHead>
+          <TableHead className="text-right">Hours / qty</TableHead>
           <TableHead className="text-right">Rate</TableHead>
+          <TableHead className="text-right">Tax</TableHead>
           <TableHead className="text-right">Amount</TableHead>
           <TableHead>Notes</TableHead>
         </TableRow>
@@ -78,11 +84,17 @@ function PayableTable({ rows, selected, onToggle, onToggleAll, showClassificatio
               )}
             </TableCell>
             <TableCell className="text-sm">
-              {r.serviceDate} · {r.role}
-              <span className="block text-xs text-muted-foreground">{r.projectCode}</span>
+              {CATEGORY_LABEL[r.category] ?? r.category} · {r.serviceDate}
+              {r.category === "fee" && r.role ? ` · ${r.role}` : ""}
+              <span className="block text-xs text-muted-foreground">
+                {r.projectCode}
+                {r.category !== "fee" && r.description ? ` · ${r.description}` : ""}
+                {r.billNumber ? ` · retry on ${r.billNumber}` : ""}
+              </span>
             </TableCell>
-            <TableCell className="text-right tabular-nums">{formatMinutes(r.payableMinutes)}</TableCell>
-            <TableCell className="text-right tabular-nums">{formatMoney(r.rateCents, r.currency)}</TableCell>
+            <TableCell className="text-right tabular-nums">{r.category === "fee" ? formatMinutes(r.payableMinutes) : "—"}</TableCell>
+            <TableCell className="text-right tabular-nums">{r.category === "fee" ? formatMoney(r.rateCents, r.currency) : "—"}</TableCell>
+            <TableCell className="text-right tabular-nums">{formatMoney(r.taxCents, r.currency)}</TableCell>
             <TableCell className="text-right font-medium tabular-nums">{formatMoney(r.totalCents, r.currency)}</TableCell>
             <TableCell>
               <div className="flex flex-wrap gap-1">
@@ -121,7 +133,7 @@ function BatchSection({ type, demo, rows, periods }: { type: BatchType; demo: bo
             {BATCH_TYPE_LABEL[type]} {demo ? <DemoBadge /> : null}
           </CardTitle>
           <CardDescription>
-            {rows.length} approved shift{rows.length === 1 ? "" : "s"} waiting.{demo ? " Demo items can only go into a demo batch; its export is marked DO NOT PAY." : ""}
+            {rows.length} approved line{rows.length === 1 ? "" : "s"} waiting.{demo ? " Demo items can only go into a demo batch; its export is marked DO NOT PAY." : ""}
           </CardDescription>
         </div>
         <div className="flex flex-wrap items-end gap-2">
@@ -175,7 +187,7 @@ function BatchSection({ type, demo, rows, periods }: { type: BatchType; demo: bo
 export function ReadyToPay({ rows, periods, canManage }: { rows: Row[]; periods: Period[]; canManage: boolean }) {
   const router = useRouter();
   const [pending, start] = useTransition();
-  if (rows.length === 0) return <EmptyState icon={WalletIcon} title="Nothing waiting to be paid" description="Approved hours show up here, ready to batch." />;
+  if (rows.length === 0) return <EmptyState icon={WalletIcon} title="Nothing ready to batch" description="Approved hours and compensation show up here once their tax is settled." />;
   if (!canManage) {
     return (
       <Card className="overflow-hidden">
@@ -203,7 +215,7 @@ export function ReadyToPay({ rows, periods, canManage }: { rows: Row[]; periods:
             <div>
               <CardTitle>Pay details changed</CardTitle>
               <CardDescription>
-                These were approved before the person&apos;s pay details changed (for example, GST/HST registration). Refresh to recalculate them.
+                These were calculated before the person&apos;s pay details changed (for example, their GST/HST answer or Finance&apos;s verification). Refresh to recalculate them; lines that still can&apos;t be calculated go to tax review.
               </CardDescription>
             </div>
             <Button

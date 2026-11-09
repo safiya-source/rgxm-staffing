@@ -83,6 +83,7 @@ export default async function PortalHome() {
                     checkedInAt={attendance.checkedInAt}
                     timezone={home.next.timezone}
                     requireLocation={attendance.requireLocation}
+                    locationRetentionDays={attendance.locationRetentionDays}
                   />
                 </div>
               ) : null}

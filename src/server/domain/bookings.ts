@@ -20,6 +20,7 @@ import {
 import { enqueue } from "@/server/notify/outbox";
 import { getOrCreateThread, postMessage } from "./comms";
 import { ACTIVE_STATUSES, assertTransition, BookingTransitionError, resolveRate, type Actor, type BookingStatus } from "./booking-rules";
+import { bookingBlockers } from "./onboarding";
 
 export class BookingError extends Error {}
 
@@ -370,6 +371,9 @@ export async function confirmBooking(actorId: string, bookingId: string, opts: {
       if (b.offeredRateCents == null) throw new BookingError("No rate was offered, so this booking can't be confirmed.");
       const [person] = await tx.select({ status: staffProfiles.status }).from(staffProfiles).where(eq(staffProfiles.id, b.staffId));
       if (person?.status !== "active") throw new BookingError(`This person's profile is ${person?.status ?? "missing"}, so they can't be confirmed.`);
+      // Contractor onboarding: RGXM's approval and acceptance of the current notice/terms.
+      const blockers = await bookingBlockers(tx, b.staffId);
+      if (blockers.length) throw new BookingError(`They can't be confirmed yet: ${blockers.join("; ")}.`);
 
       const conflicts = await findConflicts(tx, b.staffId, b, b.id);
       if (conflicts.length && !opts.override) throw new ConflictError(conflicts);

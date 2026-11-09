@@ -3,12 +3,15 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Field, FormMessage } from "@/components/app/form";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { authClient } from "@/lib/auth-client";
 
 export default function TwoFactorPage() {
   const router = useRouter();
   const [useBackup, setUseBackup] = useState(false);
+  const [trustDevice, setTrustDevice] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string>();
 
@@ -18,8 +21,8 @@ export default function TwoFactorPage() {
     setError(undefined);
     const code = String(new FormData(e.currentTarget).get("code") ?? "").replace(/\s/g, "");
     const { error } = useBackup
-      ? await authClient.twoFactor.verifyBackupCode({ code })
-      : await authClient.twoFactor.verifyTotp({ code, trustDevice: false });
+      ? await authClient.twoFactor.verifyBackupCode({ code, trustDevice })
+      : await authClient.twoFactor.verifyTotp({ code, trustDevice });
     setPending(false);
     if (error) {
       setError("That code didn't work. Try again.");
@@ -47,6 +50,13 @@ export default function TwoFactorPage() {
             autoFocus
           />
         </Field>
+        <div className="flex items-start gap-2">
+          <Checkbox id="trustDevice" checked={trustDevice} onCheckedChange={(c) => setTrustDevice(c === true)} className="mt-0.5" />
+          <Label htmlFor="trustDevice" className="leading-snug font-normal">
+            Trust this device for 14 days
+            <span className="block text-[13px] text-muted-foreground">Only on a device you use alone. New devices and unusual sign-ins will still ask for a code.</span>
+          </Label>
+        </div>
         <FormMessage>{error}</FormMessage>
         <Button type="submit" size="lg" disabled={pending}>
           {pending ? "Verifying…" : "Verify"}

@@ -28,9 +28,9 @@ test("a new Brand Ambassador registers and completes onboarding", async ({ page 
 
   // Consent is required.
   await page.getByRole("button", { name: "Finish setup" }).click();
-  await expect(page.getByText("Please confirm you've read the privacy notice.")).toBeVisible();
+  await expect(page.getByText("Please confirm you've read the Privacy Policy.")).toBeVisible();
 
-  await page.getByRole("checkbox", { name: /privacy notice/ }).click();
+  await page.getByRole("checkbox", { name: /privacy (notice|policy)/i }).click();
   await page.getByRole("button", { name: "Finish setup" }).click();
 
   await expect(page).toHaveURL(/\/portal$/);
@@ -61,7 +61,9 @@ test("a contractor adds their tax details (no SIN is asked for)", async ({ page 
   await expect(page.getByRole("heading", { name: "Tax details" })).toBeVisible();
   await expect(page.getByLabel(/Social Insurance Number/)).toHaveCount(0);
   await page.getByLabel("Legal name").fill("Jordan Lee");
-  await page.getByRole("checkbox", { name: /Registered for GST\/HST/ }).setChecked(false);
+  // Contractors choose a registration status, never a tax rate.
+  await expect(page.getByLabel(/rate/i)).toHaveCount(0);
+  await page.getByRole("radio", { name: "No", exact: true }).check();
   await page.getByLabel("Street address").fill("100 Queen St W");
   await page.getByLabel("City", { exact: true }).fill("Toronto");
   await page.getByLabel("Province").selectOption("ON");

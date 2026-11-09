@@ -7,6 +7,9 @@ import { SettingsNav } from "./settings-nav";
 const ITEMS: { href: string; label: string; permission?: Permission }[] = [
   { href: "/dashboard/settings", label: "Organisation", permission: "settings.view" },
   { href: "/dashboard/settings/users", label: "Team & roles", permission: "users.manage" },
+  { href: "/dashboard/settings/compliance", label: "Contractors & legal", permission: "legal.manage" },
+  { href: "/dashboard/settings/tax", label: "Tax & accounting", permission: "tax.configure" },
+  { href: "/dashboard/settings/privacy", label: "Privacy & retention", permission: "privacy.manage" },
   { href: "/dashboard/settings/security", label: "My security" },
   { href: "/dashboard/settings/audit", label: "Audit log", permission: "audit.view" },
   { href: "/dashboard/settings/mail-log", label: "Mail log", permission: "mail_log.view" },
@@ -20,9 +23,9 @@ export default async function SettingsLayout({ children }: LayoutProps<"/dashboa
   return (
     <>
       <PageHeader title="Settings" />
-      {!settings.requireMfaForPrivileged ? (
+      {!settings.requireMfaForStaff || !settings.requireMfaForPrivileged ? (
         <p role="status" className="mb-4 rounded-lg border border-warning/40 bg-warning-soft px-4 py-2.5 text-sm text-warning">
-          Two-step verification isn&apos;t required for Administrators and Finance. Turn it on in Organisation settings before using real data.
+          Two-step verification isn&apos;t required for every RGXM staff account. Turn it on in Organisation settings before using real data.
         </p>
       ) : null}
       <SettingsNav items={items} />

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildExport, type ExportRow } from "@/server/domain/payment-exports";
-import { basePayCents, batchTypeFor, canMoveBatch, canMovePayable, centsToDecimal, esaHints, hstCents, minutesToDecimalHours, payPeriodFor } from "@/server/domain/pay-rules";
+import { basePayCents, batchTypeFor, dueDateFor, canMoveBatch, canMovePayable, centsToDecimal, esaHints, hstCents, minutesToDecimalHours, payPeriodFor } from "@/server/domain/pay-rules";
 
 describe("base pay", () => {
   it("is minutes × rate, rounded half up to the cent", () => {
@@ -62,9 +62,22 @@ describe("classification and state machines", () => {
   });
 });
 
+describe("payment due dates", () => {
+  it("follow the contractor agreement: 1st–15th due by month end, 16th–end due by the 15th of next month", () => {
+    expect(dueDateFor("semi_monthly_agreement", { billDate: "2026-11-20", earliestServiceDate: "2026-11-03" })).toBe("2026-11-30");
+    expect(dueDateFor("semi_monthly_agreement", { billDate: "2026-12-02", earliestServiceDate: "2026-11-16" })).toBe("2026-12-15");
+    expect(dueDateFor("semi_monthly_agreement", { billDate: "2027-01-03", earliestServiceDate: "2026-12-31" })).toBe("2027-01-15");
+    expect(dueDateFor("semi_monthly_agreement", { billDate: "2028-02-10", earliestServiceDate: "2028-02-15" })).toBe("2028-02-29");
+    expect(dueDateFor("days_after_bill", { billDate: "2026-11-20", earliestServiceDate: "2026-11-03", days: 14 })).toBe("2026-12-04");
+  });
+});
+
 describe("export files", () => {
   const row: ExportRow = {
     payableId: "p1",
+    billNumber: null,
+    category: "fee",
+    description: "BA 8.00 h",
     staffName: "=HYPERLINK(\"x\")",
     legalName: null,
     email: "a@example.test",
@@ -87,20 +100,18 @@ describe("export files", () => {
     expect(text).toContain("'=HYPERLINK");
     expect(text).toContain("DEMO - DO NOT PAY");
     expect(text).toContain("8.00,25.00,200.00,0.00,200.00,,CAD");
+    expect(text).toContain("Hourly fees");
     expect(f.rowCount).toBe(1);
   });
-  it("only offers the QuickBooks bills format for contractors", async () => {
-    await expect(buildExport("csv_qbo", { reference: "PAY-1", type: "payroll", periodLabel: null, isDemo: false }, [row], "2026-11-20")).rejects.toThrow(/contractor/);
-    const f = await buildExport("csv_qbo", { reference: "CON-1", type: "contractor", periodLabel: null, isDemo: false }, [row, { ...row, payableId: "p2" }], "2026-11-20");
-    expect(f.data.toString("utf8")).toContain("CON-1-1");
+  it("bank files never use the accounting (QuickBooks) format", async () => {
+    await expect(buildExport("csv_qbo" as "xlsx", { reference: "CON-1", type: "contractor", periodLabel: null, isDemo: false }, [row], "2026-11-20")).rejects.toThrow(/Unsupported/);
   });
-  it("puts HST in its own columns for registered contractors", async () => {
-    const hst = { ...row, hstCents: 2600, totalCents: 22600, gstHstNumber: "123456789RT0001" };
-    const generic = (await buildExport("csv_generic", { reference: "CON-2", type: "contractor", periodLabel: null, isDemo: false }, [hst], "2026-11-20")).data.toString("utf8");
-    expect(generic).toContain("200.00,26.00,226.00,123456789RT0001,CAD");
-    const qbo = (await buildExport("csv_qbo", { reference: "CON-2", type: "contractor", periodLabel: null, isDemo: false }, [hst, row], "2026-11-20")).data.toString("utf8");
-    expect(qbo).toContain("200.00,HST ON,26.00,CAD");
-    expect(qbo).toContain("200.00,Out of Scope,0.00,CAD");
+  it("puts tax in its own column and identifies the bill and category", async () => {
+    const hst = { ...row, billNumber: "CRW-B-000042", hstCents: 2600, totalCents: 22600, gstHstNumber: "123456789RT0001" };
+    const generic = (await buildExport("csv_generic", { reference: "CON-2", type: "contractor", periodLabel: null, isDemo: false }, [hst, { ...row, category: "mileage", description: "Mileage: 12 km", payableMinutes: 0, subtotalCents: 876, totalCents: 876 }], "2026-11-20")).data.toString("utf8");
+    expect(generic).toContain("CON-2,CRW-B-000042");
+    expect(generic).toContain("Hourly fees,BA 8.00 h,8.00,25.00,200.00,26.00,226.00,123456789RT0001,CAD");
+    expect(generic).toContain("Mileage,Mileage: 12 km,,,8.76,0.00,8.76,,CAD");
   });
   it("writes an xlsx workbook", async () => {
     const f = await buildExport("xlsx", { reference: "CON-1", type: "contractor", periodLabel: null, isDemo: false }, [row], "2026-11-20");

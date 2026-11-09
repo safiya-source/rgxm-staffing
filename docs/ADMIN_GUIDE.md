@@ -95,3 +95,9 @@ Items flagged "check the 3-hour rule" or "check overtime" are for review only; p
 Seeded demo environments have the `@rgxm-demo.test` accounts, show "Demo" badges, never send email, and mark
 demo payment exports "DEMO - DO NOT PAY". The two-step requirement is off there, and a banner in Settings says so.
 Never seed a production database.
+
+## Contractor compliance, tax and privacy operations
+
+See docs/COMPLIANCE.md for what each new screen does and which decisions RGXM, its accountant and its lawyer
+must record (contractor approvals, legal documents, tax rules and treatments, payment terms, retention periods).
+See docs/PRIVACY_OPERATIONS.md for privacy requests, legal holds, retention, backups and incidents.

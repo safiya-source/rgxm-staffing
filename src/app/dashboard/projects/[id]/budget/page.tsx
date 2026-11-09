@@ -6,7 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { formatMoney } from "@/lib/format";
 import { FIELD_ROLE_NAMES, type FieldRole } from "@/lib/roles";
 import { canOnProject } from "@/server/authz/permissions";
-import { getProjectBudget, type BudgetLine } from "@/server/queries/budget";
+import { getProjectBudget, getProjectCostCategories, type BudgetLine } from "@/server/queries/budget";
 import { getProjectHeader } from "@/server/queries/projects";
 import { loadProjectScopes, requireInternal, toActor } from "@/server/session";
 
@@ -56,11 +56,14 @@ export default async function BudgetPage({ params }: PageProps<"/dashboard/proje
   const { id } = await params;
   const scope = (await loadProjectScopes([id])).get(id)!;
   if (!canOnProject(toActor(viewer), "budget.view", scope)) notFound();
-  const [header, budget] = await Promise.all([getProjectHeader(id), getProjectBudget(id)]);
+  const [header, budget, cats] = await Promise.all([getProjectHeader(id), getProjectBudget(id), getProjectCostCategories(id)]);
   const p = header!.project;
   const c = p.currency;
   const t = budget.totals;
-  const forecast = t.actual + t.pending + t.committed;
+  // Hourly fees (actual/pending/committed) plus approved allowances, mileage, bonuses and adjustments,
+  // plus sales tax RGXM doesn't recover (or hasn't confirmed it recovers).
+  const extras = cats.meals + cats.mileage + cats.bonuses + cats.adjustments;
+  const forecast = t.actual + t.pending + t.committed + extras + cats.tax.nonRecoverable + cats.tax.unconfirmed;
   const variance = p.budgetCents != null ? p.budgetCents - forecast : null;
   const pct = p.budgetCents ? Math.round((forecast / p.budgetCents) * 100) : null;
   const tone = pct === null ? "default" : pct > 100 ? "danger" : pct >= 90 ? "warning" : "default";
@@ -69,7 +72,7 @@ export default async function BudgetPage({ params }: PageProps<"/dashboard/proje
     <div className="grid gap-6">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         <StatCard label="Budget" value={p.budgetCents != null ? formatMoney(p.budgetCents, c) : "Not set"} hint={p.budgetCents == null ? "Set it in Setup" : undefined} />
-        <StatCard label="Actual (approved)" value={formatMoney(t.actual, c)} hint="Approved payables" />
+        <StatCard label="Actual fees (approved)" value={formatMoney(t.actual, c)} hint="Approved hourly fees, before tax" />
         <StatCard label="Pending approval" value={formatMoney(t.pending, c)} hint="Ended shifts, estimated" />
         <StatCard label="Committed" value={formatMoney(t.committed, c)} hint="Upcoming confirmed shifts" />
         <StatCard
@@ -102,13 +105,42 @@ export default async function BudgetPage({ params }: PageProps<"/dashboard/proje
         </Card>
       ) : null}
 
+      <Card className="overflow-hidden">
+        <CardHeader>
+          <CardTitle>Approved costs by category</CardTitle>
+          <CardDescription>Before tax, with sales tax shown separately by whether RGXM recovers it (as confirmed by the accountant in Settings).</CardDescription>
+        </CardHeader>
+        <Table>
+          <TableBody>
+            {(
+              [
+                ["Hourly fees", cats.fees],
+                ["Meal allowances and per diems", cats.meals],
+                ["Mileage", cats.mileage],
+                ["Bonuses", cats.bonuses],
+                ["Adjustments and credits", cats.adjustments],
+                ["Sales tax: recoverable (not counted against budget)", cats.tax.recoverable],
+                ["Sales tax: not recoverable", cats.tax.nonRecoverable],
+                ["Sales tax: recoverability not confirmed", cats.tax.unconfirmed],
+              ] as const
+            ).map(([k, v]) => (
+              <TableRow key={k}>
+                <TableCell>{k}</TableCell>
+                <TableCell className="text-right tabular-nums">{formatMoney(v, c)}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </Card>
+
       <Card>
         <CardHeader>
           <CardTitle>How these are worked out</CardTitle>
           <CardDescription>
             Actual is the sum of approved payables. Pending estimates ended shifts that aren&apos;t approved yet from the hours under review
             (or the schedule if there are none). Committed is upcoming confirmed shifts at the scheduled length. All use each booking&apos;s agreed rate.
-            Forecast = actual + pending + committed. Open positions and expenses aren&apos;t included.
+            Forecast = actual + pending + committed fees, plus approved allowances, mileage, bonuses and adjustments, plus sales tax that isn&apos;t recoverable or not yet confirmed
+            as recoverable. Open positions and unapproved compensation aren&apos;t included.
             {budget.unpriced ? ` ${budget.unpriced} booking(s) have no agreed rate and are left out.` : ""}
           </CardDescription>
         </CardHeader>
