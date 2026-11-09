@@ -283,7 +283,7 @@ export const serviceCategories = pgTable(
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
-  (t) => [check("service_categories_rule", oneOf("place_of_supply_rule", ["event_province", "finance_review"]))],
+  () => [check("service_categories_rule", oneOf("place_of_supply_rule", ["event_province", "finance_review"]))],
 );
 
 /** Effective-dated sales-tax rates per jurisdiction (and optionally per service category). */
@@ -334,7 +334,7 @@ export const compensationTaxTreatments = pgTable(
     updatedBy: userRef(),
     updatedAt: updatedAt(),
   },
-  (t) => [
+  () => [
     check("compensation_tax_treatments_category", oneOf("category", PAYABLE_CATEGORIES)),
     check("compensation_tax_treatments_gst", oneOf("gst_hst", GST_HST_TREATMENTS)),
     check("compensation_tax_treatments_year_end", oneOf("year_end", YEAR_END_TREATMENTS)),
@@ -442,7 +442,7 @@ export const accountingExports = pgTable(
     exportedBy: userRef().notNull(),
     createdAt: createdAt(),
   },
-  (t) => [check("accounting_exports_status", oneOf("status", ACCOUNTING_EXPORT_STATUSES))],
+  () => [check("accounting_exports_status", oneOf("status", ACCOUNTING_EXPORT_STATUSES))],
 );
 
 /** Which bills went in which accounting export. A bill can be in only one live export. */
@@ -689,7 +689,7 @@ export const incidents = pgTable(
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
-  (t) => [
+  () => [
     check("incidents_risk", oneOf("risk_assessment", INCIDENT_RISK)),
     check("incidents_status", oneOf("status", INCIDENT_STATUSES)),
   ],

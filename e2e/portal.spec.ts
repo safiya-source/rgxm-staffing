@@ -61,7 +61,9 @@ test("a contractor adds their tax details (no SIN is asked for)", async ({ page 
   await expect(page.getByRole("heading", { name: "Tax details" })).toBeVisible();
   await expect(page.getByLabel(/Social Insurance Number/)).toHaveCount(0);
   await page.getByLabel("Legal name").fill("Jordan Lee");
-  await page.getByRole("checkbox", { name: /Registered for GST\/HST/ }).setChecked(false);
+  // Contractors choose a registration status, never a tax rate.
+  await expect(page.getByLabel(/rate/i)).toHaveCount(0);
+  await page.getByRole("radio", { name: "No", exact: true }).check();
   await page.getByLabel("Street address").fill("100 Queen St W");
   await page.getByLabel("City", { exact: true }).fill("Toronto");
   await page.getByLabel("Province").selectOption("ON");

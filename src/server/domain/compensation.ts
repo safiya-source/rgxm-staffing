@@ -56,7 +56,7 @@ export async function saveCompensationSettings(actorId: string, projectId: strin
   await db.transaction(async (tx) => {
     const [before] = await tx.select().from(projectCompensationSettings).where(eq(projectCompensationSettings.projectId, projectId));
     await tx.insert(projectCompensationSettings).values({ projectId, ...values }).onConflictDoUpdate({ target: projectCompensationSettings.projectId, set: values });
-    const { updatedBy: _u, ...after } = values;
+    const after = { ...values, updatedBy: undefined };
     await recordAudit({ actorId, action: "project.compensation_settings", entityType: "project", entityId: projectId, projectId, before: before ?? null, after }, tx);
   });
 }

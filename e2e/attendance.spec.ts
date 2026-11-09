@@ -83,6 +83,9 @@ test("check-in/out → submit hours → Team Lead verifies → PM approves", asy
   await expect(ba.getByText(LOCATION)).toBeVisible();
   await expect(ba.getByText(/only taken at that moment/)).toBeVisible();
   await ba.getByRole("button", { name: "Check in" }).click();
+  // First time on this device: the purpose and retention are explained before the browser asks.
+  await expect(ba.getByText(/never tracked in the background/i)).toBeVisible();
+  await ba.getByRole("button", { name: "Continue" }).click();
   await expect(ba.getByText("You're checked in. Have a great shift!")).toBeVisible();
   await expect(ba.getByText(/away from the venue/)).toBeVisible();
   await expect(ba.getByText(/^Checked in at/)).toBeVisible();
@@ -193,6 +196,8 @@ test("an offline check-in is kept on the phone and syncs when back online", asyn
 
   await ctx.setOffline(true);
   await page.getByRole("button", { name: "Check in" }).click();
+  // The location explanation shows once per device; checking in without location is always allowed.
+  await page.getByRole("button", { name: "Check in without location" }).click();
   await expect(page.getByText("Saved on this phone. Waiting to sync.")).toBeVisible();
   await expect(page.getByRole("button", { name: "Check out" })).toBeVisible();
   expect((await pool.query("select count(*)::int n from attendance_events where booking_id = $1", [booking])).rows[0].n).toBe(0);
@@ -201,5 +206,6 @@ test("an offline check-in is kept on the phone and syncs when back online", asyn
   await expect(page.getByText("Check-in synced.")).toBeVisible();
   await expect(page.getByText("Saved on this phone. Waiting to sync.")).toHaveCount(0);
   const ev = await pool.query("select type, within_geofence, client_event_id is not null as has_client_id from attendance_events where booking_id = $1", [booking]);
-  expect(ev.rows).toEqual([{ type: "check_in", within_geofence: true, has_client_id: true }]);
+  // No location shared: recorded and flagged for manual review, never rejected.
+  expect(ev.rows).toEqual([{ type: "check_in", within_geofence: false, has_client_id: true }]);
 });

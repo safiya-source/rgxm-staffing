@@ -146,6 +146,9 @@ export class StepUpRequiredError extends ForbiddenError {
 
 /** Fresh authentication for payment approval and sensitive payment-detail changes. */
 export async function requireFreshAuth(viewer: Viewer) {
+  // Everyone who must use two-step verification has enrolled (needsMfaSetup blocks them otherwise).
+  // Only accounts exempt from enrolment (demo databases with the requirement switched off) skip this.
+  if (!viewer.twoFactorEnabled && !(await needsMfaSetup({ ...viewer, twoFactorEnabled: false }))) return;
   if (!(await hasFreshStepUp(viewer.sessionId))) throw new StepUpRequiredError();
 }
 
