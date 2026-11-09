@@ -24,14 +24,45 @@ import {
 
 export class OnboardingError extends Error {}
 
-export type LegalKind = "privacy_notice" | "contractor_terms";
-export const LEGAL_KIND_LABEL: Record<LegalKind, string> = { privacy_notice: "Privacy notice", contractor_terms: "Contractor agreement & platform terms" };
+export type LegalKind = "privacy_notice" | "contractor_terms" | "platform_terms";
+export const LEGAL_KINDS: LegalKind[] = ["privacy_notice", "contractor_terms", "platform_terms"];
+export const LEGAL_KIND_LABEL: Record<LegalKind, string> = {
+  privacy_notice: "Privacy Policy",
+  contractor_terms: "Independent Contractor Agreement",
+  platform_terms: "Platform Terms of Use",
+};
+/** Public page for each document. */
+export const LEGAL_KIND_PATH: Record<LegalKind, string> = { privacy_notice: "/privacy", contractor_terms: "/contractor-agreement", platform_terms: "/terms" };
+/** What the contractor ticks for each document (the Terms require this exact wording). */
+export const LEGAL_KIND_ACCEPT: Record<LegalKind, string> = {
+  privacy_notice: "I've read the RGXM Crew Privacy Policy",
+  contractor_terms: "I accept the RGXM Independent Contractor Agreement",
+  platform_terms: "I agree to the Platform Terms of Use",
+};
+
+/** Who the contractor agreement is with: the person themselves, or a business they're authorized to bind. */
+export type ContractingParty = { actingFor: "self"; legalName: string } | { actingFor: "business"; businessName: string; representative: string };
+
+export function normalizeParty(raw: { actingFor?: unknown; legalName?: unknown; businessName?: unknown; representative?: unknown }): ContractingParty {
+  const str = (v: unknown) => (typeof v === "string" ? v.trim() : "");
+  if (raw.actingFor === "business") {
+    const businessName = str(raw.businessName);
+    const representative = str(raw.representative);
+    if (businessName.length < 2) throw new OnboardingError("Enter the business's legal name.");
+    if (representative.length < 2) throw new OnboardingError("Enter your full name as the person authorized to accept for the business.");
+    return { actingFor: "business", businessName: businessName.slice(0, 160), representative: representative.slice(0, 160) };
+  }
+  const legalName = str(raw.legalName);
+  if (legalName.length < 2) throw new OnboardingError("Enter your full legal name for the agreement.");
+  return { actingFor: "self", legalName: legalName.slice(0, 160) };
+}
 
 // ─── Legal documents ─────────────────────────────────────────────────────────────
 
 export async function currentDocuments() {
   const rows = await db.select().from(legalDocuments).where(eq(legalDocuments.status, "approved"));
-  return { privacy_notice: rows.find((r) => r.kind === "privacy_notice") ?? null, contractor_terms: rows.find((r) => r.kind === "contractor_terms") ?? null };
+  const find = (k: LegalKind) => rows.find((r) => r.kind === k) ?? null;
+  return { privacy_notice: find("privacy_notice"), contractor_terms: find("contractor_terms"), platform_terms: find("platform_terms") };
 }
 
 export async function listDocuments() {
@@ -39,7 +70,7 @@ export async function listDocuments() {
 }
 
 const draftSchema = z.object({
-  kind: z.enum(["privacy_notice", "contractor_terms"]),
+  kind: z.enum(["privacy_notice", "contractor_terms", "platform_terms"]),
   version: z.string().trim().regex(/^[0-9A-Za-z.\-]{1,20}$/, "Use a short version like 1.0 or 2026-11"),
   title: z.string().trim().min(3).max(120),
   body: z.string().trim().min(50, "Paste the full approved text").max(100_000),
@@ -91,24 +122,42 @@ export async function deleteDraftDocument(actorId: string, documentId: string) {
 /** Which current documents the contractor still needs to acknowledge/accept. */
 export async function pendingAcceptances(staffId: string) {
   const docs = await currentDocuments();
-  const current = [docs.privacy_notice, docs.contractor_terms].filter((d): d is NonNullable<typeof d> => Boolean(d));
+  const current = LEGAL_KINDS.map((k) => docs[k]).filter((d): d is NonNullable<typeof d> => Boolean(d));
   if (!current.length) return [];
   const accepted = await db.select({ documentId: staffAcceptances.documentId }).from(staffAcceptances).where(and(eq(staffAcceptances.staffId, staffId), inArray(staffAcceptances.documentId, current.map((d) => d.id))));
   return current.filter((d) => !accepted.some((a) => a.documentId === d.id));
 }
 
 /** Records acceptance of the given current documents (each document id must be the live version). */
-export async function acceptDocuments(user: { userId: string; staffId: string }, documentIds: string[], method: "portal_onboarding" | "portal_update") {
+export async function acceptDocuments(user: { userId: string; staffId: string }, documentIds: string[], method: "portal_onboarding" | "portal_update", party?: ContractingParty) {
   if (!documentIds.length) return;
   await db.transaction(async (tx) => {
     const docs = await tx.select().from(legalDocuments).where(and(inArray(legalDocuments.id, documentIds), eq(legalDocuments.status, "approved")));
     if (docs.length !== new Set(documentIds).size) throw new OnboardingError("A newer version was just published. Please review it and try again.");
+    // The contractor agreement records who it is with (the person, or a business and its representative).
+    if (docs.some((d) => d.kind === "contractor_terms") && !party) throw new OnboardingError("Tell us who is entering the contractor agreement.");
+    const partyFields = (kind: string) =>
+      kind !== "contractor_terms" || !party
+        ? {}
+        : party.actingFor === "self"
+          ? { actingFor: "self", contractingParty: party.legalName, authorizedRepresentative: null }
+          : { actingFor: "business", contractingParty: party.businessName, authorizedRepresentative: party.representative };
     await tx
       .insert(staffAcceptances)
-      .values(docs.map((d) => ({ staffId: user.staffId, documentId: d.id, kind: d.kind, version: d.version, userId: user.userId, method })))
+      .values(docs.map((d) => ({ staffId: user.staffId, documentId: d.id, kind: d.kind, version: d.version, userId: user.userId, method, ...partyFields(d.kind) })))
       .onConflictDoNothing();
     await recordAudit({ actorId: user.userId, action: "legal.accept", entityType: "staff", entityId: user.staffId, after: docs.map((d) => ({ kind: d.kind, version: d.version })) }, tx);
   });
+}
+
+/** One accepted document exactly as it was presented, with the acceptance record (the contractor's own copy). */
+export async function acceptedCopy(staffId: string, acceptanceId: string) {
+  const [row] = await db
+    .select({ a: staffAcceptances, d: legalDocuments })
+    .from(staffAcceptances)
+    .innerJoin(legalDocuments, eq(legalDocuments.id, staffAcceptances.documentId))
+    .where(and(eq(staffAcceptances.id, acceptanceId), eq(staffAcceptances.staffId, staffId)));
+  return row ?? null;
 }
 
 export async function acceptanceHistory(staffId: string) {
@@ -246,7 +295,7 @@ export async function bookingBlockers(tx: Tx | typeof db, staffId: string): Prom
   const docs = await tx.select({ id: legalDocuments.id, kind: legalDocuments.kind }).from(legalDocuments).where(eq(legalDocuments.status, "approved"));
   if (docs.length) {
     const accepted = await tx.select({ documentId: staffAcceptances.documentId }).from(staffAcceptances).where(and(eq(staffAcceptances.staffId, staffId), inArray(staffAcceptances.documentId, docs.map((d) => d.id))));
-    for (const d of docs) if (!accepted.some((a) => a.documentId === d.id)) blockers.push(`they haven't accepted the current ${LEGAL_KIND_LABEL[d.kind as LegalKind].toLowerCase()}`);
+    for (const d of docs) if (!accepted.some((a) => a.documentId === d.id)) blockers.push(`they haven't accepted the current ${LEGAL_KIND_LABEL[d.kind as LegalKind]}`);
   }
   return blockers;
 }

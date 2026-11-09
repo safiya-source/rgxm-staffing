@@ -42,7 +42,8 @@ const oneOf = (col: string, values: readonly string[]) => sql.raw(`${col} in (${
 
 // ───────────────────────────── Onboarding & consent ─────────────────────────────
 
-export const LEGAL_DOCUMENT_KINDS = ["privacy_notice", "contractor_terms"] as const;
+// contractor_terms = the Independent Contractor Agreement; platform_terms = the Platform Terms of Use.
+export const LEGAL_DOCUMENT_KINDS = ["privacy_notice", "contractor_terms", "platform_terms"] as const;
 export const LEGAL_DOCUMENT_STATUSES = ["draft", "approved", "retired"] as const;
 
 /** Versioned privacy notice and contractor agreement / platform terms. Approved versions are frozen. */
@@ -88,6 +89,11 @@ export const staffAcceptances = pgTable(
     userId: userRef(),
     // portal_onboarding | portal_update | recorded_by_rgxm
     method: text().notNull(),
+    // Contractor agreement only: who the contracting party is (the person, or a business they
+    // represent) and the person accepting on the business's behalf.
+    actingFor: text(),
+    contractingParty: text(),
+    authorizedRepresentative: text(),
     recordedBy: userRef(),
   },
   (t) => [uniqueIndex("staff_acceptances_uq").on(t.staffId, t.documentId), index("staff_acceptances_staff_idx").on(t.staffId)],

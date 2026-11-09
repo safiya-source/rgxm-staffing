@@ -42,7 +42,21 @@ export default async function ProfilePage() {
             Ask RGXM to correct or delete my information
           </Link>
           <Link href="/privacy" className="text-muted-foreground hover:text-foreground">
-            Privacy notice
+            Privacy Policy
+          </Link>
+        </section>
+        <section aria-labelledby="my-agreements" className="grid gap-2">
+          <h2 id="my-agreements" className="font-medium">
+            Agreements
+          </h2>
+          <Link href="/portal/agreements" className="text-muted-foreground hover:text-foreground">
+            My agreements (accepted copies)
+          </Link>
+          <Link href="/contractor-agreement" className="text-muted-foreground hover:text-foreground">
+            Independent Contractor Agreement
+          </Link>
+          <Link href="/terms" className="text-muted-foreground hover:text-foreground">
+            Platform Terms of Use
           </Link>
         </section>
         <SignOutButton />

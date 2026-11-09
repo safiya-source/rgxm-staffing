@@ -44,6 +44,7 @@ import { buildExport, type ExportFormat, type ExportRow } from "./payment-export
 import {
   basePayCents,
   batchTypeFor,
+  dueDateFor,
   canMoveBatch,
   canMovePayable,
   payPeriodFor,
@@ -534,12 +535,6 @@ export async function approveBatch(actorId: string, batchId: string) {
 
 // ─── Bills ──────────────────────────────────────────────────────────────────────
 
-function addDays(date: string, days: number) {
-  const d = new Date(`${date}T12:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + days);
-  return d.toISOString().slice(0, 10);
-}
-
 export function torontoToday(now = new Date()) {
   return utcToZoned(now, "America/Toronto").date;
 }
@@ -548,7 +543,9 @@ export function torontoToday(now = new Date()) {
 export async function approvedPaymentTerms(tx: Tx | typeof db) {
   const [s] = await tx.select({ terms: orgSettings.paymentTerms }).from(orgSettings).where(eq(orgSettings.id, 1));
   const t = s?.terms ?? {};
-  return t.approvedAt && t.dueDaysAfterBillDate != null ? t : null;
+  if (!t.approvedAt) return null;
+  if ((t.dueRule ?? "days_after_bill") === "days_after_bill" && t.dueDaysAfterBillDate == null) return null;
+  return t;
 }
 
 async function ensureSupplier(tx: Tx, staffId: string) {
@@ -567,20 +564,21 @@ async function ensureSupplier(tx: Tx, staffId: string) {
 /** Finalizes one bill per contractor for the batch's lines that aren't billed yet. */
 async function finalizeBills(tx: Tx, b: Batch, actorId: string) {
   const lines = await tx
-    .select({ id: payableItems.id, staffId: payableItems.staffId, baseCents: payableItems.baseCents, taxCents: payableItems.taxCents, totalCents: payableItems.totalCents })
+    .select({ id: payableItems.id, staffId: payableItems.staffId, serviceDate: payableItems.serviceDate, baseCents: payableItems.baseCents, taxCents: payableItems.taxCents, totalCents: payableItems.totalCents })
     .from(paymentBatchItems)
     .innerJoin(payableItems, eq(payableItems.id, paymentBatchItems.payableItemId))
     .where(and(eq(paymentBatchItems.batchId, b.id), eq(paymentBatchItems.active, true), isNull(payableItems.billId)));
   if (!lines.length) return [];
   const terms = await approvedPaymentTerms(tx);
   const billDate = torontoToday();
-  const dueDate = terms ? addDays(billDate, terms.dueDaysAfterBillDate!) : billDate;
   const byStaff = new Map<string, typeof lines>();
   for (const l of lines) byStaff.set(l.staffId, [...(byStaff.get(l.staffId) ?? []), l]);
   const created: string[] = [];
   for (const [staffId, ls] of byStaff) {
     const supplier = await ensureSupplier(tx, staffId);
     const [{ n }] = (await tx.execute<{ n: string }>(sql`select nextval('bill_number_seq')::text as n`)).rows as [{ n: string }];
+    const earliest = ls.map((l) => l.serviceDate).sort()[0]!;
+    const dueDate = terms ? dueDateFor(terms.dueRule ?? "days_after_bill", { billDate, earliestServiceDate: earliest, days: terms.dueDaysAfterBillDate }) : billDate;
     const subtotal = ls.reduce((s, l) => s + l.baseCents, 0);
     const tax = ls.reduce((s, l) => s + l.taxCents, 0);
     const [bill] = await tx
@@ -592,7 +590,7 @@ async function finalizeBills(tx: Tx, b: Batch, actorId: string) {
         kind: subtotal + tax >= 0 ? "bill" : "credit",
         billDate,
         dueDate,
-        termsSnapshot: terms ? { approved: true, dueDaysAfterBillDate: terms.dueDaysAfterBillDate, description: terms.description ?? null, approvalReference: terms.approvalReference ?? null } : { approved: false, note: "No RGXM-approved payment terms; due date set to the bill date." },
+        termsSnapshot: terms ? { approved: true, dueRule: terms.dueRule ?? "days_after_bill", dueDaysAfterBillDate: terms.dueDaysAfterBillDate ?? null, description: terms.description ?? null, approvalReference: terms.approvalReference ?? null } : { approved: false, note: "No RGXM-approved payment terms; due date set to the bill date." },
         currency: b.currency,
         subtotalCents: subtotal,
         taxCents: tax,

@@ -30,14 +30,14 @@ export default async function CompliancePage() {
   await requireInternal("legal.manage");
   const [settings, documents, purposes] = await Promise.all([getOrgSettings(), listDocuments(), listConsentPurposes()]);
   const terms = settings.paymentTerms ?? {};
-  const kinds: LegalKind[] = ["privacy_notice", "contractor_terms"];
+  const kinds: LegalKind[] = ["privacy_notice", "contractor_terms", "platform_terms"];
 
   return (
     <div className="grid max-w-4xl gap-6">
       <Card>
         <CardHeader>
-          <CardTitle>Privacy Officer</CardTitle>
-          <CardDescription>Shown on the privacy notice and in the staff portal so contractors know who to contact about their information.</CardDescription>
+          <CardTitle>Privacy Officer and contacts</CardTitle>
+          <CardDescription>Shown on the Privacy Policy, Terms and Contractor Agreement pages and in the staff portal.</CardDescription>
         </CardHeader>
         <CardContent>
           <ActionForm action={savePrivacyOfficerAction} submitLabel="Save contact" keep>
@@ -50,6 +50,15 @@ export default async function CompliancePage() {
               </Field>
               <Field label="Phone (optional)" htmlFor="po-phone">
                 <Input id="po-phone" name="phone" defaultValue={settings.privacyOfficerPhone ?? ""} />
+              </Field>
+              <Field label="Mailing address" htmlFor="po-address" className="sm:col-span-3">
+                <Input id="po-address" name="address" defaultValue={settings.privacyOfficerAddress ?? ""} />
+              </Field>
+              <Field label="Platform support and account closure email" htmlFor="po-support">
+                <Input id="po-support" name="supportEmail" type="email" defaultValue={settings.supportEmail ?? ""} />
+              </Field>
+              <Field label="Finance and payments email" htmlFor="po-finance">
+                <Input id="po-finance" name="financeEmail" type="email" defaultValue={settings.financeEmail ?? ""} />
               </Field>
             </div>
           </ActionForm>
@@ -225,10 +234,16 @@ export default async function CompliancePage() {
           </p>
           <ActionForm action={savePaymentTermsAction} submitLabel="Save terms" keep>
             <div className="grid w-full gap-4 sm:grid-cols-2">
+              <Field label="How due dates are set" htmlFor="pt-rule" className="sm:col-span-2">
+                <NativeSelect id="pt-rule" name="dueRule" defaultValue={terms.dueRule ?? "days_after_bill"}>
+                  <option value="semi_monthly_agreement">Contractor Agreement §4: work on the 1st–15th due by month end; 16th–end due by the 15th of next month</option>
+                  <option value="days_after_bill">A number of days after the bill date</option>
+                </NativeSelect>
+              </Field>
               <Field label="Cutoff: days after the pay period ends" htmlFor="pt-cutoff" hint="Hours approved after this go into the next pay run.">
                 <Input id="pt-cutoff" name="cutoffDaysAfterPeriodEnd" inputMode="numeric" defaultValue={terms.cutoffDaysAfterPeriodEnd ?? ""} />
               </Field>
-              <Field label="Bills are due this many days after the bill date" htmlFor="pt-due">
+              <Field label="Bills are due this many days after the bill date (only for that rule)" htmlFor="pt-due">
                 <Input id="pt-due" name="dueDaysAfterBillDate" inputMode="numeric" defaultValue={terms.dueDaysAfterBillDate ?? ""} />
               </Field>
               <Field label="Description for contractors" htmlFor="pt-desc" className="sm:col-span-2">
@@ -274,6 +289,7 @@ function DocumentForm({ doc }: { doc?: { id: string; kind: string; version: stri
           <NativeSelect id={`doc-kind-${p}`} name="kind" defaultValue={doc?.kind ?? "privacy_notice"}>
             <option value="privacy_notice">{LEGAL_KIND_LABEL.privacy_notice}</option>
             <option value="contractor_terms">{LEGAL_KIND_LABEL.contractor_terms}</option>
+            <option value="platform_terms">{LEGAL_KIND_LABEL.platform_terms}</option>
           </NativeSelect>
         </Field>
         <Field label="Version" htmlFor={`doc-version-${p}`}>

@@ -129,6 +129,15 @@ export default async function Page() {
       <Card className="grid gap-2 p-4">
         <p className="text-sm font-medium">Something wrong with a payment?</p>
         <PayReviewRequest payableId={null} label="Ask RGXM Finance to review it" kind="other" showKinds />
+        {settings.financeEmail ? (
+          <p className="text-[13px] text-muted-foreground">
+            You can also email{" "}
+            <a href={`mailto:${settings.financeEmail}`} className="underline underline-offset-2">
+              {settings.financeEmail}
+            </a>
+            . Never include your SIN or banking details in an email.
+          </p>
+        ) : null}
       </Card>
     </div>
   );

@@ -138,3 +138,28 @@ export function centsToDecimal(cents: number) {
 export function minutesToDecimalHours(minutes: number) {
   return (Math.round((minutes / 60) * 100) / 100).toFixed(2);
 }
+
+// ─── Payment due dates ──────────────────────────────────────────────────────────
+
+export type DueRule = "days_after_bill" | "semi_monthly_agreement";
+
+/**
+ * Due date for a bill under RGXM-approved terms.
+ *  - days_after_bill: bill date + N days.
+ *  - semi_monthly_agreement (Independent Contractor Agreement §4): work in the 1st–15th is due by the
+ *    last day of that month; work in the 16th–last day is due by the 15th of the following month.
+ *    A bill covering several periods takes the earliest due date.
+ */
+export function dueDateFor(rule: DueRule, input: { billDate: string; earliestServiceDate: string; days?: number | null }) {
+  if (rule === "days_after_bill") {
+    const d = new Date(`${input.billDate}T12:00:00Z`);
+    d.setUTCDate(d.getUTCDate() + (input.days ?? 0));
+    return d.toISOString().slice(0, 10);
+  }
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(input.earliestServiceDate);
+  if (!m) throw new Error(`Invalid date ${input.earliestServiceDate}`);
+  const [year, month, day] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  if (day <= 15) return `${year}-${pad(month)}-${pad(lastDayOfMonth(year, month))}`;
+  const [ny, nm] = month === 12 ? [year + 1, 1] : [year, month + 1];
+  return `${ny}-${pad(nm)}-15`;
+}

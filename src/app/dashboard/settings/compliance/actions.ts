@@ -34,15 +34,25 @@ const officerSchema = z.object({
   name: z.string().trim().max(120),
   email: z.union([z.literal(""), z.string().trim().email("Enter a valid email")]),
   phone: z.string().trim().max(40),
+  address: z.string().trim().max(200),
+  supportEmail: z.union([z.literal(""), z.string().trim().email("Enter a valid email")]),
+  financeEmail: z.union([z.literal(""), z.string().trim().email("Enter a valid email")]),
 });
 
 export async function savePrivacyOfficerAction(fd: FormData): Promise<ActionResult> {
   return runAction(async () => {
     const viewer = await authorizeInternal("legal.manage");
-    const v = officerSchema.parse({ name: str(fd, "name"), email: str(fd, "email"), phone: str(fd, "phone") });
-    await updateSettings(viewer.userId, "settings.privacy_officer", { privacyOfficerName: optional(v.name), privacyOfficerEmail: optional(v.email), privacyOfficerPhone: optional(v.phone) }, { hasName: Boolean(v.name), hasEmail: Boolean(v.email), hasPhone: Boolean(v.phone) });
+    const v = officerSchema.parse({ name: str(fd, "name"), email: str(fd, "email"), phone: str(fd, "phone"), address: str(fd, "address"), supportEmail: str(fd, "supportEmail"), financeEmail: str(fd, "financeEmail") });
+    await updateSettings(
+      viewer.userId,
+      "settings.privacy_officer",
+      { privacyOfficerName: optional(v.name), privacyOfficerEmail: optional(v.email), privacyOfficerPhone: optional(v.phone), privacyOfficerAddress: optional(v.address), supportEmail: optional(v.supportEmail), financeEmail: optional(v.financeEmail) },
+      { hasName: Boolean(v.name), hasEmail: Boolean(v.email), hasPhone: Boolean(v.phone), hasAddress: Boolean(v.address), hasSupportEmail: Boolean(v.supportEmail), hasFinanceEmail: Boolean(v.financeEmail) },
+    );
     revalidatePath("/privacy");
-    return { ok: true, message: "Privacy Officer contact saved." };
+    revalidatePath("/terms");
+    revalidatePath("/contractor-agreement");
+    return { ok: true, message: "Contacts saved." };
   });
 }
 
@@ -117,11 +127,12 @@ export async function savePaymentTermsAction(fd: FormData): Promise<ActionResult
   return runAction(async () => {
     const viewer = await authorizeInternal("legal.manage");
     const v = z
-      .object({ cutoffDaysAfterPeriodEnd: intOrNull, dueDaysAfterBillDate: intOrNull, description: z.string().trim().max(500), approvalReference: z.string().trim().max(300) })
-      .parse({ cutoffDaysAfterPeriodEnd: str(fd, "cutoffDaysAfterPeriodEnd"), dueDaysAfterBillDate: str(fd, "dueDaysAfterBillDate"), description: str(fd, "description"), approvalReference: str(fd, "approvalReference") });
-    const approved = v.approvalReference.length >= 5 && v.dueDaysAfterBillDate != null;
-    if (v.approvalReference && !approved) throw new UserFacingError("To approve terms, enter the due days and a reference of at least a few words.");
+      .object({ dueRule: z.enum(["days_after_bill", "semi_monthly_agreement"]).default("days_after_bill"), cutoffDaysAfterPeriodEnd: intOrNull, dueDaysAfterBillDate: intOrNull, description: z.string().trim().max(500), approvalReference: z.string().trim().max(300) })
+      .parse({ dueRule: str(fd, "dueRule") || undefined, cutoffDaysAfterPeriodEnd: str(fd, "cutoffDaysAfterPeriodEnd"), dueDaysAfterBillDate: str(fd, "dueDaysAfterBillDate"), description: str(fd, "description"), approvalReference: str(fd, "approvalReference") });
+    const approved = v.approvalReference.length >= 5 && (v.dueRule === "semi_monthly_agreement" || v.dueDaysAfterBillDate != null);
+    if (v.approvalReference && !approved) throw new UserFacingError("To approve terms, choose a due-date rule (and the days, if using days after the bill date) and a reference of at least a few words.");
     const terms = {
+      dueRule: v.dueRule,
       cutoffDaysAfterPeriodEnd: v.cutoffDaysAfterPeriodEnd,
       dueDaysAfterBillDate: v.dueDaysAfterBillDate,
       description: optional(v.description),
@@ -129,7 +140,7 @@ export async function savePaymentTermsAction(fd: FormData): Promise<ActionResult
       approvedBy: approved ? viewer.userId : null,
       approvedAt: approved ? new Date().toISOString() : null,
     };
-    await updateSettings(viewer.userId, "settings.payment_terms", { paymentTerms: terms }, { cutoffDaysAfterPeriodEnd: terms.cutoffDaysAfterPeriodEnd, dueDaysAfterBillDate: terms.dueDaysAfterBillDate, approved }, terms.approvalReference);
+    await updateSettings(viewer.userId, "settings.payment_terms", { paymentTerms: terms }, { dueRule: terms.dueRule, cutoffDaysAfterPeriodEnd: terms.cutoffDaysAfterPeriodEnd, dueDaysAfterBillDate: terms.dueDaysAfterBillDate, approved }, terms.approvalReference);
     return { ok: true, message: approved ? "Payment terms approved. New bills will use them." : "Saved as not approved. Bills keep showing \"terms not approved\"." };
   });
 }

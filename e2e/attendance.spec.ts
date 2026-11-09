@@ -99,6 +99,8 @@ test("check-in/out → submit hours → Team Lead verifies → PM approves", asy
   // 2. Jordan reviews hours on the shift page: adds a break and submits.
   await ba.goto(`/portal/shifts/${baBooking}`);
   await expect(ba.getByLabel("Started")).not.toHaveValue("");
+  // Let the form finish hydrating before typing, or React can reset the field.
+  await ba.waitForLoadState("networkidle");
   // Submitting the times exactly as recorded needs no reason; here Jordan arrived on time but checked in late.
   const scheduledStart = (await pool.query("select to_char(starts_at at time zone 'America/Toronto', 'HH24:MI') t from bookings where id = $1", [baBooking])).rows[0].t as string;
   const checkout = await ba.getByLabel("Finished").inputValue();

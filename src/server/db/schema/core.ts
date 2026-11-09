@@ -97,6 +97,10 @@ export const orgSettings = pgTable("org_settings", {
   privacyOfficerName: text(),
   privacyOfficerEmail: text(),
   privacyOfficerPhone: text(),
+  privacyOfficerAddress: text(),
+  // Contacts shown to contractors: platform support / account closure, and finance / payments.
+  supportEmail: text(),
+  financeEmail: text(),
   // All RGXM staff accounts (not only Admin/Finance) must enrol in two-step verification.
   requireMfaForStaff: boolean().notNull().default(true),
   // Contractors need a recorded contractor-process approval before a booking can be confirmed.
@@ -110,7 +114,7 @@ export const orgSettings = pgTable("org_settings", {
   taxRecoverability: jsonb().$type<Record<string, "recoverable" | "non_recoverable" | "unconfirmed">>().notNull().default({}),
   // RGXM-approved payment terms; due dates and cutoffs are only shown as "approved" once set.
   paymentTerms: jsonb()
-    .$type<{ cutoffDaysAfterPeriodEnd?: number | null; dueDaysAfterBillDate?: number | null; description?: string | null; approvedBy?: string | null; approvedAt?: string | null; approvalReference?: string | null }>()
+    .$type<{ dueRule?: "days_after_bill" | "semi_monthly_agreement"; cutoffDaysAfterPeriodEnd?: number | null; dueDaysAfterBillDate?: number | null; description?: string | null; approvedBy?: string | null; approvedAt?: string | null; approvalReference?: string | null }>()
     .notNull()
     .default({}),
   // Accounting export configuration (accounts, tax codes, currency); validated with RGXM's system.

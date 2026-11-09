@@ -3,7 +3,7 @@ import Link from "next/link";
 import { Logo } from "@/components/app/logo";
 import { BottomNav } from "@/components/portal/bottom-nav";
 import { RegisterServiceWorker } from "@/components/portal/register-sw";
-import { pendingAcceptances } from "@/server/domain/onboarding";
+import { pendingAcceptances, LEGAL_KIND_LABEL, type LegalKind } from "@/server/domain/onboarding";
 import { getNotificationSummary } from "@/server/queries/notifications";
 import { requireStaff } from "@/server/session";
 
@@ -34,7 +34,7 @@ export default async function PortalLayout({ children }: LayoutProps<"/portal">)
       <main className="mx-auto max-w-lg px-4 pt-5">
         {pending.length ? (
           <Link href="/portal/agreements" className="mb-4 block rounded-lg border border-warning/40 bg-warning-soft px-3 py-2.5 text-sm text-warning">
-            RGXM updated its {pending.map((d) => (d.kind === "privacy_notice" ? "privacy notice" : "contractor terms")).join(" and ")}. Please review →
+            Please review and accept: {pending.map((d) => LEGAL_KIND_LABEL[d.kind as LegalKind]).join(", ")} →
           </Link>
         ) : null}
         {children}

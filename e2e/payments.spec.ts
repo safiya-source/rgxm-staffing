@@ -152,5 +152,5 @@ test("finance sees the T4A summary and the talent tax details", async ({ page })
   await page.goto("/dashboard/talent?q=Jordan%20Lee");
   await page.getByRole("link", { name: "Jordan Lee" }).click();
   await expect(page.getByRole("heading", { name: "Pay & tax details" })).toBeVisible();
-  await expect(page.getByText("Independent contractor")).toBeVisible();
+  await expect(page.getByText("Independent contractor").first()).toBeVisible();
 });

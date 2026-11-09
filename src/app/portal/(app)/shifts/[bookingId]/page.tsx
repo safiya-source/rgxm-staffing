@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { formatMoney } from "@/lib/format";
 import { FIELD_ROLE_NAMES, type FieldRole } from "@/lib/roles";
+import { AssignmentTerms } from "@/components/portal/assignment-terms";
 import { getBookingForStaff } from "@/server/domain/bookings";
 import { listStaffAnnouncements, listStaffDocuments } from "@/server/domain/comms";
 import { requireStaff } from "@/server/session";
@@ -87,7 +88,13 @@ export default async function ShiftPage({ params }: PageProps<"/portal/shifts/[b
               <dt className="text-xs text-muted-foreground">Agreed rate</dt>
               <dd>{formatMoney(b.agreedRateCents, b.currency)}/hour</dd>
             </div>
+          ) : b.offeredRateCents != null ? (
+            <div>
+              <dt className="text-xs text-muted-foreground">Offered rate</dt>
+              <dd>{formatMoney(b.offeredRateCents, b.currency)}/hour</dd>
+            </div>
           ) : null}
+          <AssignmentTerms projectId={b.projectId} currency={b.currency} />
         </dl>
       </Card>
 

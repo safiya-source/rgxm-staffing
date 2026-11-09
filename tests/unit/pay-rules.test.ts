@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildExport, type ExportRow } from "@/server/domain/payment-exports";
-import { basePayCents, batchTypeFor, canMoveBatch, canMovePayable, centsToDecimal, esaHints, hstCents, minutesToDecimalHours, payPeriodFor } from "@/server/domain/pay-rules";
+import { basePayCents, batchTypeFor, dueDateFor, canMoveBatch, canMovePayable, centsToDecimal, esaHints, hstCents, minutesToDecimalHours, payPeriodFor } from "@/server/domain/pay-rules";
 
 describe("base pay", () => {
   it("is minutes × rate, rounded half up to the cent", () => {
@@ -59,6 +59,16 @@ describe("classification and state machines", () => {
     expect(centsToDecimal(5)).toBe("0.05");
     expect(minutesToDecimalHours(435)).toBe("7.25");
     expect(minutesToDecimalHours(437)).toBe("7.28");
+  });
+});
+
+describe("payment due dates", () => {
+  it("follow the contractor agreement: 1st–15th due by month end, 16th–end due by the 15th of next month", () => {
+    expect(dueDateFor("semi_monthly_agreement", { billDate: "2026-11-20", earliestServiceDate: "2026-11-03" })).toBe("2026-11-30");
+    expect(dueDateFor("semi_monthly_agreement", { billDate: "2026-12-02", earliestServiceDate: "2026-11-16" })).toBe("2026-12-15");
+    expect(dueDateFor("semi_monthly_agreement", { billDate: "2027-01-03", earliestServiceDate: "2026-12-31" })).toBe("2027-01-15");
+    expect(dueDateFor("semi_monthly_agreement", { billDate: "2028-02-10", earliestServiceDate: "2028-02-15" })).toBe("2028-02-29");
+    expect(dueDateFor("days_after_bill", { billDate: "2026-11-20", earliestServiceDate: "2026-11-03", days: 14 })).toBe("2026-12-04");
   });
 });
 

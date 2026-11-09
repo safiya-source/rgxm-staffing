@@ -32,6 +32,25 @@ someone at RGXM enters and approves, with a reference to the approval.
 | Optional consent choices | Only purposes approved by a lawyer and active are offered. One is seeded, inactive: "News and announcements from RGXM" (`marketing_email`). | **Waiting on lawyer** to approve the wording |
 | Status evidence (e.g. WSIB) | Optional records: WSIB clearance, "coverage not required" confirmation, independent operator, business registration, insurance, other. Nothing requires them, and there is no blanket construction-clearance rule. | Built |
 
+### RGXM's documents (added November 9, 2026)
+
+- **Where the text lives:** `docs/legal/` holds the source text of the Privacy Policy (effective Nov 9, 2026),
+  the Independent Contractor Agreement v1.0.0 and the Platform Terms of Use v1.0.0. Migration 0013 loads them
+  into Crew as drafts for an administrator to approve.
+- **Public pages:** they appear at `/privacy`, `/contractor-agreement` and `/terms`. Each page links to the
+  others, lists the contacts and has a print/save button. The pages are also linked from sign-in and the
+  portal profile.
+- **Separate acceptances:** a contractor ticks each document separately. The wording follows the documents,
+  for example "I agree to the Platform Terms of Use".
+- **Contracting party:** for the Contractor Agreement, Crew records who it is with: the person, or a business
+  plus the authorized representative accepting for it.
+- **Contractor copies:** contractors keep a copy under *My profile → My agreements*: the exact version
+  accepted, plus the acceptance record (contracting party, representative, version, date, record ID).
+- **Shift pages:** each shift page shows the payment terms and the project's approved allowances, and links
+  to the Contractor Agreement (§2 of the agreement).
+- **Due dates:** they can follow the agreement's schedule. Work on the 1st–15th is due by month end; work on
+  the 16th–end is due by the 15th of the next month.
+
 ## 2. Project-specific compensation
 
 Each project has its own switches for meal allowances, per diems, mileage and bonuses (Project → Setup).

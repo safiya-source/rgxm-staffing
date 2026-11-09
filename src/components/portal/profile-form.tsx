@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { saveStaffProfile } from "@/app/portal/actions";
 import { Field, FormMessage } from "@/components/app/form";
 import { Button } from "@/components/ui/button";
+import { ContractingPartyFields } from "@/components/portal/contracting-party-fields";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -27,6 +28,8 @@ export type ProfileDefaults = {
 export type OnboardingAgreements = {
   privacy: { title: string; version: string } | null;
   terms: { title: string; version: string } | null;
+  platform: { title: string; version: string } | null;
+  party: { legalName: string; businessName: string };
   consents: { key: string; label: string; description: string }[];
 };
 
@@ -88,28 +91,43 @@ export function ProfileForm({ mode, defaults, agreements }: { mode: "onboarding"
             <div className="flex items-start gap-3">
               <Checkbox id="consent" name="consent" className="mt-0.5" />
               <Label htmlFor="consent" className="leading-snug font-normal">
-                I&apos;ve read the{" "}
+                {agreements?.privacy ? "I've read the " : "I've read the "}
                 <Link href="/privacy" target="_blank" className="underline underline-offset-2">
-                  privacy notice{agreements?.privacy ? ` (version ${agreements.privacy.version})` : ""}
+                  {agreements?.privacy ? `RGXM Crew Privacy Policy (version ${agreements.privacy.version})` : "privacy notice"}
                 </Link>{" "}
                 and understand how RGXM uses my information to offer and manage event work.
               </Label>
             </div>
             {errors?.consent ? <p className="text-[13px] text-destructive">Please confirm to continue.</p> : null}
           </div>
-          {agreements?.terms ? (
+          {agreements?.platform ? (
             <div className="grid gap-2">
+              <div className="flex items-start gap-3">
+                <Checkbox id="platformAccept" name="platformAccept" className="mt-0.5" />
+                <Label htmlFor="platformAccept" className="leading-snug font-normal">
+                  I agree to the{" "}
+                  <Link href="/terms" target="_blank" className="underline underline-offset-2">
+                    Platform Terms of Use (version {agreements.platform.version})
+                  </Link>
+                </Label>
+              </div>
+              {errors?.platformAccept ? <p className="text-[13px] text-destructive">Please agree to the Platform Terms of Use to continue.</p> : null}
+            </div>
+          ) : null}
+          {agreements?.terms ? (
+            <div className="grid gap-3">
+              <ContractingPartyFields defaults={agreements.party} />
               <div className="flex items-start gap-3">
                 <Checkbox id="termsAccept" name="termsAccept" className="mt-0.5" />
                 <Label htmlFor="termsAccept" className="leading-snug font-normal">
                   I accept the{" "}
-                  <Link href="/portal/terms" target="_blank" className="underline underline-offset-2">
-                    {agreements.terms.title} (version {agreements.terms.version})
+                  <Link href="/contractor-agreement" target="_blank" className="underline underline-offset-2">
+                    RGXM Independent Contractor Agreement (version {agreements.terms.version})
                   </Link>
-                  .
                 </Label>
               </div>
-              {errors?.termsAccept ? <p className="text-[13px] text-destructive">Please accept the terms to continue.</p> : null}
+              {errors?.termsAccept ? <p className="text-[13px] text-destructive">{errors.termsAccept[0] === "Required" ? "Please accept the Independent Contractor Agreement to continue." : errors.termsAccept[0]}</p> : null}
+              <p className="text-[13px] text-muted-foreground">You can print or save a copy of each document from its page, and later from My profile → My agreements.</p>
             </div>
           ) : null}
           {agreements?.consents.length ? (

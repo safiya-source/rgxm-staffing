@@ -53,10 +53,21 @@ export async function saveStaffProfile(_prev: ActionResult, formData: FormData):
     // Current approved documents come from the database, never from the form.
     const docs = mode === "onboarding" ? await onboarding.currentDocuments() : null;
     if (mode === "onboarding" && formData.get("consent") !== "on") {
-      return { ok: false, error: "Please confirm you've read the privacy notice.", fieldErrors: { consent: ["Required"] } };
+      return { ok: false, error: "Please confirm you've read the Privacy Policy.", fieldErrors: { consent: ["Required"] } };
+    }
+    if (docs?.platform_terms && formData.get("platformAccept") !== "on") {
+      return { ok: false, error: "Please agree to the Platform Terms of Use.", fieldErrors: { platformAccept: ["Required"] } };
     }
     if (docs?.contractor_terms && formData.get("termsAccept") !== "on") {
-      return { ok: false, error: "Please accept the contractor agreement and platform terms.", fieldErrors: { termsAccept: ["Required"] } };
+      return { ok: false, error: "Please accept the Independent Contractor Agreement.", fieldErrors: { termsAccept: ["Required"] } };
+    }
+    let party: onboarding.ContractingParty | undefined;
+    if (docs?.contractor_terms) {
+      try {
+        party = onboarding.normalizeParty({ actingFor: formData.get("actingFor"), legalName: formData.get("partyLegalName"), businessName: formData.get("partyBusinessName"), representative: formData.get("partyRepresentative") });
+      } catch (err) {
+        return { ok: false, error: (err as Error).message, fieldErrors: { termsAccept: [(err as Error).message] } };
+      }
     }
     const input = profileSchema.parse({
       firstName: formData.get("firstName"),
@@ -102,8 +113,8 @@ export async function saveStaffProfile(_prev: ActionResult, formData: FormData):
     if (docs && savedStaffId) {
       const me = { userId: viewer.userId, staffId: savedStaffId };
       // Privacy acknowledgement and terms acceptance are recorded separately, against the live versions.
-      const ids = [docs.privacy_notice?.id, docs.contractor_terms?.id].filter((x): x is string => Boolean(x));
-      if (ids.length) await onboarding.acceptDocuments(me, ids, "portal_onboarding");
+      const ids = [docs.privacy_notice?.id, docs.platform_terms?.id, docs.contractor_terms?.id].filter((x): x is string => Boolean(x));
+      if (ids.length) await onboarding.acceptDocuments(me, ids, "portal_onboarding", party);
       const offered = await onboarding.offeredConsentPurposes();
       await onboarding.setConsents(me, Object.fromEntries(offered.map((p) => [p.key, formData.get(`consent_${p.key}`) === "on"])), "portal_onboarding");
     }
@@ -466,7 +477,10 @@ export async function acceptAgreementsAction(fd: FormData): Promise<ActionResult
     const missing = pending.filter((d) => fd.get(`accept_${d.id}`) !== "on");
     if (missing.length) throw new UserFacingError("Please tick each box to continue.");
     try {
-      await onboarding.acceptDocuments(me, pending.map((d) => d.id), "portal_update");
+      const party = pending.some((d) => d.kind === "contractor_terms")
+        ? onboarding.normalizeParty({ actingFor: fd.get("actingFor"), legalName: fd.get("partyLegalName"), businessName: fd.get("partyBusinessName"), representative: fd.get("partyRepresentative") })
+        : undefined;
+      await onboarding.acceptDocuments(me, pending.map((d) => d.id), "portal_update", party);
     } catch (err) {
       if (err instanceof onboarding.OnboardingError) throw new UserFacingError(err.message);
       throw err;

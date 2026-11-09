@@ -72,19 +72,27 @@ describe("contractor onboarding", () => {
     expect(await onboarding.bookingBlockers(db, who.staffId)).toEqual([]);
     await expect(onboarding.approveDocument(admin.id, termsId, "")).rejects.toThrow(/legal review/);
     await onboarding.approveDocument(admin.id, termsId, "Reviewed by counsel, email 2026-11-25");
-    expect(await onboarding.bookingBlockers(db, who.staffId)).toEqual(["they haven't accepted the current contractor agreement & platform terms"]);
+    expect(await onboarding.bookingBlockers(db, who.staffId)).toEqual(["they haven't accepted the current Independent Contractor Agreement"]);
     await expect(pool.query("update legal_documents set body = 'changed' where id = $1", [termsId])).rejects.toThrow(/frozen/);
-    await onboarding.acceptDocuments(who, [termsId], "portal_onboarding");
+    // The agreement records who it's with.
+    await expect(onboarding.acceptDocuments(who, [termsId], "portal_onboarding")).rejects.toThrow(/who is entering/);
+    expect(() => onboarding.normalizeParty({ actingFor: "business", businessName: "Ola Events Inc.", representative: "" })).toThrow(/authorized/);
+    await onboarding.acceptDocuments(who, [termsId], "portal_onboarding", onboarding.normalizeParty({ actingFor: "business", businessName: "Ola Events Inc.", representative: "Ola Onboard" }));
     expect(await onboarding.bookingBlockers(db, who.staffId)).toEqual([]);
     const history = await onboarding.acceptanceHistory(who.staffId);
-    expect(history).toEqual([expect.objectContaining({ kind: "contractor_terms", version: "1.0", method: "portal_onboarding" })]);
+    expect(history).toEqual([expect.objectContaining({ kind: "contractor_terms", version: "1.0", method: "portal_onboarding", actingFor: "business", contractingParty: "Ola Events Inc.", authorizedRepresentative: "Ola Onboard" })]);
+    const copy = await onboarding.acceptedCopy(who.staffId, history[0]!.id);
+    expect(copy?.d.body).toBe(body.trim());
+    // Another contractor can't open this person's copy.
+    expect(await onboarding.acceptedCopy((await person()).staffId, history[0]!.id)).toBeNull();
+    await expect(pool.query("insert into staff_acceptances (staff_id, document_id, kind, version, method) values ($1, $2, 'contractor_terms', '1.0', 'portal_update')", [(await person()).staffId, termsId])).rejects.toThrow(/staff_acceptances_party/);
     await expect(pool.query("delete from staff_acceptances where staff_id = $1", [who.staffId])).rejects.toThrow(/append-only/);
 
     // A new version replaces the old one and must be accepted again.
     const v2 = await onboarding.saveDraftDocument(admin.id, { kind: "contractor_terms", version: "1.1", title: "Contractor terms", body: `${body} Updated.` });
     await onboarding.approveDocument(admin.id, v2, "Reviewed by counsel, email 2026-12-02");
     expect(await onboarding.pendingAcceptances(who.staffId)).toEqual([expect.objectContaining({ version: "1.1" })]);
-    await expect(onboarding.acceptDocuments(who, [termsId], "portal_update")).rejects.toThrow(/newer version/);
+    await expect(onboarding.acceptDocuments(who, [termsId], "portal_update", { actingFor: "self", legalName: "Ola Onboard" })).rejects.toThrow(/newer version/);
     // Retire it again so other suites aren't blocked.
     await pool.query("update legal_documents set status = 'retired' where kind = 'contractor_terms' and status = 'approved'");
   });
@@ -113,6 +121,31 @@ describe("contractor onboarding", () => {
     expect(e).toMatchObject({ kind: "wsib_coverage_not_required", verifiedBy: admin.id });
     await onboarding.removeEvidence(admin.id, e.id);
     expect(await onboarding.listEvidence(who.staffId)).toEqual([]);
+  });
+});
+
+describe("RGXM's published documents", () => {
+  it("are loaded as drafts (an admin approves them), with the platform terms accepted separately", async () => {
+    const docs = (await pool.query("select kind, version, title, status from legal_documents where version in ('2026-11-09', '1.0.0') order by kind")).rows;
+    expect(docs).toEqual([
+      { kind: "contractor_terms", version: "1.0.0", title: "RGXM Independent Contractor Agreement", status: "draft" },
+      { kind: "platform_terms", version: "1.0.0", title: "RGXM Crew Platform Terms of Use", status: "draft" },
+      { kind: "privacy_notice", version: "2026-11-09", title: "RGXM Crew Privacy Policy", status: "draft" },
+    ]);
+    const settings = await one<Record<string, unknown>>("select privacy_officer_email, support_email, finance_email, privacy_request_response_days, payment_terms from org_settings");
+    expect(settings).toMatchObject({ privacy_officer_email: "safiya@rgxmagency.com", support_email: "staffing@rgxmagency.com", finance_email: "safiya@rgxmagency.com", privacy_request_response_days: 30 });
+    expect((settings.payment_terms as { dueRule: string; approvedAt?: string }).dueRule).toBe("semi_monthly_agreement");
+    expect((settings.payment_terms as { approvedAt?: string }).approvedAt).toBeUndefined();
+
+    const platform = await one<{ id: string }>("select id from legal_documents where kind = 'platform_terms' and version = '1.0.0'");
+    await onboarding.approveDocument(admin.id, platform.id, "Approved by the Privacy Officer for release");
+    const who = await person();
+    await onboarding.approveContractors(admin.id, [who.staffId], { approvedOn: "2026-11-01" });
+    expect(await onboarding.bookingBlockers(db, who.staffId)).toEqual(["they haven't accepted the current Platform Terms of Use"]);
+    // Platform terms need no contracting party.
+    await onboarding.acceptDocuments(who, [platform.id], "portal_onboarding");
+    expect(await onboarding.bookingBlockers(db, who.staffId)).toEqual([]);
+    await pool.query("update legal_documents set status = 'retired' where id = $1", [platform.id]);
   });
 });
 
@@ -200,7 +233,8 @@ describe("privacy operations", () => {
     const who = await person();
     await pool.query("insert into internal_notes (staff_id, author_id, body) values ($1, $2, 'Great with guests')", [who.staffId, admin.id]);
     const r = await ops.createPrivacyRequest(admin.id, { kind: "access", staffId: who.staffId, requesterName: "Ola Onboard", requesterContact: "by email", receivedAt: "2026-11-20", receivedVia: "email" });
-    expect(r.dueAt).toBeNull();
+    // RGXM's Privacy Policy states a 30-day response period (set by migration 0013).
+    expect(r.dueAt?.toISOString().slice(0, 10)).toBe("2026-12-20");
     expect(r.reference).toMatch(/^PR-2026-\d{4}$/);
     await expect(ops.buildAccessPackage(admin.id, r.id)).rejects.toThrow(/identity/);
     await ops.verifyRequesterIdentity(admin.id, r.id, "Replied from the email on file and confirmed two recent shift dates");
@@ -214,11 +248,11 @@ describe("privacy operations", () => {
     await ops.respondToRequest(admin.id, r.id, { outcome: "responded", summary: "Package released after review; no redactions needed", method: "Secure download link, expired after 7 days" });
     await expect(ops.verifyRequesterIdentity(admin.id, r.id, "again please")).rejects.toThrow(/responded/);
 
-    // With a configured response period, the due date is set.
-    await pool.query("update org_settings set privacy_request_response_days = 30");
-    const r2 = await ops.createPrivacyRequest(admin.id, { kind: "correction", staffId: who.staffId, requesterName: "Ola Onboard", receivedAt: "2026-11-20" });
-    expect(r2.dueAt?.toISOString().slice(0, 10)).toBe("2026-12-20");
+    // With no configured response period, there's no deadline.
     await pool.query("update org_settings set privacy_request_response_days = null");
+    const r2 = await ops.createPrivacyRequest(admin.id, { kind: "correction", staffId: who.staffId, requesterName: "Ola Onboard", receivedAt: "2026-11-20" });
+    expect(r2.dueAt).toBeNull();
+    await pool.query("update org_settings set privacy_request_response_days = 30");
   });
 });
 

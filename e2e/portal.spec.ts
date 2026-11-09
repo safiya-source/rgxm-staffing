@@ -28,9 +28,9 @@ test("a new Brand Ambassador registers and completes onboarding", async ({ page 
 
   // Consent is required.
   await page.getByRole("button", { name: "Finish setup" }).click();
-  await expect(page.getByText("Please confirm you've read the privacy notice.")).toBeVisible();
+  await expect(page.getByText("Please confirm you've read the Privacy Policy.")).toBeVisible();
 
-  await page.getByRole("checkbox", { name: /privacy notice/ }).click();
+  await page.getByRole("checkbox", { name: /privacy (notice|policy)/i }).click();
   await page.getByRole("button", { name: "Finish setup" }).click();
 
   await expect(page).toHaveURL(/\/portal$/);
