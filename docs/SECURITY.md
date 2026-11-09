@@ -9,8 +9,14 @@ had an external penetration test or a legal/privacy review.
 ### Identity and sessions
 - **Field staff** sign in with single-use magic links (15 minutes). Only a hash of each link token is stored.
 - **Internal users** are invited by an administrator. They sign in with a password (12+ characters), can't
-  use magic links, and can turn on TOTP two-step verification (with backup codes).
-- **Two-step verification is required for Administrators and Finance** (Settings → Organisation → Security & privacy).
+  use magic links, and use TOTP two-step verification (with backup codes).
+- **Two-step verification is required for every RGXM staff account** (`requireMfaForStaff`, on by default), and
+  always for Administrators and Finance. Contractors (magic link) are out of scope.
+- **Trusted devices:** at sign-in a person can trust the device for 14 days. A code is still required on new or
+  untrusted devices, after a session expires, and on **suspicious sign-ins**: a network (/24) and browser family the
+  person hasn't used before revokes all their remembered devices (only salted hashes of these are stored).
+- **Fresh authentication** (a code entered in the last 10 minutes) is required for payment approval, bank export,
+  submission, settlement, returns, adjustments, tax overrides, and changes to tax or payment details.
   - Without it, they're sent to *My security* and every server action refuses.
   - So do the download routes (payment exports, documents, data exports).
   - They can't switch it off while it's required.
@@ -83,10 +89,16 @@ had an external penetration test or a legal/privacy review.
   (Finance/Admins only) and are never written to the audit log (only that they changed).
 - Erasure keeps legal name, business number and mailing address, because tax records must be kept for six years.
 
+### Audit log minimisation
+- `recordAudit` replaces personal fields (names, emails, phones, addresses, tax numbers, coordinates, requester
+  details) with `[redacted]` in before/after data. The entity id identifies the record.
+
 ### Privacy (PIPEDA)
 - Location is captured only at the moment of check-in/out, only where the venue requires it. It's never tracked in the background.
-- **Retention** (configurable in Settings): check-in coordinates are cleared after 90 days, and stored email bodies after
-  30 days. Expired sessions and sign-in tokens are deleted. The scheduled runner does this every time it runs.
+- **Retention** by category (Settings → Privacy & retention) with RGXM-approved periods, legal holds and deletion
+  reports. See docs/PRIVACY_OPERATIONS.md. The 90-day location and 30-day email-copy periods keep running until
+  RGXM confirms or changes them.
+- **Privacy requests** (access, correction, deletion) are worked in *Privacy & incidents*. See docs/PRIVACY_OPERATIONS.md.
 - **Access:** staff download their own record from *My profile*. Administrators can export any person's record for
   an access request (*Talent → person → Privacy requests*).
 - **Erasure:** an administrator can erase a former staff member's personal details on request.
@@ -136,6 +148,8 @@ Accepted for now:
 
 ## Before using real data (RGXM to complete)
 
+See docs/COMPLIANCE.md for the full list of decisions; the security items are:
+
 - [ ] **Privacy officer:** legal/privacy review of the privacy notice (`/privacy`, marked draft), retention periods and the
       erasure scope. Appoint a privacy officer and publish their contact.
 - [ ] **Accountant:** confirm that RGXM's field staff qualify as independent contractors (CRA and the Ontario
@@ -147,5 +161,9 @@ Accepted for now:
 - [ ] **Backups:** daily backups with point-in-time recovery enabled, and a restore drill performed and recorded.
 - [ ] **Monitoring:** log drain and alerting connected; uptime check on `/api/health`.
 - [ ] **Security test:** an external penetration test or security review of the deployed environment.
-- [ ] **Staff accounts:** every Administrator and Finance user has two-step verification turned on (it's enforced),
+- [ ] **Vendors:** verify actual data flows, hosting regions, log retention, backups and support access for Supabase,
+      Vercel, Resend and GitHub (table in docs/PRIVACY_OPERATIONS.md); sign DPAs where available.
+- [ ] **Restore test:** restore a backup to a separate project and follow the post-restore steps in PRIVACY_OPERATIONS.md.
+- [ ] **Independent review:** resolve material findings before launch.
+- [ ] **Staff accounts:** every RGXM staff user has two-step verification turned on (it's enforced),
       and the demo accounts don't exist in production (never run `db:seed` there).

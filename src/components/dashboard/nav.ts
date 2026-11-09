@@ -6,6 +6,7 @@ import {
   LayoutDashboardIcon,
   SendIcon,
   SettingsIcon,
+  ShieldCheckIcon,
   UsersIcon,
   WalletIcon,
   type LucideIcon,
@@ -23,5 +24,6 @@ export const DASHBOARD_NAV: NavItem[] = [
   { href: "/dashboard/timesheets", label: "Timesheets", icon: ClockIcon, permission: "timesheet.view" },
   { href: "/dashboard/payments", label: "Payments", icon: WalletIcon, permission: "payments.view" },
   { href: "/dashboard/reports", label: "Reports", icon: BarChart3Icon, permission: "reports.view" },
+  { href: "/dashboard/privacy", label: "Privacy & incidents", icon: ShieldCheckIcon, permission: "privacy.manage" },
   { href: "/dashboard/settings", label: "Settings", icon: SettingsIcon },
 ];
