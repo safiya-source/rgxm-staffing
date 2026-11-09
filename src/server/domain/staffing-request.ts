@@ -6,6 +6,7 @@ import { FIELD_ROLE_NAMES } from "@/lib/roles";
 import { recordAudit } from "@/server/audit";
 import { db } from "@/server/db";
 import { projects } from "@/server/db/schema";
+import { compensationSettingsSchema, saveCompensationSettings } from "./compensation";
 import { createProject, locationSchema, ProjectError, projectSchema, saveLocation } from "./projects";
 import { bulkShiftSchema, createShifts } from "./shifts";
 
@@ -50,6 +51,8 @@ export const staffingRequestSchema = z.object({
     z.object({ mode: z.literal("new"), name: z.string(), address: z.unknown().optional(), city: z.unknown().optional(), timezone: z.string() }),
   ]),
   shifts: requestShiftsSchema,
+  // Allowances, per diems, mileage and bonus for the project (saved to its compensation settings).
+  compensation: compensationSettingsSchema.optional(),
 });
 export type StaffingRequestInput = z.infer<typeof staffingRequestSchema>;
 
@@ -110,6 +113,7 @@ export async function createStaffingRequest(actorId: string, input: StaffingRequ
       if (p.status === "closed" || p.status === "cancelled") throw new ProjectError(`This project is ${p.status}. Reopen it or start a new one.`);
     }
     const locationId = newLocation ? await saveLocation(actorId, projectId, null, newLocation, tx) : (input.location as { locationId: string }).locationId;
+    if (input.compensation) await saveCompensationSettings(actorId, projectId, input.compensation, tx);
     const { roles, ...common } = shifts;
     const shiftIds: string[] = [];
     for (const r of roles) {

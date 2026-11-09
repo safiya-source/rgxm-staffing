@@ -65,6 +65,37 @@ describe("new staffing request shortcut", () => {
     expect(() => staffingRequestSchema.parse({ project: { mode: "existing", projectId: p.projectId }, location: { mode: "existing", locationId: p.locationId }, shifts: { ...shifts, roles: [{ role: "BA", headcount: 1 }, { role: "BA", headcount: 2 }] } })).toThrow(/listed twice/);
   });
 
+  it("sets the project's allowances, per diem, mileage and bonus along with the hourly rate", async () => {
+    const name = `Comp Test ${crypto.randomUUID().slice(0, 6)}`;
+    const input = staffingRequestSchema.parse({
+      project: { mode: "new", name, clientId: null, newClientName: null, code: null },
+      location: { mode: "new", name: "Venue", city: "Toronto", address: "", timezone: "America/Toronto" },
+      shifts: { ...shifts, roles: [{ role: "BA", headcount: 1, rateCents: "26.00" }] },
+      compensation: {
+        mealsEnabled: true,
+        perDiemEnabled: false,
+        mileageEnabled: true,
+        bonusEnabled: true,
+        breakfast: "20",
+        lunch: "25",
+        dinner: "40",
+        perDiem: "85",
+        mileageRate: "0.73",
+        eligibleMeals: ["meal_breakfast", "meal_dinner"],
+        bonusAmount: "50",
+        bonusConditions: "$50 per shift when all sampling targets are met",
+        notes: "Lunch is provided on site.",
+      },
+    });
+    const res = await createStaffingRequest(pm.id, input);
+    const c = await one<Record<string, unknown>>("select meals_enabled, mileage_enabled, bonus_enabled, eligible_meals, bonus_cents, bonus_conditions, notes from project_compensation_settings where project_id = $1", [res.projectId]);
+    expect(c).toEqual({ meals_enabled: true, mileage_enabled: true, bonus_enabled: true, eligible_meals: ["meal_breakfast", "meal_dinner"], bonus_cents: 5000, bonus_conditions: "$50 per shift when all sampling targets are met", notes: "Lunch is provided on site." });
+    const rate = await one<{ rate_cents: number }>("select rate_cents from shifts where project_id = $1 limit 1", [res.projectId]);
+    expect(rate.rate_cents).toBe(2600);
+    // A bonus has to say when it's earned.
+    expect(() => staffingRequestSchema.parse({ ...input, compensation: { ...input.compensation, bonusConditions: "" } })).toThrow(/when the bonus is earned/);
+  });
+
   it("creates nothing when any part fails", async () => {
     const name = `Rollback Test ${crypto.randomUUID().slice(0, 6)}`;
     await expect(

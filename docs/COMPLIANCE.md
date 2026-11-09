@@ -69,6 +69,13 @@ Initial rates (CAD):
 
 You can change any of these per project.
 
+- **Set when creating a staffing request** (section 4 of the form, for PMs and Admins) or later under Project → Setup:
+  - which meals are eligible (for example, lunch excluded when provided on site);
+  - the per diem and mileage rates;
+  - a bonus amount with the conditions for earning it (required, as the Contractor Agreement asks);
+  - notes for contractors.
+
+  Contractors see all of this on each shift before they accept.
 - **Recorded per contractor, per work date and booked shift.** Each item is tied to a confirmed or completed
   booking.
 - **No duplicates.**

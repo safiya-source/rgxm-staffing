@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { formatMoney } from "@/lib/format";
 import { recordCompensationAction } from "./actions";
 
-type Rates = { breakfast: number; lunch: number; dinner: number; perDiem: number; mileage: string };
+type Rates = { breakfast: number; lunch: number; dinner: number; perDiem: number; mileage: string; eligibleMeals: string[]; bonusCents: number | null; bonusConditions: string | null };
 
 export function RecordCompensationForm({
   projectId,
@@ -27,7 +27,7 @@ export function RecordCompensationForm({
           ["meal_breakfast", `Breakfast allowance (${formatMoney(rates.breakfast)})`],
           ["meal_lunch", `Lunch allowance (${formatMoney(rates.lunch)})`],
           ["meal_dinner", `Dinner allowance (${formatMoney(rates.dinner)})`],
-        ]
+        ].filter(([k]) => rates.eligibleMeals.includes(k!))
       : []),
     ...(enabled.perDiem ? [["per_diem", `Full-day per diem (${formatMoney(rates.perDiem)})`]] : []),
     ...(enabled.mileage ? [["mileage", `Mileage ($${Number(rates.mileage).toFixed(2)}/km)`]] : []),
@@ -71,10 +71,10 @@ export function RecordCompensationForm({
       {category === "bonus" ? (
         <>
           <Field label="Amount (CAD)" htmlFor="comp-amount">
-            <Input id="comp-amount" name="amount" inputMode="decimal" required placeholder="50.00" />
+            <Input id="comp-amount" name="amount" inputMode="decimal" required placeholder="50.00" defaultValue={rates.bonusCents != null ? (rates.bonusCents / 100).toFixed(2) : undefined} />
           </Field>
           <Field label="Reason" htmlFor="comp-reason">
-            <Textarea id="comp-reason" name="reason" required rows={2} placeholder="Covered a no-show at short notice" />
+            <Textarea id="comp-reason" name="reason" required rows={2} placeholder="Covered a no-show at short notice" defaultValue={rates.bonusConditions ?? undefined} />
           </Field>
         </>
       ) : null}

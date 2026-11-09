@@ -11,12 +11,39 @@ import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
 import { formatMinutes, formatMoney } from "@/lib/format";
+import { CompensationFields, type CompensationDefaults } from "@/components/app/compensation-fields";
+import { readCompensationForm } from "@/lib/compensation-form";
 import { FIELD_ROLE_NAMES, FIELD_ROLES, type FieldRole } from "@/lib/roles";
 import { COMMON_TIME_ZONES, expandShiftPattern } from "@/lib/time";
 import { cn } from "@/lib/utils";
 import { createStaffingRequestAction } from "../actions";
 
-type ProjectOption = { id: string; label: string; canAddVenue: boolean; roleRates: Partial<Record<FieldRole, number>>; locations: { id: string; label: string; timezone: string }[] };
+type ProjectOption = {
+  id: string;
+  label: string;
+  canAddVenue: boolean;
+  roleRates: Partial<Record<FieldRole, number>>;
+  // null = nothing set yet (defaults); undefined = the viewer can't set compensation on this project.
+  compensation?: CompensationDefaults | null;
+  locations: { id: string; label: string; timezone: string }[];
+};
+
+/** All off, at the initial CAD rates. */
+const NEW_COMPENSATION: CompensationDefaults = {
+  mealsEnabled: false,
+  perDiemEnabled: false,
+  mileageEnabled: false,
+  bonusEnabled: false,
+  breakfastCents: 2000,
+  lunchCents: 2500,
+  dinnerCents: 4000,
+  perDiemCents: 8500,
+  mileageRate: "0.7300",
+  eligibleMeals: ["meal_breakfast", "meal_lunch", "meal_dinner"],
+  bonusCents: null,
+  bonusConditions: null,
+  notes: null,
+};
 
 const DAY_LABELS = ["S", "M", "T", "W", "T", "F", "S"];
 const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -56,6 +83,7 @@ export function StaffingRequestForm({
   showRates,
   defaultRates,
   preselectProjectId,
+  canSetCompensation = false,
 }: {
   projects: ProjectOption[];
   clients: { id: string; name: string }[];
@@ -64,6 +92,7 @@ export function StaffingRequestForm({
   showRates: boolean;
   defaultRates: Partial<Record<FieldRole, number>>;
   preselectProjectId?: string;
+  canSetCompensation?: boolean;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -119,9 +148,15 @@ export function StaffingRequestForm({
     !preview?.windows.length ||
     lines.some((l) => !(Number(l.headcount) >= 1));
 
-  function submit(e: React.FormEvent) {
+  const selectedProject = projectMode === "existing" ? projects.find((p) => p.id === projectId) : undefined;
+  // New project: anyone allowed to configure compensation; existing: only where they may on that project.
+  const showCompensation = canSetCompensation && (projectMode === "new" || selectedProject?.compensation !== undefined);
+  const compensationDefaults = projectMode === "new" ? NEW_COMPENSATION : (selectedProject?.compensation ?? NEW_COMPENSATION);
+
+  function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(undefined);
+    const compensation = showCompensation ? readCompensationForm(new FormData(e.currentTarget)) : undefined;
     start(async () => {
       const res = await createStaffingRequestAction({
         project:
@@ -140,6 +175,7 @@ export function StaffingRequestForm({
           uniform: s.uniform,
           instructions: s.instructions,
         },
+        compensation,
       });
       if (!res.ok) return setError(res.error);
       toast.success(res.message ?? "Staffing request created");
@@ -356,6 +392,21 @@ export function StaffingRequestForm({
           </details>
         </CardContent>
       </Card>
+
+      {showCompensation ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>4. Allowances, mileage &amp; bonus</CardTitle>
+            <CardDescription>
+              On top of the hourly rate. These apply to the whole project and are shown to contractors on each shift before they accept. Staff record them per person and day
+              once approved work comes in.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <CompensationFields key={projectMode === "new" ? "new" : projectId} defaults={compensationDefaults} idPrefix="req-comp" />
+          </CardContent>
+        </Card>
+      ) : null}
 
       <div className="grid gap-3 rounded-xl border bg-card p-4" aria-live="polite">
         {preview?.error ? (

@@ -215,6 +215,13 @@ export const projectCompensationSettings = pgTable("project_compensation_setting
   perDiemCents: integer().notNull().default(8500),
   // Dollars per km, exact decimal.
   mileageRate: numeric({ precision: 8, scale: 4 }).notNull().default("0.7300"),
+  // Which meal allowances apply (e.g. no lunch allowance when lunch is provided on site).
+  eligibleMeals: text().array().notNull().default(sql`'{meal_breakfast,meal_lunch,meal_dinner}'::text[]`),
+  // The bonus offered on this project and the conditions for earning it (shown before acceptance).
+  bonusCents: integer(),
+  bonusConditions: text(),
+  // Anything else contractors should know about allowances, travel or bonuses for this project.
+  notes: text(),
   updatedBy: userRef(),
   updatedAt: updatedAt(),
 });
