@@ -363,3 +363,12 @@ export async function getPrivacyRequest(id: string) {
     .where(eq(privacyRequests.id, id));
   return row ?? null;
 }
+
+/** Saves the privacy officer's redaction notes for a request. */
+export async function setRedactionNotes(actorId: string, requestId: string, notes: string | null) {
+  await db.transaction(async (tx) => {
+    await loadRequest(tx, requestId);
+    await tx.update(privacyRequests).set({ redactionNotes: notes?.trim() || null }).where(eq(privacyRequests.id, requestId));
+    await recordAudit({ actorId, action: "privacy_request.redaction_notes", entityType: "privacy_request", entityId: requestId }, tx);
+  });
+}
