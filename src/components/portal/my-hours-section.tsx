@@ -38,7 +38,7 @@ export async function MyHoursSection({ bookingId, status, startsAt, timezone }: 
       </h2>
       {status === "confirmed" ? (
         <Card className="p-4">
-          <CheckInPanel bookingId={bookingId} state={att.state} opensAt={att.opensAt} checkedInAt={att.checkedInAt} timezone={timezone} requireLocation={att.requireLocation} />
+          <CheckInPanel bookingId={bookingId} state={att.state} opensAt={att.opensAt} checkedInAt={att.checkedInAt} timezone={timezone} requireLocation={att.requireLocation} locationRetentionDays={att.locationRetentionDays} />
         </Card>
       ) : null}
       {t && t.status === "needs_review" && t.reviewNote ? (

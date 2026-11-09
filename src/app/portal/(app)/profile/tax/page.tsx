@@ -19,10 +19,19 @@ export default async function TaxDetailsPage() {
       <div>
         <h1 className="text-[22px] font-semibold">Tax details</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          RGXM pays you as an independent contractor. We need these details to pay you correctly and for your T4A tax slip.
+          RGXM pays you as an independent contractor. We need these details to pay you correctly and for any year-end tax slip.
           Please don&apos;t enter your SIN here: if it&apos;s needed, RGXM&apos;s accountant will ask you for it directly.
         </p>
       </div>
+      {details.gstRegistrationStatus !== "unknown" ? (
+        <p className="rounded-lg bg-muted px-3 py-2 text-sm">
+          {details.gstVerificationStatus === "verified"
+            ? "RGXM Finance has checked your GST/HST answer."
+            : details.gstVerificationStatus === "rejected"
+              ? "RGXM Finance couldn't confirm your GST/HST details. They'll be in touch, or message RGXM."
+              : "RGXM Finance hasn't checked your GST/HST answer yet. Until they do, tax on your pay is reviewed by hand."}
+        </p>
+      ) : null}
       <TaxDetailsForm initial={details} action={saveMyTaxDetailsAction} selfService />
     </div>
   );

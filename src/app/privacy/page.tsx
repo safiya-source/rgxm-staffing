@@ -1,13 +1,53 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Logo } from "@/components/app/logo";
+import { LegalText } from "@/components/portal/legal-text";
+import { currentDocuments } from "@/server/domain/onboarding";
 import { getOrgSettings } from "@/server/settings";
 
 export const metadata: Metadata = { title: "Privacy notice" };
 
-// DRAFT. Must be reviewed by RGXM's legal/privacy advisor before production use (PIPEDA).
+function PrivacyOfficer({ name, email, phone }: { name: string | null; email: string | null; phone: string | null }) {
+  return (
+    <section aria-labelledby="privacy-officer" className="mt-10 rounded-xl border bg-card p-5 text-[15px]">
+      <h2 id="privacy-officer" className="text-lg font-semibold">
+        Privacy Officer
+      </h2>
+      {name || email || phone ? (
+        <p className="mt-2 text-muted-foreground">
+          {name ? <span className="block font-medium text-foreground">{name}</span> : null}
+          {email ? (
+            <a href={`mailto:${email}`} className="block underline underline-offset-2">
+              {email}
+            </a>
+          ) : null}
+          {phone ? <span className="block">{phone}</span> : null}
+        </p>
+      ) : (
+        <p className="mt-2 text-muted-foreground">To be appointed by RGXM. Until then, contact RGXM through the Messages tab in the staff portal.</p>
+      )}
+    </section>
+  );
+}
+
+// Shows the version RGXM's lawyer approved (Settings → Contractors & legal). Until one is approved,
+// the built-in draft below is shown and clearly marked as a draft.
 export default async function PrivacyPage() {
-  const settings = await getOrgSettings();
+  const [settings, docs] = await Promise.all([getOrgSettings(), currentDocuments()]);
+  const officer = <PrivacyOfficer name={settings.privacyOfficerName} email={settings.privacyOfficerEmail} phone={settings.privacyOfficerPhone} />;
+  if (docs.privacy_notice) {
+    return (
+      <div className="mx-auto max-w-2xl px-5 py-10">
+        <Link href="/">
+          <Logo />
+        </Link>
+        <div className="mt-8">
+          <LegalText doc={docs.privacy_notice} />
+        </div>
+        {officer}
+      </div>
+    );
+  }
   return (
     <div className="mx-auto max-w-2xl px-5 py-10">
       <Link href="/">
@@ -54,6 +94,7 @@ export default async function PrivacyPage() {
           are legally required to retain.
         </p>
       </div>
+      {officer}
     </div>
   );
 }

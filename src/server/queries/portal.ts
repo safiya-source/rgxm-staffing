@@ -2,7 +2,7 @@
 import { and, asc, desc, eq, gte, inArray, lt, sql } from "drizzle-orm";
 import { db } from "@/server/db";
 import type { CheckInState } from "@/components/portal/check-in-panel";
-import { attendanceEvents, bookings, offerResponses, projectLocations, projects, shifts, timesheets } from "@/server/db/schema";
+import { attendanceEvents, bookings, offerResponses, projectLocations, projects, retentionPolicies, shifts, timesheets } from "@/server/db/schema";
 import { CHECK_OUT_GRACE_MINUTES, checkInWindow } from "@/server/domain/attendance-rules";
 import { getOrgSettings } from "@/server/settings";
 
@@ -80,6 +80,8 @@ export type AttendanceState = {
   opensAt: string;
   checkedInAt: string | null;
   requireLocation: boolean;
+  /** How long check-in coordinates are kept (retention policy), or null if no period is set. */
+  locationRetentionDays: number | null;
 };
 
 /** Check-in state per booking, from the immutable attendance events. */
@@ -87,6 +89,8 @@ export async function getAttendanceStates(bookingIds: string[], now = new Date()
   const out = new Map<string, AttendanceState>();
   if (!bookingIds.length) return out;
   const settings = await getOrgSettings();
+  const [policy] = await db.select({ days: retentionPolicies.retentionDays }).from(retentionPolicies).where(eq(retentionPolicies.category, "check_in_location"));
+  const locationRetentionDays = policy ? policy.days : settings.locationRetentionDays;
   const [rows, events] = await Promise.all([
     db
       .select({ id: bookings.id, startsAt: shifts.startsAt, endsAt: shifts.endsAt, requireLocation: projectLocations.requireLocationAtCheckIn })
@@ -107,7 +111,7 @@ export async function getAttendanceStates(bookingIds: string[], now = new Date()
     else if (now < w.opensAt) state = "before_window";
     else if (now <= w.closesAt) state = "can_check_in";
     else state = "closed";
-    out.set(r.id, { state, opensAt: w.opensAt.toISOString(), checkedInAt: lastIn?.occurredAt.toISOString() ?? null, requireLocation: r.requireLocation });
+    out.set(r.id, { state, opensAt: w.opensAt.toISOString(), checkedInAt: lastIn?.occurredAt.toISOString() ?? null, requireLocation: r.requireLocation, locationRetentionDays });
   }
   return out;
 }
