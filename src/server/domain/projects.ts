@@ -1,6 +1,7 @@
 // Projects, locations, staffing requirements and project team. Authorisation is done by callers.
 import { and, count, eq, inArray, ne, sql } from "drizzle-orm";
 import { z } from "zod";
+import { PROVINCE_CODES } from "@/lib/provinces";
 import { FIELD_ROLES } from "@/lib/roles";
 import { isIsoDate, isValidTimeZone } from "@/lib/time";
 import { recordAudit } from "@/server/audit";
@@ -8,6 +9,7 @@ import { db, inTransaction, type Tx } from "@/server/db";
 import { clients, projectLocations, projectMembers, projects, shifts, staffingRequirements, users } from "@/server/db/schema";
 
 export class ProjectError extends Error {}
+
 
 const blankToNull = (v: unknown) => (typeof v === "string" && v.trim() === "" ? null : v);
 const optText = (max: number) => z.preprocess(blankToNull, z.string().trim().max(max).nullable().optional());
@@ -27,8 +29,8 @@ export const moneyToCents = z.preprocess(
   z.number({ message: "Enter an amount like 15000 or 15000.50" }).int().nonnegative().nullable(),
 );
 
-export { canTransitionProject, PROJECT_STATUSES, PROJECT_TRANSITIONS, type ProjectStatus } from "./project-status";
-import { canTransitionProject, type ProjectStatus } from "./project-status";
+export { canTransitionProject, PROJECT_STATUSES, PROJECT_TRANSITIONS, SUPPLY_TYPE_LABEL, SUPPLY_TYPES, type ProjectStatus } from "./project-status";
+import { canTransitionProject, SUPPLY_TYPES, type ProjectStatus } from "./project-status";
 
 export const projectSchema = z
   .object({
@@ -50,6 +52,10 @@ export const projectSchema = z
     currency: z.enum(["CAD", "USD"]).default("CAD"),
     internalNotes: optText(4000),
     clientNotes: optText(4000),
+    // Tax setup: where the event happens and what service RGXM is buying (see tax-engine.ts).
+    eventProvince: z.preprocess(blankToNull, z.enum(PROVINCE_CODES).nullable().optional()),
+    serviceCategory: z.preprocess(blankToNull, z.string().max(40).nullable().optional()),
+    supplyType: z.enum(SUPPLY_TYPES).default("onsite"),
   })
   .refine((p) => !p.startDate || !p.endDate || p.endDate >= p.startDate, { message: "End date is before start date", path: ["endDate"] });
 export type ProjectInput = z.infer<typeof projectSchema>;
@@ -94,6 +100,9 @@ function projectValues(input: ProjectInput, clientId: string | null) {
     currency: input.currency,
     internalNotes: input.internalNotes ?? null,
     clientNotes: input.clientNotes ?? null,
+    eventProvince: input.eventProvince ?? null,
+    serviceCategory: input.serviceCategory ?? null,
+    supplyType: input.supplyType,
   };
 }
 

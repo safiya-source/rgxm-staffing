@@ -18,6 +18,7 @@ export function CheckInPanel({
   checkedInAt,
   timezone,
   requireLocation,
+  locationRetentionDays = null,
 }: {
   bookingId: string;
   state: CheckInState;
@@ -25,9 +26,12 @@ export function CheckInPanel({
   checkedInAt: string | null;
   timezone: string;
   requireLocation: boolean;
+  locationRetentionDays?: number | null;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
+  // The browser's location prompt only appears after the person has read why we ask (once per device).
+  const [explain, setExplain] = useState<"check_in" | "check_out" | null>(null);
   const queued = useSyncExternalStore(subscribeQueue, queueSnapshot, serverQueueSnapshot);
   const mine = queued.filter((q) => q.bookingId === bookingId);
   // While something is waiting to sync, show the state the person expects.
@@ -58,9 +62,32 @@ export function CheckInPanel({
     return () => window.removeEventListener("online", onOnline);
   }, [flush]);
 
-  async function tap(type: "check_in" | "check_out") {
+  function start(type: "check_in" | "check_out") {
+    let seen = false;
+    try {
+      seen = localStorage.getItem("rgxm.location-explained") === "1";
+    } catch {
+      // Storage unavailable (private mode): explain every time.
+    }
+    if (requireLocation && !seen) setExplain(type);
+    else void tap(type);
+  }
+
+  function continueAfterExplanation(share: boolean) {
+    const type = explain!;
+    setExplain(null);
+    try {
+      localStorage.setItem("rgxm.location-explained", "1");
+    } catch {
+      // ignore
+    }
+    void tap(type, share);
+  }
+
+  async function tap(type: "check_in" | "check_out", share = true) {
     setBusy(true);
-    const location = requireLocation ? await getLocationOnce() : null;
+    // A denied or failed location never blocks the check-in; it's flagged for a manual check.
+    const location = requireLocation && share ? await getLocationOnce() : null;
     const event: QueuedEvent = { bookingId, type, clientEventId: crypto.randomUUID(), occurredAt: new Date().toISOString(), location };
     try {
       // Online: let the server stamp the time.
@@ -82,6 +109,31 @@ export function CheckInPanel({
     }
   }
 
+  if (explain) {
+    return (
+      <div className="grid gap-3 rounded-lg border bg-card p-4 text-sm" role="dialog" aria-labelledby="loc-why">
+        <p id="loc-why" className="flex items-center gap-2 font-medium">
+          <MapPinIcon className="size-4" /> Why this venue asks for your location
+        </p>
+        <ul className="grid list-disc gap-1 pl-5 text-muted-foreground">
+          <li>It confirms you&apos;re at the venue when you check in or out, so your hours can be approved quickly.</li>
+          <li>Your phone shares it once, at the moment you tap. It&apos;s never tracked in the background.</li>
+          <li>{locationRetentionDays ? `RGXM keeps the coordinates for ${locationRetentionDays} days, then deletes them. The check-in time stays with your hours.` : "RGXM keeps the coordinates only as long as its retention policy allows; the check-in time stays with your hours."}</li>
+          <li>If you say no or it doesn&apos;t work, you can still check in. Your Team Lead or RGXM will confirm you were on site, and your pay isn&apos;t affected.</li>
+        </ul>
+        <p className="text-muted-foreground">Next, your browser will ask for permission.</p>
+        <div className="flex flex-wrap gap-2">
+          <Button size="sm" onClick={() => continueAfterExplanation(true)}>
+            Continue
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => continueAfterExplanation(false)}>
+            {explain === "check_in" ? "Check in without location" : "Check out without location"}
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="grid gap-2">
       {mine.length ? (
@@ -94,13 +146,13 @@ export function CheckInPanel({
           Check-in opens {formatInZone(opensAt, timezone, "h:mm a")} ({formatDistanceToNowStrict(new Date(opensAt), { addSuffix: true })}).
         </p>
       ) : effective === "can_check_in" ? (
-        <Button size="lg" className="w-full" disabled={busy} onClick={() => tap("check_in")}>
+        <Button size="lg" className="w-full" disabled={busy} onClick={() => start("check_in")}>
           <LogInIcon /> {busy ? "Checking in…" : "Check in"}
         </Button>
       ) : effective === "checked_in" ? (
         <>
           <p className="text-sm text-success">Checked in{checkedInAt ? ` at ${formatInZone(checkedInAt, timezone, "h:mm a")}` : ""}.</p>
-          <Button size="lg" variant="outline" className="w-full" disabled={busy} onClick={() => tap("check_out")}>
+          <Button size="lg" variant="outline" className="w-full" disabled={busy} onClick={() => start("check_out")}>
             <LogOutIcon /> {busy ? "Checking out…" : "Check out"}
           </Button>
         </>
@@ -111,7 +163,7 @@ export function CheckInPanel({
       )}
       {requireLocation && (effective === "can_check_in" || effective === "checked_in") ? (
         <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
-          <MapPinIcon className="mt-0.5 size-3.5 shrink-0" /> This venue asks for your location when you tap. It&apos;s only taken at that moment, never tracked.
+          <MapPinIcon className="mt-0.5 size-3.5 shrink-0" /> This venue asks for your location when you tap. It&apos;s only taken at that moment, never tracked{locationRetentionDays ? `, and deleted after ${locationRetentionDays} days` : ""}.
         </p>
       ) : null}
     </div>

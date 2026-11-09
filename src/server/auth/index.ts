@@ -15,6 +15,7 @@ import { sendEmail } from "@/server/notify/mailer";
 import { actionEmail } from "@/server/notify/templates";
 import { getOrgSettings } from "@/server/settings";
 import { staffInvite } from "./staff-invite-plugin";
+import { recordStepUp, rememberSignInContext, screenSignIn, TRUST_DEVICE_DAYS } from "./step-up";
 
 const MAGIC_LINK_TTL_SECONDS = 15 * 60;
 
@@ -36,15 +37,44 @@ async function hasCredentialAccount(userId: string) {
   return Boolean(row);
 }
 
-/** Admins and Finance can't switch off two-step verification while the org requires it. */
-const keepPrivilegedMfa = createAuthMiddleware(async (ctx) => {
+function requestIp(headers: Headers | undefined) {
+  if (!headers) return null;
+  for (const h of env.AUTH_IP_HEADERS.split(",").map((x) => x.trim().toLowerCase()).filter(Boolean)) {
+    const v = headers.get(h);
+    if (v) return v.split(",")[0]!.trim();
+  }
+  return null;
+}
+
+/**
+ * - RGXM staff can't switch off two-step verification while the org requires it.
+ * - A password sign-in from a new network/browser revokes remembered devices, so a code is needed.
+ */
+const beforeHook = createAuthMiddleware(async (ctx) => {
+  if (ctx.path === "/sign-in/email") {
+    const email = (ctx.body as { email?: string } | undefined)?.email;
+    if (email) await screenSignIn(email, requestIp(ctx.headers), ctx.headers?.get("user-agent") ?? null);
+    return;
+  }
   if (ctx.path !== "/two-factor/disable") return;
   const session = await getSessionFromCtx(ctx);
   if (!session) return;
+  const [u] = await db.select({ kind: schema.users.kind }).from(schema.users).where(eq(schema.users.id, session.user.id));
+  if (u?.kind !== "internal") return;
+  const settings = await getOrgSettings();
   const roles = await db.select({ role: schema.userRoles.role }).from(schema.userRoles).where(eq(schema.userRoles.userId, session.user.id));
-  if (!roles.some((r) => r.role === "admin" || r.role === "finance")) return;
-  if (!(await getOrgSettings()).requireMfaForPrivileged) return;
-  throw new APIError("FORBIDDEN", { message: "Two-step verification is required for administrators and Finance." });
+  const privileged = roles.some((r) => r.role === "admin" || r.role === "finance");
+  if (!settings.requireMfaForStaff && !(privileged && settings.requireMfaForPrivileged)) return;
+  throw new APIError("FORBIDDEN", { message: "Two-step verification is required for RGXM staff accounts." });
+});
+
+/** A correct two-step code (at sign-in or from inside the app) marks the session as freshly verified. */
+const afterHook = createAuthMiddleware(async (ctx) => {
+  if (ctx.path !== "/two-factor/verify-totp" && ctx.path !== "/two-factor/verify-backup-code") return;
+  const returned = ctx.context.returned;
+  if (!returned || returned instanceof Error || (returned instanceof Response && !returned.ok)) return;
+  const fresh = ctx.context.newSession ?? (await getSessionFromCtx(ctx));
+  if (fresh) await recordStepUp(fresh.session.id, fresh.user.id);
 });
 
 export const auth = betterAuth({
@@ -72,7 +102,7 @@ export const auth = betterAuth({
     },
     useSecureCookies: env.APP_URL.startsWith("https://"),
   },
-  hooks: { before: keepPrivilegedMfa },
+  hooks: { before: beforeHook, after: afterHook },
   user: {
     additionalFields: {
       kind: { type: "string", required: false, defaultValue: "staff", input: false },
@@ -162,6 +192,7 @@ export const auth = betterAuth({
         },
         after: async (session) => {
           await db.update(schema.users).set({ lastSignInAt: new Date() }).where(eq(schema.users.id, session.userId));
+          await rememberSignInContext(session.userId, session.ipAddress, session.userAgent);
           await recordAudit({ actorId: session.userId, action: "auth.sign_in", entityType: "user", entityId: session.userId });
         },
       },
@@ -189,7 +220,9 @@ export const auth = betterAuth({
         await sendEmail({ to: email, subject: "Your RGXM Crew sign-in link", containsSecretLink: true, ...content });
       },
     }),
-    twoFactor({ issuer: "RGXM Crew" }),
+    // A device can be trusted for TRUST_DEVICE_DAYS; new devices, expired sessions and suspicious
+    // sign-ins (see screenSignIn) need a code.
+    twoFactor({ issuer: "RGXM Crew", trustDeviceMaxAge: TRUST_DEVICE_DAYS * 24 * 60 * 60 }),
     staffInvite(),
     nextCookies(),
   ],

@@ -42,7 +42,7 @@ test("admins and Finance must set up two-step verification when required", async
     await expect(fin).toHaveURL(/\/dashboard\/settings\/security\?required=1/);
     await fin.goto("/dashboard/payments");
     await expect(fin).toHaveURL(/\/dashboard\/settings\/security\?required=1/);
-    await expect(fin.getByRole("alert").filter({ hasText: "two-step verification is required" })).toBeVisible();
+    await expect(fin.getByRole("alert").filter({ hasText: "must use two-step verification" })).toBeVisible();
     // Downloads apply the same rule.
     const exp = await pool.query("select id from payment_exports limit 1");
     if (exp.rows[0]) expect((await fin.request.get(`/api/payments/exports/${exp.rows[0].id}`)).status()).toBe(404);

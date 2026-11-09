@@ -11,6 +11,13 @@ import {
   availabilityRules,
   bookings,
   bookingStatusHistory,
+  compensationItems,
+  contractorApprovals,
+  contractorEvidence,
+  payReviewRequests,
+  staffAcceptances,
+  staffConsentEvents,
+  staffEmailPreferences,
   documentAcknowledgements,
   evaluations,
   internalNotes,
@@ -105,6 +112,17 @@ export async function exportStaffData(staffId: string) {
     q(db.select({ documentId: documentAcknowledgements.documentId, version: documentAcknowledgements.documentVersion, at: documentAcknowledgements.acknowledgedAt }).from(documentAcknowledgements).where(eq(documentAcknowledgements.staffId, staffId))),
     q(db.select({ id: messageThreads.id, subject: messageThreads.subject }).from(messageThreads).where(eq(messageThreads.staffId, staffId))),
   ]);
+  const [acceptances, consents, compensation, reviews, approvals, evidence] = await Promise.all([
+    db.select({ kind: staffAcceptances.kind, version: staffAcceptances.version, acceptedAt: staffAcceptances.acceptedAt, method: staffAcceptances.method }).from(staffAcceptances).where(eq(staffAcceptances.staffId, staffId)),
+    db.select({ purpose: staffConsentEvents.purposeKey, granted: staffConsentEvents.granted, at: staffConsentEvents.recordedAt }).from(staffConsentEvents).where(eq(staffConsentEvents.staffId, staffId)),
+    db
+      .select({ workDate: compensationItems.workDate, category: compensationItems.category, quantity: compensationItems.quantity, unitRate: compensationItems.unitRate, amountCents: compensationItems.amountCents, tripDate: compensationItems.tripDate, businessPurpose: compensationItems.businessPurpose, reason: compensationItems.reason, status: compensationItems.status })
+      .from(compensationItems)
+      .where(eq(compensationItems.staffId, staffId)),
+    db.select({ kind: payReviewRequests.kind, message: payReviewRequests.message, status: payReviewRequests.status, resolution: payReviewRequests.resolution, at: payReviewRequests.createdAt }).from(payReviewRequests).where(eq(payReviewRequests.staffId, staffId)),
+    db.select({ approvedOn: contractorApprovals.approvedOn, revokedAt: contractorApprovals.revokedAt }).from(contractorApprovals).where(eq(contractorApprovals.staffId, staffId)),
+    db.select({ kind: contractorEvidence.kind, issuedOn: contractorEvidence.issuedOn, expiresOn: contractorEvidence.expiresOn }).from(contractorEvidence).where(and(eq(contractorEvidence.staffId, staffId), isNull(contractorEvidence.removedAt))),
+  ]);
   const threadMessages = threadRows.length
     ? await db.select({ threadId: messages.threadId, authorId: messages.authorId, body: messages.body, at: messages.createdAt }).from(messages).where(inArray(messages.threadId, threadRows.map((t) => t.id)))
     : [];
@@ -122,7 +140,9 @@ export async function exportStaffData(staffId: string) {
           legalName: sensitive.legalName,
           businessName: sensitive.businessName,
           businessNumber: sensitive.businessNumber,
-          taxRegistered: sensitive.taxRegistered,
+          gstRegistration: sensitive.gstRegistrationStatus,
+          gstRegistrationEffectiveDate: sensitive.gstRegistrationEffectiveDate,
+          gstVerification: sensitive.gstVerificationStatus,
           gstHstNumber: sensitive.gstHstNumber,
           mailingAddress: [sensitive.mailingStreet, sensitive.mailingCity, sensitive.mailingProvince, sensitive.mailingPostalCode].filter(Boolean).join(", ") || null,
           emergencyContactName: sensitive.emergencyContactName,
@@ -139,6 +159,12 @@ export async function exportStaffData(staffId: string) {
     attendance: attendanceRows,
     payments: payRows,
     documentAcknowledgements: ackRows,
+    agreements: acceptances,
+    consentChoices: consents,
+    contractorApproval: approvals,
+    statusEvidence: evidence,
+    allowancesMileageBonuses: compensation,
+    payReviewRequests: reviews,
     messages: threadRows.map((t) => ({ subject: t.subject, messages: threadMessages.filter((m) => m.threadId === t.id).map((m) => ({ fromYou: m.authorId === profile.userId, body: m.body, at: m.at })) })),
   };
 }
@@ -149,13 +175,17 @@ export async function exportStaffData(staffId: string) {
  * payables and their legal/tax identity (needed for tax records) are kept against the anonymised
  * profile; messages they exchanged with RGXM are kept as business correspondence.
  */
-export async function anonymizeStaff(actorId: string, staffId: string, reason: string) {
+export async function anonymizeStaff(actorId: string | null, staffId: string, reason: string) {
   if (reason.trim().length < 5) throw new PrivacyError("Record why (e.g. the date and channel of their request).");
   const storageKeys: string[] = [];
   await db.transaction(async (tx) => {
     const [p] = await tx.select().from(staffProfiles).where(eq(staffProfiles.id, staffId)).for("update");
     if (!p) throw new PrivacyError("Profile not found.");
     if (p.anonymizedAt) throw new PrivacyError("This profile has already been anonymised.");
+    const { rows: held } = await tx.execute<{ held: boolean }>(sql`
+      select exists (select 1 from legal_holds h where h.released_at is null and (h.staff_id = ${staffId}
+        or h.project_id in (select b.project_id from bookings b where b.staff_id = ${staffId}))) as held`);
+    if (held[0]?.held) throw new PrivacyError("This person (or a project they worked on) is under a legal hold, so their details can't be erased yet.");
     const [upcoming] = await tx
       .select({ n: sql<number>`count(*)::int` })
       .from(bookings)
@@ -185,7 +215,7 @@ export async function anonymizeStaff(actorId: string, staffId: string, reason: s
     storageKeys.push(...files.map((f) => f.key), ...certFiles.map((f) => f.key!));
     if (p.photoKey) storageKeys.push(p.photoKey);
 
-    for (const t of [staffSkills, staffLanguages, staffCertifications, availabilityRules, availabilityExceptions, staffListMembers, projectTeamMembers, staffFiles, internalNotes, evaluations, staffRoles] as const) {
+    for (const t of [staffSkills, staffLanguages, staffCertifications, availabilityRules, availabilityExceptions, staffListMembers, projectTeamMembers, staffFiles, internalNotes, evaluations, staffRoles, staffEmailPreferences] as const) {
       await tx.delete(t).where(eq(t.staffId, staffId));
     }
     await tx

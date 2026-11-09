@@ -104,7 +104,7 @@ export function TwoFactorSettings({ enabled, required = false }: { enabled: bool
             </ul>
           </div>
         ) : enabled && required ? (
-          <p className="text-sm text-muted-foreground">Required for your role, so it can&apos;t be turned off. Lost your device? Use a backup code, or ask another administrator to reset it.</p>
+          <p className="text-sm text-muted-foreground">Required for RGXM staff accounts, so it can&apos;t be turned off. Lost your device? Use a backup code, or ask another administrator to reset it.</p>
         ) : enabled ? (
           <form onSubmit={disable} className="grid max-w-sm gap-4">
             <Field label="Confirm your password to turn it off" htmlFor="password">

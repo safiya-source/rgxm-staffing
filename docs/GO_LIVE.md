@@ -143,3 +143,41 @@ New work is merged into `main` and appears on staging first. To release it to pr
 2. GitHub → **Pull requests → New** → base `production` ← compare `main` → create and merge.
    Vercel deploys it to crew.rgxmagency.com.
 3. To undo a bad release, use Vercel → Deployments → the previous production deployment → **Promote** (instant rollback).
+
+## Releasing the contractor-compliance update (migration 0012)
+
+This release changes day-to-day work, so plan it with the team. Full details are in docs/COMPLIANCE.md.
+
+**Before merging the release PR:**
+
+1. Run **Actions → Production database** (boxes empty). It applies `0012_compliance_foundation`. The migration
+   only adds things and doesn't change any amount; the current app keeps working with it.
+2. Tell everyone at RGXM that they'll be asked to set up two-step verification on their next visit. This now
+   applies to every staff account, not only Admin and Finance.
+
+**Straight after release:**
+
+0. **Publish RGXM's documents.** Migration 0013 loads the Privacy Policy, Independent Contractor Agreement and
+   Platform Terms of Use (source: `docs/legal/`) as drafts, and fills in the Privacy Officer, contact emails and
+   30-day privacy response period from them. In **Settings → Contractors & legal**:
+   - approve each of the three documents, recording who approved it;
+   - confirm the payment terms ("Contractor Agreement §4" rule) with an approval reference;
+   - in **Privacy & retention**, approve the 90-day location and 30-day email periods with the reference
+     "Privacy Policy, effective Nov 9, 2026".
+
+   From the moment a document is approved, contractors must accept it (at sign-up, or on the *My agreements*
+   page) before they can be confirmed for new shifts. Publish when you're ready for that.
+
+1. **Contractor approvals.** Bookings can't be confirmed for people without a recorded contractor-process
+   approval. In Talent, select the current contractors and use **Record contractor approval** (approval date,
+   plus the reference to the assessment you did). If you need a few days to do this, an Admin can temporarily
+   switch off *Require RGXM contractor approval* in Settings → Contractors & legal.
+2. **GST/HST answers.** New pay lines for anyone whose answer isn't verified by Finance go to **Finance tax
+   review**, and those lines can't be batched until Finance decides. Two ways to clear them:
+   - ask contractors to answer the GST/HST question in the portal, then verify each answer on their Talent page;
+   - or decide individual lines under Payments → *Needs Finance tax review*.
+
+   Pay lines approved before the release keep their old amounts and can still be batched.
+3. **Bank files and accounting files are now separate.** Batches produce the bank file. QuickBooks bills come
+   from Payments → **Accounting**. Record the bank submission and each payment's outcome, with bank evidence;
+   exporting a file no longer counts as paid.

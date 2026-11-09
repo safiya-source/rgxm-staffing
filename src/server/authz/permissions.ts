@@ -61,6 +61,22 @@ export const PERMISSIONS = {
   "payments.manage": { admin: A, finance: A },
 
   "reports.view": { admin: A, project_manager: A, staffing_coordinator: A, finance: A },
+  "reports.finance": { admin: A, finance: A },
+
+  // Contractor onboarding and compliance.
+  "contractor.approve": { admin: A, finance: A },
+  "legal.manage": { admin: A },
+  "incidents.manage": { admin: A },
+
+  // Tax configuration (accountant-approved) and Finance verification of GST/HST registration.
+  "tax.configure": { admin: A, finance: A },
+  "tax.verify_registration": { admin: A, finance: A },
+  "accounting.manage": { admin: A, finance: A },
+
+  // Project compensation (allowances, mileage, bonuses).
+  "compensation.configure": { admin: A, project_manager: S },
+  "compensation.record": { admin: A, project_manager: S, staffing_coordinator: S },
+  "compensation.approve": { admin: A, project_manager: S, finance: A },
 } as const satisfies Record<string, Partial<Record<InternalRole, Grant>>>;
 
 export type Permission = keyof typeof PERMISSIONS;

@@ -22,7 +22,8 @@ export type OutboxEvent =
   | { type: "timesheet.needs_review"; payload: { timesheetId: string } }
   | { type: "timesheet.approved"; payload: { timesheetId: string; corrected?: boolean } }
   | { type: "payment.paid"; payload: { batchId: string; staffId: string } }
-  | { type: "staff.invite"; payload: { invitationId: string } };
+  | { type: "staff.invite"; payload: { invitationId: string } }
+  | { type: "pay_review.requested"; payload: { requestId: string } };
 
 export async function enqueue(tx: Tx | typeof db, event: OutboxEvent & { dedupeKey?: string }) {
   await tx

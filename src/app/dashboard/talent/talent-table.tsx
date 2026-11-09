@@ -1,6 +1,6 @@
 "use client";
 import { TimeAgo } from "@/components/app/time-ago";
-import { DownloadIcon, ListPlusIcon, MailIcon, UsersIcon } from "lucide-react";
+import { BadgeCheckIcon, DownloadIcon, ListPlusIcon, MailIcon, UsersIcon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
@@ -14,7 +14,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { NativeSelect } from "@/components/ui/native-select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatMoney } from "@/lib/format";
-import { addToListAction, inviteStaffAction } from "./actions";
+import { addToListAction, approveContractorsAction, inviteStaffAction } from "./actions";
 
 export type TalentTableRow = {
   id: string;
@@ -37,12 +37,14 @@ export function TalentTable({
   lists,
   canEdit,
   canExport,
+  canApprove = false,
 }: {
   rows: TalentTableRow[];
   showRates: boolean;
   lists: { value: string; label: string }[];
   canEdit: boolean;
   canExport: boolean;
+  canApprove?: boolean;
 }) {
   const router = useRouter();
   const [selected, setSelected] = useState<string[]>([]);
@@ -101,6 +103,28 @@ export function TalentTable({
               }
             >
               <MailIcon /> Send portal invite
+            </Button>
+          ) : null}
+          {canApprove ? (
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={pending}
+              onClick={() => {
+                const ref = window.prompt(
+                  `Record RGXM's contractor-process approval for ${selected.length} ${selected.length === 1 ? "person" : "people"} as of today?\n\nOptional: reference to the external assessment (e.g. accountant checklist, file name).`,
+                  "",
+                );
+                if (ref === null) return;
+                start(async () => {
+                  const res = await approveContractorsAction(selected, { approvedOn: new Date().toLocaleDateString("en-CA"), assessmentReference: ref });
+                  if (res.ok) toast.success(res.message ?? "Approval recorded");
+                  else toast.error(res.error);
+                  router.refresh();
+                });
+              }}
+            >
+              <BadgeCheckIcon /> Record contractor approval
             </Button>
           ) : null}
           {canExport ? (

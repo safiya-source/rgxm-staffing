@@ -4,7 +4,7 @@ import Link from "next/link";
 import { PageHeader } from "@/components/app/page-header";
 import { Card, CardContent } from "@/components/ui/card";
 import { canAny } from "@/server/authz/permissions";
-import { getClients, getInternalUsers } from "@/server/queries/projects";
+import { getClients, getInternalUsers, getServiceCategoryOptions } from "@/server/queries/projects";
 import { requireInternal, toActor } from "@/server/session";
 import { createProjectAction } from "../actions";
 import { ProjectForm } from "../project-form";
@@ -13,7 +13,7 @@ export const metadata: Metadata = { title: "New project" };
 
 export default async function NewProjectPage() {
   const viewer = await requireInternal("project.create");
-  const [team, clients] = await Promise.all([getInternalUsers(), getClients()]);
+  const [team, clients, serviceCategories] = await Promise.all([getInternalUsers(), getClients(), getServiceCategoryOptions()]);
   return (
     <>
       <Link href="/dashboard/projects" className="mb-6 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
@@ -26,6 +26,7 @@ export default async function NewProjectPage() {
             action={createProjectAction}
             clients={clients}
             team={team}
+            serviceCategories={serviceCategories}
             canSeeBudget={canAny(toActor(viewer), "budget.view")}
             submitLabel="Create project"
             values={{
@@ -42,6 +43,9 @@ export default async function NewProjectPage() {
               currency: "CAD",
               internalNotes: null,
               clientNotes: null,
+              eventProvince: "ON",
+              serviceCategory: null,
+              supplyType: "onsite",
             }}
           />
         </CardContent>

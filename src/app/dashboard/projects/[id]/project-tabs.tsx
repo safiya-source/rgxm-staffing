@@ -10,6 +10,7 @@ export function ProjectTabs({ projectId, showBudget }: { projectId: string; show
     { href: base, label: "Overview" },
     { href: `${base}/shifts`, label: "Shifts" },
     { href: `${base}/comms`, label: "Briefs & updates" },
+    { href: `${base}/compensation`, label: "Allowances & bonuses" },
     ...(showBudget ? [{ href: `${base}/budget`, label: "Budget" }] : []),
     { href: `${base}/setup`, label: "Setup" },
   ];

@@ -10,6 +10,7 @@ import { FIELD_ROLES } from "@/lib/roles";
 import { recordAudit } from "@/server/audit";
 import { runAction, UserFacingError } from "@/server/actions";
 import { saveTaxDetails, TaxDetailsError, type TaxDetailsInput } from "@/server/domain/tax-details";
+import { BillingError, requestPayReview } from "@/server/domain/billing";
 import { db } from "@/server/db";
 import { bookings as bookingsTable, messageThreads, notifications, shifts as shiftsTable, staffProfiles, staffRoles, users } from "@/server/db/schema";
 import * as attendance from "@/server/domain/attendance";
@@ -18,6 +19,7 @@ import { isIsoDate, isLocalTime, shiftInstants, zonedToUtc } from "@/lib/time";
 import * as availability from "@/server/domain/availability";
 import * as bookingsDomain from "@/server/domain/bookings";
 import * as comms from "@/server/domain/comms";
+import * as onboarding from "@/server/domain/onboarding";
 import { kickOutbox } from "@/server/notify/run";
 import { ForbiddenError, getViewer } from "@/server/session";
 
@@ -48,8 +50,24 @@ export async function saveStaffProfile(_prev: ActionResult, formData: FormData):
   const result = await runAction(async (): Promise<ActionResult> => {
     const viewer = await getViewer();
     if (!viewer || viewer.kind !== "staff") throw new ForbiddenError("Please sign in.");
+    // Current approved documents come from the database, never from the form.
+    const docs = mode === "onboarding" ? await onboarding.currentDocuments() : null;
     if (mode === "onboarding" && formData.get("consent") !== "on") {
-      return { ok: false, error: "Please confirm you've read the privacy notice.", fieldErrors: { consent: ["Required"] } };
+      return { ok: false, error: "Please confirm you've read the Privacy Policy.", fieldErrors: { consent: ["Required"] } };
+    }
+    if (docs?.platform_terms && formData.get("platformAccept") !== "on") {
+      return { ok: false, error: "Please agree to the Platform Terms of Use.", fieldErrors: { platformAccept: ["Required"] } };
+    }
+    if (docs?.contractor_terms && formData.get("termsAccept") !== "on") {
+      return { ok: false, error: "Please accept the Independent Contractor Agreement.", fieldErrors: { termsAccept: ["Required"] } };
+    }
+    let party: onboarding.ContractingParty | undefined;
+    if (docs?.contractor_terms) {
+      try {
+        party = onboarding.normalizeParty({ actingFor: formData.get("actingFor"), legalName: formData.get("partyLegalName"), businessName: formData.get("partyBusinessName"), representative: formData.get("partyRepresentative") });
+      } catch (err) {
+        return { ok: false, error: (err as Error).message, fieldErrors: { termsAccept: [(err as Error).message] } };
+      }
     }
     const input = profileSchema.parse({
       firstName: formData.get("firstName"),
@@ -62,6 +80,7 @@ export async function saveStaffProfile(_prev: ActionResult, formData: FormData):
     });
     const { roles, ...fields } = input;
 
+    let savedStaffId: string | undefined;
     await db.transaction(async (tx) => {
       let staffId = viewer.staff?.id;
       if (staffId) {
@@ -76,6 +95,7 @@ export async function saveStaffProfile(_prev: ActionResult, formData: FormData):
           .returning({ id: staffProfiles.id });
         staffId = created!.id;
       }
+      savedStaffId = staffId;
       await tx.delete(staffRoles).where(eq(staffRoles.staffId, staffId));
       await tx.insert(staffRoles).values(roles.map((role) => ({ staffId: staffId!, role })));
       await tx.update(users).set({ name: `${fields.firstName} ${fields.lastName}` }).where(eq(users.id, viewer.userId));
@@ -90,6 +110,14 @@ export async function saveStaffProfile(_prev: ActionResult, formData: FormData):
         tx,
       );
     });
+    if (docs && savedStaffId) {
+      const me = { userId: viewer.userId, staffId: savedStaffId };
+      // Privacy acknowledgement and terms acceptance are recorded separately, against the live versions.
+      const ids = [docs.privacy_notice?.id, docs.platform_terms?.id, docs.contractor_terms?.id].filter((x): x is string => Boolean(x));
+      if (ids.length) await onboarding.acceptDocuments(me, ids, "portal_onboarding", party);
+      const offered = await onboarding.offeredConsentPurposes();
+      await onboarding.setConsents(me, Object.fromEntries(offered.map((p) => [p.key, formData.get(`consent_${p.key}`) === "on"])), "portal_onboarding");
+    }
     revalidatePath("/portal", "layout");
     return { ok: true, message: "Profile saved." };
   });
@@ -99,7 +127,7 @@ export async function saveStaffProfile(_prev: ActionResult, formData: FormData):
 
 // ─── Tax details ─────────────────────────────────────────────────────────────
 
-/** A contractor's own tax details (SIN, HST registration, mailing address) for pay and T4A slips. */
+/** A contractor's own tax details (GST/HST answer, mailing address) for pay and year-end slips. No SIN. */
 export async function saveMyTaxDetailsAction(_prev: ActionResult, formData: FormData): Promise<ActionResult> {
   return runAction(async () => {
     const me = await requireStaffViewer();
@@ -436,5 +464,57 @@ export async function supervisorSendBackAction(bookingId: string, reason: string
     kickOutbox();
     revalidatePath("/portal/team");
     return { ok: true, message: "Sent back with your note." };
+  });
+}
+
+// ─── Agreements, consents, email preferences, pay reviews ─────────────────────
+
+/** Accepts the current approved privacy notice / terms the contractor hasn't accepted yet. */
+export async function acceptAgreementsAction(fd: FormData): Promise<ActionResult> {
+  return runAction(async () => {
+    const me = await requireStaffViewer();
+    const pending = await onboarding.pendingAcceptances(me.staffId);
+    const missing = pending.filter((d) => fd.get(`accept_${d.id}`) !== "on");
+    if (missing.length) throw new UserFacingError("Please tick each box to continue.");
+    try {
+      const party = pending.some((d) => d.kind === "contractor_terms")
+        ? onboarding.normalizeParty({ actingFor: fd.get("actingFor"), legalName: fd.get("partyLegalName"), businessName: fd.get("partyBusinessName"), representative: fd.get("partyRepresentative") })
+        : undefined;
+      await onboarding.acceptDocuments(me, pending.map((d) => d.id), "portal_update", party);
+    } catch (err) {
+      if (err instanceof onboarding.OnboardingError) throw new UserFacingError(err.message);
+      throw err;
+    }
+    revalidatePath("/portal", "layout");
+    return { ok: true, message: "Thanks. That's recorded." };
+  });
+}
+
+export async function savePreferencesAction(fd: FormData): Promise<ActionResult> {
+  return runAction(async () => {
+    const me = await requireStaffViewer();
+    await onboarding.setEmailPreferences(me, { shiftOpportunityEmails: fd.get("shiftOpportunityEmails") === "on" });
+    const offered = await onboarding.offeredConsentPurposes();
+    await onboarding.setConsents(me, Object.fromEntries(offered.map((p) => [p.key, fd.get(`consent_${p.key}`) === "on"])), "portal_update");
+    revalidatePath("/portal/profile");
+    return { ok: true, message: "Preferences saved." };
+  });
+}
+
+/** "Tax details incorrect? Request a review." and general pay questions. */
+export async function requestPayReviewAction(fd: FormData): Promise<ActionResult> {
+  return runAction(async () => {
+    const me = await requireStaffViewer();
+    await rateLimit("tax.self_update", me.userId); // shares the pay-details limit (10 an hour)
+    const payableId = String(fd.get("payableId") ?? "") || null;
+    try {
+      await requestPayReview(me, { payableId, kind: String(fd.get("kind") ?? "other") as "tax", message: String(fd.get("message") ?? "") });
+    } catch (err) {
+      if (err instanceof BillingError) throw new UserFacingError(err.message);
+      throw err;
+    }
+    await kickOutbox();
+    revalidatePath("/portal/payments");
+    return { ok: true, message: "Sent to RGXM Finance. They'll get back to you." };
   });
 }

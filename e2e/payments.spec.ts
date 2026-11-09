@@ -23,7 +23,7 @@ async function approvedPayable() {
   try {
     await client.query("begin");
     // Jordan isn't GST/HST-registered for this test, so the payable needs no HST.
-    await client.query("update staff_sensitive set tax_registered = false, gst_hst_number = null where staff_id = $1", [ctx.staff_id]);
+    await client.query("update staff_sensitive set tax_registered = false, gst_hst_number = null, gst_registration_status = 'no', gst_verification_status = 'verified' where staff_id = $1", [ctx.staff_id]);
     const shift = (
       await client.query(
         `insert into shifts (project_id, location_id, role, starts_at, ends_at, timezone, rate_cents, status)
@@ -47,8 +47,8 @@ async function approvedPayable() {
     ).rows[0];
     const payable = (
       await client.query(
-        `insert into payable_items (timesheet_id, staff_id, project_id, service_date, classification, payable_minutes, rate_cents, base_cents, total_cents, calc_version, calc_inputs)
-         values ($1, $2, $3, (($4::timestamptz) at time zone 'America/Toronto')::date, 'contractor', 300, 2400, 12000, 12000, 'base-hst-v2', '{"role":"BA","hst":null}') returning id`,
+        `insert into payable_items (timesheet_id, staff_id, project_id, service_date, classification, payable_minutes, rate_cents, base_cents, total_cents, calc_version, calc_inputs, tax_status, registration_snapshot)
+         values ($1, $2, $3, (($4::timestamptz) at time zone 'America/Toronto')::date, 'contractor', 300, 2400, 12000, 12000, 'lines-tax-v3', '{"role":"BA"}', 'no_tax', 'no:verified') returning id`,
         [ts.id, ctx.staff_id, ctx.project_id, start],
       )
     ).rows[0];
@@ -90,20 +90,23 @@ test("finance batches, a second person approves, export once, mark paid, staff s
   // 3. Finance exports once; the file is marked as demo and includes our payable.
   await fin.reload();
   const downloadPromise = fin.waitForEvent("download");
-  await fin.getByRole("button", { name: "Generate export" }).click();
+  await fin.getByRole("button", { name: "Generate bank file" }).click();
   const download = await downloadPromise;
   expect(download.suggestedFilename()).toMatch(/^DEMO-CON-.*\.csv$/);
   const text = await (await download.createReadStream()).toArray().then((chunks) => Buffer.concat(chunks).toString("utf8"));
   expect(text).toContain(payableId);
   expect(text).toContain("DEMO - DO NOT PAY");
   await fin.reload();
-  await expect(fin.getByRole("button", { name: "Generate export" })).toHaveCount(0);
+  await expect(fin.getByRole("button", { name: "Generate bank file" })).toHaveCount(0);
+  // Exporting never marks anything paid.
+  expect((await pool.query("select status from payable_items where id = $1", [payableId])).rows[0].status).toBe("exported");
   await expect(fin.getByTitle("SHA-256 fingerprint")).toBeVisible();
 
   // 4. Finance records the payment.
-  await fin.getByRole("button", { name: "Mark paid" }).click();
-  await fin.getByRole("button", { name: "Mark paid" }).last().click();
-  await expect(fin.getByText(/Marked paid/)).toBeVisible();
+  await fin.getByLabel("Bank evidence").fill("Demo statement, line 1");
+  await fin.getByRole("button", { name: "Record settlement" }).click();
+  await fin.getByRole("button", { name: "Record settlement" }).last().click();
+  await expect(fin.getByText(/Settlement recorded/)).toBeVisible();
   const p = (await pool.query("select status from payable_items where id = $1", [payableId])).rows[0];
   expect(p.status).toBe("paid");
   expect((await pool.query("select status from timesheets where id = $1", [timesheetId])).rows[0].status).toBe("paid");
@@ -121,7 +124,8 @@ test("finance batches, a second person approves, export once, mark paid, staff s
   const pm = await (await browser.newContext()).newPage();
   await signInAsTeam(pm, "pm");
   await pm.goto(`/dashboard/projects/${projectId}/budget`);
-  await expect(pm.getByText("Actual (approved)")).toBeVisible();
+  await expect(pm.getByText("Actual fees (approved)")).toBeVisible();
+  await expect(pm.getByText("Approved costs by category")).toBeVisible();
   await expect(pm.getByRole("cell", { name: "Brand Ambassador" })).toBeVisible();
 });
 
@@ -139,8 +143,8 @@ test("coordinators can't see payments or budgets", async ({ page }) => {
 test("finance sees the T4A summary and the talent tax details", async ({ page }) => {
   await signInAsTeam(page, "finance");
   await page.goto("/dashboard/payments");
-  await page.getByRole("link", { name: "T4A summary" }).click();
-  await expect(page.getByRole("heading", { name: /T4A summary \d{4}/ })).toBeVisible();
+  await page.getByRole("link", { name: "Year-end" }).first().click();
+  await expect(page.getByRole("heading", { name: /Year-end review \d{4}/ })).toBeVisible();
   await expect(page.getByRole("link", { name: "Download CSV for accountant" })).toBeVisible();
   // Demo payments are never included.
   await expect(page.getByText(/Jordan Lee/)).toHaveCount(0);
@@ -148,5 +152,5 @@ test("finance sees the T4A summary and the talent tax details", async ({ page })
   await page.goto("/dashboard/talent?q=Jordan%20Lee");
   await page.getByRole("link", { name: "Jordan Lee" }).click();
   await expect(page.getByRole("heading", { name: "Pay & tax details" })).toBeVisible();
-  await expect(page.getByText("Independent contractor")).toBeVisible();
+  await expect(page.getByText("Independent contractor").first()).toBeVisible();
 });

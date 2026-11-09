@@ -4,7 +4,7 @@ import { and, eq, gte, lte, sql } from "drizzle-orm";
 import { db } from "@/server/db";
 import { bookings, timesheets } from "@/server/db/schema";
 import { ensureTimesheet, recomputeTimesheet } from "@/server/domain/attendance";
-import { purgeExpiredPersonalData } from "@/server/domain/privacy";
+import { runRetention } from "@/server/domain/privacy-ops";
 import { pruneRateLimits } from "@/server/rate-limit";
 import { enqueue } from "./outbox";
 
@@ -40,8 +40,8 @@ export async function runSweeps(now = new Date()) {
       await enqueue(db, { type: "timesheet.reminder", payload: { bookingId: b.id }, dedupeKey: `timesheet.reminder:${b.id}` });
     }
   }
-  // 3. Privacy retention: clear check-in coordinates and stored email bodies past their retention period.
-  const retention = await purgeExpiredPersonalData(now);
+  // 3. Privacy retention: every category with an RGXM-set period (legal holds are skipped).
+  const retention = await runRetention(now);
   await pruneRateLimits(now);
   return { reminders: upcoming.length, endedShifts: ended.length, retention };
 }

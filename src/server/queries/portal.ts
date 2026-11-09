@@ -2,7 +2,7 @@
 import { and, asc, desc, eq, gte, inArray, lt, sql } from "drizzle-orm";
 import { db } from "@/server/db";
 import type { CheckInState } from "@/components/portal/check-in-panel";
-import { attendanceEvents, bookings, offerResponses, projectLocations, projects, shifts, timesheets } from "@/server/db/schema";
+import { attendanceEvents, bookings, offerResponses, projectLocations, projects, retentionPolicies, shifts, timesheets } from "@/server/db/schema";
 import { CHECK_OUT_GRACE_MINUTES, checkInWindow } from "@/server/domain/attendance-rules";
 import { getOrgSettings } from "@/server/settings";
 
@@ -80,6 +80,8 @@ export type AttendanceState = {
   opensAt: string;
   checkedInAt: string | null;
   requireLocation: boolean;
+  /** How long check-in coordinates are kept (retention policy), or null if no period is set. */
+  locationRetentionDays: number | null;
 };
 
 /** Check-in state per booking, from the immutable attendance events. */
@@ -87,6 +89,8 @@ export async function getAttendanceStates(bookingIds: string[], now = new Date()
   const out = new Map<string, AttendanceState>();
   if (!bookingIds.length) return out;
   const settings = await getOrgSettings();
+  const [policy] = await db.select({ days: retentionPolicies.retentionDays }).from(retentionPolicies).where(eq(retentionPolicies.category, "check_in_location"));
+  const locationRetentionDays = policy ? policy.days : settings.locationRetentionDays;
   const [rows, events] = await Promise.all([
     db
       .select({ id: bookings.id, startsAt: shifts.startsAt, endsAt: shifts.endsAt, requireLocation: projectLocations.requireLocationAtCheckIn })
@@ -107,7 +111,7 @@ export async function getAttendanceStates(bookingIds: string[], now = new Date()
     else if (now < w.opensAt) state = "before_window";
     else if (now <= w.closesAt) state = "can_check_in";
     else state = "closed";
-    out.set(r.id, { state, opensAt: w.opensAt.toISOString(), checkedInAt: lastIn?.occurredAt.toISOString() ?? null, requireLocation: r.requireLocation });
+    out.set(r.id, { state, opensAt: w.opensAt.toISOString(), checkedInAt: lastIn?.occurredAt.toISOString() ?? null, requireLocation: r.requireLocation, locationRetentionDays });
   }
   return out;
 }
@@ -136,4 +140,63 @@ export async function getHoursToReview(staffId: string, now = new Date()) {
 export async function getTimesheetForBooking(bookingId: string) {
   const [t] = await db.select().from(timesheets).where(eq(timesheets.bookingId, bookingId));
   return t ?? null;
+}
+
+/**
+ * A contractor's own pay lines with their stored tax decision, bill and payment state, plus their
+ * open pay review requests. Never includes other people's data.
+ */
+export async function getMyPayLines(staffId: string) {
+  const { rows } = await db.execute<{
+    id: string;
+    project_name: string;
+    service_date: string;
+    category: string;
+    description: string | null;
+    quantity: string | null;
+    unit: string | null;
+    unit_rate: string | null;
+    payable_minutes: number;
+    rate_cents: number;
+    base_cents: string;
+    tax_cents: string;
+    total_cents: string;
+    currency: string;
+    status: string;
+    tax_status: string;
+    bill_number: string | null;
+    paid_at: Date | null;
+    last_state: string | null;
+    adjusts_payable_id: string | null;
+  }>(sql`
+    select p.id, pr.name as project_name, p.service_date::text, p.category, p.description, p.quantity::text, p.unit, p.unit_rate::text,
+      p.payable_minutes, p.rate_cents, p.base_cents, p.tax_cents, p.total_cents, p.currency, p.status, p.tax_status, b.bill_number,
+      (select max(i.paid_at) from payment_batch_items i where i.payable_item_id = p.id and i.state = 'settled') as paid_at,
+      (select i.state from payment_batch_items i where i.payable_item_id = p.id order by coalesce(i.reconciled_at, i.returned_at, i.paid_at) desc nulls last limit 1) as last_state,
+      p.adjusts_payable_id
+    from payable_items p join projects pr on pr.id = p.project_id left join bills b on b.id = p.bill_id
+    where p.staff_id = ${staffId} and p.status <> 'void'
+    order by p.service_date desc, p.category
+    limit 300`);
+  const ids = rows.map((r) => r.id);
+  const taxLines = ids.length
+    ? (
+        await db.execute<{ payable_item_id: string; component: string; jurisdiction: string; rate_ppm: number; tax_cents: string }>(
+          sql`select payable_item_id, component, jurisdiction, rate_ppm, tax_cents from payable_tax_lines where payable_item_id in ${ids} order by component`,
+        )
+      ).rows
+    : [];
+  const { rows: reviews } = await db.execute<{ id: string; payable_item_id: string | null; kind: string; message: string; status: string; resolution: string | null; created_at: Date }>(
+    sql`select id, payable_item_id, kind, message, status, resolution, created_at from pay_review_requests where staff_id = ${staffId} order by created_at desc limit 20`,
+  );
+  return {
+    lines: rows.map((r) => ({
+      ...r,
+      base_cents: Number(r.base_cents),
+      tax_cents: Number(r.tax_cents),
+      total_cents: Number(r.total_cents),
+      taxes: taxLines.filter((t) => t.payable_item_id === r.id).map((t) => ({ component: t.component, jurisdiction: t.jurisdiction, ratePpm: t.rate_ppm, cents: Number(t.tax_cents) })),
+    })),
+    reviews,
+  };
 }

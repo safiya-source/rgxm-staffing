@@ -257,6 +257,20 @@ export const handlers: Record<string, Handler> = {
     await sendInvitation(payload.invitationId as string);
   },
 
+  // In-app only (no email): pay details stay inside Crew.
+  "pay_review.requested": async (payload, eventId) => {
+    const finance = await db.selectDistinct({ userId: userRoles.userId }).from(userRoles).where(inArray(userRoles.role, ["finance", "admin"]));
+    for (const { userId } of finance) {
+      await notify({
+        dedupeKey: `n:${eventId}:${userId}`,
+        userId,
+        type: "pay_review.requested",
+        title: "A contractor asked for a pay or tax review",
+        href: "/dashboard/payments/reviews",
+      });
+    }
+  },
+
   "payment.paid": async (payload, eventId) => {
     const rows = await db
       .select({ totalCents: paymentBatchItems.amountCents, currency: payableItems.currency, paidAt: paymentBatchItems.paidAt, isDemo: paymentBatches.isDemo })
@@ -274,18 +288,18 @@ export const handlers: Record<string, Handler> = {
       userId: person.userId,
       type: "payment.paid",
       title: `Payment sent: ${amount}`,
-      body: `${rows.length} shift${rows.length === 1 ? "" : "s"} · paid ${paidOn}`,
+      body: `${rows.length} item${rows.length === 1 ? "" : "s"} · settled ${paidOn}`,
       href: "/portal/payments",
       email: {
         to: person.email,
         subject: `RGXM payment sent: ${amount}`,
         ...detailEmail({
           heading: `Your payment is on its way, ${person.name}`,
-          intro: "RGXM has recorded a payment for your approved shifts. Depending on your bank it can take a few business days to arrive.",
+          intro: "RGXM's bank confirmed a payment for your approved work. Depending on your bank it can take a few business days to appear.",
           details: [
             ["Amount", amount],
-            ["Shifts", String(rows.length)],
-            ["Paid on", paidOn],
+            ["Items", String(rows.length)],
+            ["Settled on", paidOn],
           ],
           actionLabel: "See payment details",
           url: url("/portal/payments"),

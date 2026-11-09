@@ -1,7 +1,7 @@
 // Pure payment rules (no database). Unit-tested in tests/unit/pay-rules.test.ts.
 
 /** Bumped whenever the calculation changes; stored on every payable with its inputs. */
-export const CALC_VERSION = "base-hst-v2";
+export const CALC_VERSION = "base-hst-v2"; // legacy; new lines use LINE_CALC_VERSION in payments.ts
 
 /** Base pay in cents: payable minutes × hourly rate, rounded half up to the cent. */
 export function basePayCents(payableMinutes: number, rateCentsPerHour: number) {
@@ -69,10 +69,11 @@ export type BatchStatus = "draft" | "approved" | "exported" | "paid" | "void";
 const PAYABLE: Record<PayableStatus, PayableStatus[]> = {
   pending: ["batched", "void"],
   // Back to pending when removed from a draft batch or the batch is voided.
-  batched: ["pending", "exported"],
+  batched: ["pending", "exported", "failed"],
   exported: ["paid", "failed", "pending"],
   failed: ["batched", "void"],
-  paid: ["disputed"],
+  // A settled payment the bank later returns goes back to failed (retry against the same bill).
+  paid: ["disputed", "failed"],
   disputed: [],
   void: [],
 };
@@ -82,7 +83,7 @@ export function canMovePayable(from: PayableStatus, to: PayableStatus) {
 
 const BATCH: Record<BatchStatus, BatchStatus[]> = {
   draft: ["approved", "void"],
-  approved: ["exported", "void"],
+  approved: ["exported", "void", "draft"],
   exported: ["paid", "void"],
   paid: [],
   void: [],
@@ -104,7 +105,7 @@ export const BATCH_STATUS_LABEL: Record<BatchStatus, string> = {
   draft: "Draft",
   approved: "Approved",
   exported: "Exported",
-  paid: "Paid",
+  paid: "Reconciled",
   void: "Void",
 };
 
@@ -136,4 +137,29 @@ export function centsToDecimal(cents: number) {
 /** "7.25" hours from 435 minutes, rounded to 2 decimals. */
 export function minutesToDecimalHours(minutes: number) {
   return (Math.round((minutes / 60) * 100) / 100).toFixed(2);
+}
+
+// ─── Payment due dates ──────────────────────────────────────────────────────────
+
+export type DueRule = "days_after_bill" | "semi_monthly_agreement";
+
+/**
+ * Due date for a bill under RGXM-approved terms.
+ *  - days_after_bill: bill date + N days.
+ *  - semi_monthly_agreement (Independent Contractor Agreement §4): work in the 1st–15th is due by the
+ *    last day of that month; work in the 16th–last day is due by the 15th of the following month.
+ *    A bill covering several periods takes the earliest due date.
+ */
+export function dueDateFor(rule: DueRule, input: { billDate: string; earliestServiceDate: string; days?: number | null }) {
+  if (rule === "days_after_bill") {
+    const d = new Date(`${input.billDate}T12:00:00Z`);
+    d.setUTCDate(d.getUTCDate() + (input.days ?? 0));
+    return d.toISOString().slice(0, 10);
+  }
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(input.earliestServiceDate);
+  if (!m) throw new Error(`Invalid date ${input.earliestServiceDate}`);
+  const [year, month, day] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  if (day <= 15) return `${year}-${pad(month)}-${pad(lastDayOfMonth(year, month))}`;
+  const [ny, nm] = month === 12 ? [year + 1, 1] : [year, month + 1];
+  return `${ny}-${pad(nm)}-15`;
 }

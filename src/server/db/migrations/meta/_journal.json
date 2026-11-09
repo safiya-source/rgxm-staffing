@@ -85,6 +85,20 @@
       "when": 1793918546424,
       "tag": "0011_drop_sin_columns",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1794250548721,
+      "tag": "0012_compliance_foundation",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1794255494252,
+      "tag": "0013_legal_documents",
+      "breakpoints": true
     }
   ]
 }

@@ -188,12 +188,21 @@ export async function getStaffDetail(
                 legalName: sensitive?.legalName ?? null,
                 businessName: sensitive?.businessName ?? null,
                 businessNumber: sensitive?.businessNumber ?? null,
-                taxRegistered: sensitive?.taxRegistered ?? false,
+                gstRegistrationStatus: (sensitive?.gstRegistrationStatus ?? "unknown") as "yes" | "no" | "unsure" | "unknown",
+                gstRegistrationEffectiveDate: sensitive?.gstRegistrationEffectiveDate ?? null,
                 gstHstNumber: sensitive?.gstHstNumber ?? null,
                 mailingStreet: sensitive?.mailingStreet ?? null,
                 mailingCity: sensitive?.mailingCity ?? null,
                 mailingProvince: sensitive?.mailingProvince ?? null,
                 mailingPostalCode: sensitive?.mailingPostalCode ?? null,
+              }
+            : null,
+          gst: can.editRates
+            ? {
+                status: (sensitive?.gstRegistrationStatus ?? "unknown") as "yes" | "no" | "unsure" | "unknown",
+                verification: (sensitive?.gstVerificationStatus ?? "unverified") as "unverified" | "verified" | "rejected",
+                verifiedAt: sensitive?.gstVerifiedAt?.toISOString() ?? null,
+                reference: sensitive?.gstVerificationReference ?? null,
               }
             : null,
         }

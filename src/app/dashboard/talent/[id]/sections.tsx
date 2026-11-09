@@ -403,7 +403,10 @@ export function PaySetup({
   return (
     <div className="grid gap-2 text-sm">
       <p>Independent contractor{pay.classification === "employee" ? " (previously set as employee)" : ""}</p>
-      <p className="text-muted-foreground">{pay.taxRegistered ? `GST/HST registered${t?.gstHstNumber ? ` · ${t.gstHstNumber}` : ""}: HST added to pay` : "Not GST/HST registered"}</p>
+      <p className="text-muted-foreground">
+        {pay.taxRegistered ? `Says they're GST/HST registered${t?.gstHstNumber ? ` · ${t.gstHstNumber}` : ""}.` : "Not recorded as GST/HST registered."} Tax is decided for each pay
+        line from accountant-approved rules (or by Finance); see Onboarding &amp; compliance for verification.
+      </p>
       {t ? (
         <>
           {t.legalName ? <p className="text-muted-foreground">Legal name: {t.legalName}{t.businessName ? ` (${t.businessName})` : ""}</p> : null}

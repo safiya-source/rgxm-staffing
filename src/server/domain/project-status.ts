@@ -17,3 +17,12 @@ export const PROJECT_TRANSITIONS: Record<ProjectStatus, ProjectStatus[]> = {
 export function canTransitionProject(from: ProjectStatus, to: ProjectStatus) {
   return PROJECT_TRANSITIONS[from].includes(to);
 }
+
+/** Where a project's work is supplied; only "onsite" is calculated automatically for tax. */
+export const SUPPLY_TYPES = ["onsite", "offsite", "mixed", "multi_province"] as const;
+export const SUPPLY_TYPE_LABEL: Record<(typeof SUPPLY_TYPES)[number], string> = {
+  onsite: "Onsite at the event venue",
+  offsite: "Offsite (e.g. prep or remote work)",
+  mixed: "Mixed onsite and offsite",
+  multi_province: "Covers events in more than one province",
+};

@@ -1,19 +1,19 @@
 import type { Metadata } from "next";
-import Link from "next/link";
-import { Logo } from "@/components/app/logo";
+import { LegalDocumentPage, LegalShell } from "@/components/legal/legal-page";
+import { currentDocuments } from "@/server/domain/onboarding";
 import { getOrgSettings } from "@/server/settings";
 
-export const metadata: Metadata = { title: "Privacy notice" };
+export const metadata: Metadata = { title: "Privacy Policy" };
+export const dynamic = "force-dynamic";
 
-// DRAFT. Must be reviewed by RGXM's legal/privacy advisor before production use (PIPEDA).
+// Shows the version RGXM's lawyer approved (Settings → Contractors & legal). Until one is approved,
+// the built-in draft below is shown and clearly marked as a draft.
 export default async function PrivacyPage() {
-  const settings = await getOrgSettings();
+  const [settings, docs] = await Promise.all([getOrgSettings(), currentDocuments()]);
+  if (docs.privacy_notice) return <LegalDocumentPage kind="privacy_notice" doc={docs.privacy_notice} />;
   return (
-    <div className="mx-auto max-w-2xl px-5 py-10">
-      <Link href="/">
-        <Logo />
-      </Link>
-      <p className="mt-8 inline-flex rounded-full bg-warning-soft px-2.5 py-0.5 text-xs font-medium text-warning">
+    <LegalShell current="privacy_notice">
+      <p className="inline-flex rounded-full bg-warning-soft px-2.5 py-0.5 text-xs font-medium text-warning">
         Draft · pending legal review
       </p>
       <h1 className="mt-4 text-3xl font-semibold">Privacy notice</h1>
@@ -54,6 +54,6 @@ export default async function PrivacyPage() {
           are legally required to retain.
         </p>
       </div>
-    </div>
+    </LegalShell>
   );
 }

@@ -102,6 +102,7 @@ export default async function TalentPage({ searchParams }: PageProps<"/dashboard
           lists={lookups.lists.map((l) => ({ value: l.id, label: l.name }))}
           canEdit={canEdit}
           canExport={canExport}
+          canApprove={canAny(actor, "contractor.approve")}
         />
         <Pagination page={filters.page} pageSize={PAGE_SIZE} total={result.total} hrefFor={(p) => `/dashboard/talent${withParams(params, { page: p })}`} />
       </div>

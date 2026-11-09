@@ -1,11 +1,13 @@
 import type { Metadata } from "next";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { canAny, canOnProject } from "@/server/authz/permissions";
-import { getProjectHeader, getProjectSetup } from "@/server/queries/projects";
+import { getProjectHeader, getProjectSetup, getServiceCategoryOptions, projectTaxWarnings } from "@/server/queries/projects";
 import { getProjectRates } from "@/server/queries/staffing";
 import { loadProjectScopes, requireInternal, toActor } from "@/server/session";
 import { updateProjectAction } from "../../actions";
 import { ProjectForm } from "../../project-form";
+import { getCompensationSettings } from "@/server/domain/compensation";
+import { CompensationSettingsCard } from "./compensation-settings";
 import { RateOverrides } from "./rate-overrides";
 import { LocationsSection, RequirementsSection, TeamSection } from "./sections";
 
@@ -21,9 +23,21 @@ export default async function ProjectSetupPage({ params }: PageProps<"/dashboard
   const showRates = canAny(actor, "rates.view");
   const p = header!.project;
   const overrides = showRates ? await getProjectRates(id) : [];
+  const [serviceCategories, taxWarnings, compSettings] = await Promise.all([getServiceCategoryOptions(), projectTaxWarnings(p), getCompensationSettings(id)]);
+  const canConfigureComp = canOnProject(actor, "compensation.configure", scope);
 
   return (
     <div className="grid gap-6 lg:grid-cols-5">
+      {taxWarnings.length ? (
+        <div role="status" className="rounded-lg border border-warning/40 bg-warning-soft px-4 py-3 text-sm text-warning lg:col-span-5">
+          <p className="font-medium">Tax on this project will go to Finance review.</p>
+          <ul className="mt-1 list-disc pl-5">
+            {taxWarnings.map((w) => (
+              <li key={w}>{w}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
       <div className="grid content-start gap-6 lg:col-span-3">
         <Card>
           <CardHeader>
@@ -45,6 +59,7 @@ export default async function ProjectSetupPage({ params }: PageProps<"/dashboard
                 values={p}
                 clients={setup.clients}
                 team={setup.team}
+                serviceCategories={serviceCategories}
                 canSeeBudget={canOnProject(actor, "budget.view", scope)}
                 submitLabel="Save project"
               />
@@ -73,6 +88,7 @@ export default async function ProjectSetupPage({ params }: PageProps<"/dashboard
             </CardContent>
           </Card>
         ) : null}
+        <CompensationSettingsCard projectId={id} settings={compSettings} canEdit={canConfigureComp} />
         <Card>
           <CardHeader>
             <CardTitle>Project team</CardTitle>
