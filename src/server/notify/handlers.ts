@@ -96,7 +96,7 @@ async function supervisorUserIds(bookingId: string) {
     select distinct sp.user_id from bookings b
     join shifts s on s.id = b.shift_id
     join bookings sb on sb.project_id = b.project_id and sb.status in ('confirmed', 'completed') and sb.staff_id <> b.staff_id
-      and ((sb.role = 'AM' and b.role <> 'AM') or (sb.role = 'TL' and b.role in ('BA', 'PA')))
+      and ((sb.role = 'AM' and b.role <> 'AM') or (sb.role = 'TL' and b.role not in ('TL', 'AM')))
     join shifts ss on ss.id = sb.shift_id and ss.location_id = s.location_id
       and (ss.starts_at at time zone ss.timezone)::date = (s.starts_at at time zone s.timezone)::date
     join staff_profiles sp on sp.id = sb.staff_id

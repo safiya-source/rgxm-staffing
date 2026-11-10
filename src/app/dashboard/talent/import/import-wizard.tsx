@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { commitImportAction, previewImportAction, type ImportPreview } from "../actions";
 
-const TEMPLATE_ROW = ["Jordan", "Lee", "", "jordan.lee@example.com", "416-555-0100", "Toronto", "ON", "BA|TL", "English|French", "Sampling|Product demos", "3", "25.00", "30.00", "", ""];
+const TEMPLATE_ROW = ["Jordan", "Lee", "", "jordan.lee@example.com", "416-555-0100", "Toronto", "ON", "BA|TL", "English|French", "Sampling|Product demos", "3", "25.00", "30.00", "", "", "", "", ""];
 
 export function ImportWizard({ columns, canEditRates }: { columns: string[]; canEditRates: boolean }) {
   const [csv, setCsv] = useState<string | null>(null);

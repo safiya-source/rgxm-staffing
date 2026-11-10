@@ -7,7 +7,7 @@ export const internalRole = pgEnum("internal_role", [
   "staffing_coordinator",
   "finance",
 ]);
-export const fieldRole = pgEnum("field_role", ["BA", "TL", "PA", "AM"]);
+export const fieldRole = pgEnum("field_role", ["BA", "TL", "PA", "AM", "CH", "MS", "DN"]);
 export const staffStatus = pgEnum("staff_status", ["active", "inactive", "suspended", "archived"]);
 export const workerClassification = pgEnum("worker_classification", ["unset", "contractor", "employee"]);
 
