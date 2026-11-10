@@ -79,8 +79,9 @@ export default async function CompliancePage() {
                 <span>
                   <span className="font-medium">Require RGXM&apos;s contractor approval before a booking can be confirmed</span>
                   <span className="block text-muted-foreground">
-                    Record each person&apos;s approval on their talent profile (or in bulk from the Talent list) first, or confirmations will be refused. Turning this off lets
-                    anyone be confirmed without a recorded approval.
+                    Approval is recorded automatically when a contractor accepts the Independent Contractor Agreement. You can also record it on their talent profile
+                    (or in bulk from the Talent list), and revoke it there; a revoked person stays blocked until RGXM approves them again. Turning this off lets anyone be
+                    confirmed without a recorded approval.
                   </span>
                 </span>
               </label>

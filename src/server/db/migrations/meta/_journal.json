@@ -120,6 +120,13 @@
       "when": 1794272894002,
       "tag": "0016_event_roles",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1794344925827,
+      "tag": "0017_auto_contractor_approval",
+      "breakpoints": true
     }
   ]
 }
