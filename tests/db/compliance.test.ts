@@ -97,6 +97,31 @@ describe("contractor onboarding", () => {
     await pool.query("update legal_documents set status = 'retired' where kind = 'contractor_terms' and status = 'approved'");
   });
 
+  it("records the contractor approval automatically when the agreement is accepted, but never undoes a revocation", async () => {
+    await pool.query("update org_settings set require_contractor_approval = true");
+    const body = "These are the contractor terms for RGXM Crew, auto-approval test. ".repeat(3);
+    const termsId = await onboarding.saveDraftDocument(admin.id, { kind: "contractor_terms", version: "9.0", title: "Contractor terms", body });
+    await onboarding.approveDocument(admin.id, termsId, "Reviewed by counsel, auto-approval test");
+    const self = { actingFor: "self" as const, legalName: "Ola Onboard" };
+
+    const who = await person();
+    expect(await onboarding.bookingBlockers(db, who.staffId)).toContain("RGXM hasn't recorded their approval for the contractor process");
+    await onboarding.acceptDocuments(who, [termsId], "portal_onboarding", self);
+    expect(await onboarding.bookingBlockers(db, who.staffId)).toEqual([]);
+    const [approval] = await onboarding.contractorApprovalHistory(who.staffId);
+    expect(approval).toMatchObject({ approvedBy: who.userId, revokedAt: null, notes: expect.stringMatching(/automatically.*version 9\.0/) });
+
+    // RGXM revokes; accepting a newer agreement doesn't quietly approve them again.
+    await onboarding.revokeContractorApproval(admin.id, who.staffId, "Not working with RGXM for now");
+    const v2 = await onboarding.saveDraftDocument(admin.id, { kind: "contractor_terms", version: "9.1", title: "Contractor terms", body: `${body} Updated.` });
+    await onboarding.approveDocument(admin.id, v2, "Reviewed by counsel, auto-approval test v2");
+    await onboarding.acceptDocuments(who, [v2], "portal_update", self);
+    expect(await onboarding.bookingBlockers(db, who.staffId)).toEqual(["RGXM hasn't recorded their approval for the contractor process"]);
+    expect(await onboarding.contractorApprovalHistory(who.staffId)).toHaveLength(1);
+
+    await pool.query("update legal_documents set status = 'retired' where kind = 'contractor_terms' and status = 'approved'");
+  });
+
   it("records optional consents as a history and only offers approved purposes", async () => {
     const who = await person();
     expect(await onboarding.offeredConsentPurposes()).toEqual([]);

@@ -155,6 +155,8 @@ export async function acceptDocuments(user: { userId: string; staffId: string },
       .values(docs.map((d) => ({ staffId: user.staffId, documentId: d.id, kind: d.kind, version: d.version, userId: user.userId, method, ...partyFields(d.kind) })))
       .onConflictDoNothing();
     await recordAudit({ actorId: user.userId, action: "legal.accept", entityType: "staff", entityId: user.staffId, after: docs.map((d) => ({ kind: d.kind, version: d.version })) }, tx);
+    const terms = docs.find((d) => d.kind === "contractor_terms");
+    if (terms) await autoApproveOnAcceptance(tx, user, terms.version);
     return docs.some((d) => d.selfBilling);
   }).then(async (selfBilling) => {
     // Approved work from before they accepted the self-billing clause gets its invoice now.
@@ -278,6 +280,20 @@ export async function approveContractors(actorId: string, staffIds: string[], ra
     }
     return { approved: todo.length, alreadyApproved: existing.length };
   });
+}
+
+/**
+ * Accepting the Independent Contractor Agreement records RGXM's contractor approval, so nobody has to
+ * approve each person by hand. Never overrides RGXM: someone whose approval was ever revoked stays
+ * unapproved until RGXM records a new approval.
+ */
+async function autoApproveOnAcceptance(tx: Tx, user: { userId: string; staffId: string }, termsVersion: string) {
+  const history = await tx.select({ revokedAt: contractorApprovals.revokedAt }).from(contractorApprovals).where(eq(contractorApprovals.staffId, user.staffId));
+  if (history.length) return; // already approved, or revoked by RGXM
+  const approvedOn = new Date().toLocaleDateString("en-CA", { timeZone: "America/Toronto" });
+  const notes = `Recorded automatically when they accepted the Independent Contractor Agreement (version ${termsVersion}).`;
+  await tx.insert(contractorApprovals).values({ staffId: user.staffId, approvedBy: user.userId, approvedOn, notes }).onConflictDoNothing();
+  await recordAudit({ actorId: user.userId, action: "contractor.auto_approve", entityType: "staff", entityId: user.staffId, after: { approvedOn, termsVersion } }, tx);
 }
 
 export async function revokeContractorApproval(actorId: string, staffId: string, reason: string) {
