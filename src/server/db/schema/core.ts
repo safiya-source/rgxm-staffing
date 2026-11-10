@@ -92,7 +92,7 @@ export const orgSettings = pgTable("org_settings", {
   // Stored copies of sent emails (mail log) have their bodies cleared after this.
   mailLogRetentionDays: integer().notNull().default(30),
   // Company-wide default hourly rate per field role, in cents (e.g. {"BA": 2500}). Pre-fills new shifts.
-  defaultRates: jsonb().$type<Partial<Record<"BA" | "TL" | "PA" | "AM", number>>>().notNull().default({}),
+  defaultRates: jsonb().$type<Partial<Record<"BA" | "TL" | "PA" | "AM" | "CH" | "MS" | "DN", number>>>().notNull().default({}),
   // Privacy Officer contact, shown on the privacy notice and in the staff portal.
   privacyOfficerName: text(),
   privacyOfficerEmail: text(),

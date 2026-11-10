@@ -20,6 +20,7 @@ import * as availability from "@/server/domain/availability";
 import * as bookingsDomain from "@/server/domain/bookings";
 import * as comms from "@/server/domain/comms";
 import * as onboarding from "@/server/domain/onboarding";
+import { saveWorkDetails, type WorkDetailsInput } from "@/server/domain/work-details";
 import { kickOutbox } from "@/server/notify/run";
 import { ForbiddenError, getViewer } from "@/server/session";
 
@@ -121,7 +122,7 @@ export async function saveStaffProfile(_prev: ActionResult, formData: FormData):
     revalidatePath("/portal", "layout");
     return { ok: true, message: "Profile saved." };
   });
-  if (result.ok && mode === "onboarding") redirect("/portal");
+  if (result.ok && mode === "onboarding") redirect("/portal/onboarding/work");
   return result;
 }
 
@@ -141,6 +142,31 @@ export async function saveMyTaxDetailsAction(_prev: ActionResult, formData: Form
     revalidatePath("/portal/profile/tax");
     return { ok: true, message: "Tax details saved." };
   });
+}
+
+// ─── Work details ───────────────────────────────────────────────────────────
+
+/** Licence, vehicle, travel, experience, languages and skills. Shown after setup and editable from My profile. */
+export async function saveWorkDetailsAction(_prev: ActionResult, formData: FormData): Promise<ActionResult> {
+  const mode = formData.get("mode") === "onboarding" ? "onboarding" : "profile";
+  const result = await runAction(async () => {
+    const me = await requireStaffViewer();
+    await rateLimit("work_details.update", me.userId);
+    const input: WorkDetailsInput = {
+      hasDriversLicence: formData.get("hasDriversLicence"),
+      hasVehicle: formData.get("hasVehicle"),
+      willingToTravel: formData.get("willingToTravel"),
+      travelRadiusKm: formData.get("travelRadiusKm"),
+      experienceYears: formData.get("experienceYears"),
+      languages: formData.get("languages"),
+      skills: formData.get("skills"),
+    };
+    await saveWorkDetails(me.userId, me.staffId, input);
+    revalidatePath("/portal/profile");
+    return { ok: true, message: "Work details saved." };
+  });
+  if (result.ok && mode === "onboarding") redirect("/portal/onboarding/next");
+  return result;
 }
 
 // ─── Availability ───────────────────────────────────────────────────────────

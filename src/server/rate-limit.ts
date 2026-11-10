@@ -23,6 +23,7 @@ export const LIMITS = {
   "export.personal_data": { max: 5, windowSeconds: 3600 },
   "export.t4a": { max: 10, windowSeconds: 3600 },
   "tax.self_update": { max: 10, windowSeconds: 3600 },
+  "work_details.update": { max: 30, windowSeconds: 3600 },
 } as const;
 export type LimitName = keyof typeof LIMITS;
 

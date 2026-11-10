@@ -133,9 +133,9 @@ export const TIMESHEET_STATUS_LABEL: Record<TimesheetStatus, string> = {
   paid: "Paid",
 };
 
-/** Who may verify whose hours on site: AMs verify TLs, BAs and PAs; TLs verify BAs and PAs. */
+/** Who may verify whose hours on site: AMs verify every other role; TLs verify every role except TLs and AMs. */
 export function supervises(supervisorRole: string, memberRole: string) {
   if (supervisorRole === "AM") return memberRole !== "AM";
-  if (supervisorRole === "TL") return memberRole === "BA" || memberRole === "PA";
+  if (supervisorRole === "TL") return memberRole !== "TL" && memberRole !== "AM";
   return false;
 }

@@ -1,6 +1,7 @@
 // Read models for the Staffing Requests screens.
 import { and, asc, desc, eq, gte, inArray, isNull, ne, sql } from "drizzle-orm";
 import { availabilityOnDate, type AvailabilityStatus } from "@/lib/availability";
+import { FIELD_ROLES } from "@/lib/roles";
 import { utcToZoned } from "@/lib/time";
 import { db } from "@/server/db";
 import {
@@ -90,7 +91,7 @@ export async function getShiftGroups(projectId: string, now = new Date()): Promi
     if (!groups.has(key)) groups.set(key, { key, role: r.role, locationId: r.locationId, locationName: r.locationName, timezone: r.timezone, shifts: [] });
     groups.get(key)!.shifts.push(r);
   }
-  const order = ["BA", "TL", "PA", "AM"];
+  const order: string[] = [...FIELD_ROLES];
   return [...groups.values()].sort((a, b) => order.indexOf(a.role) - order.indexOf(b.role) || a.locationName.localeCompare(b.locationName));
 }
 
