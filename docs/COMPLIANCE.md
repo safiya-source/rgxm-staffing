@@ -23,8 +23,8 @@ someone at RGXM enters and approves, with a reference to the approval.
 
 | Requirement | How Crew does it | Status |
 |---|---|---|
-| Record approval for the contractor process (approver, date, optional assessment reference) | Talent → person → *Onboarding & compliance* → Record approval. Bulk approval is on the talent list. Revocation needs a reason; the history is kept (`contractor_approvals`). | Built |
-| Approval required before accepting bookings | `confirmBooking` refuses without a current approval (Settings → Contractors & legal → *Require RGXM contractor approval*, on by default). | Built. **Before release, record approvals for current contractors** or confirmations will be refused. |
+| Record approval for the contractor process (approver, date, optional assessment reference) | **Recorded automatically** when the contractor accepts the Independent Contractor Agreement (approver = the contractor's account, with a note naming the agreement version; existing acceptances backfilled by migration 0017). RGXM can also record it on Talent → person → *Onboarding & compliance*, or in bulk on the talent list. Revocation needs a reason and the history is kept (`contractor_approvals`); someone whose approval was ever revoked is never re-approved automatically. | Built |
+| Approval required before accepting bookings | `confirmBooking` refuses without a current approval (Settings → Contractors & legal → *Require RGXM contractor approval*, on by default). | Built. Approval follows agreement acceptance automatically, so no manual step is needed unless RGXM revoked someone. |
 | Separate privacy acknowledgement, terms acceptance and optional consents | Three separate records: `staff_acceptances` (per document version), `staff_consent_events` (grant/withdraw history) and the approval above. | Built |
 | Document versions, timestamps, acceptance history | `legal_documents` holds versioned drafts and approved versions. An approved version is frozen by a database trigger. A new version replaces the old one and must be accepted again. Acceptances are append-only. | Built. **Waiting on lawyer**: no approved privacy notice or contractor terms exist yet. Until one is approved, the portal shows the current draft notice and nothing blocks bookings. |
 | Display the approved privacy notice and Privacy Officer contact | `/privacy` shows the approved version, or the draft marked "pending legal review" if none is approved. The Privacy Officer contact comes from Settings. | Built. **Waiting on RGXM**: appoint the Privacy Officer and enter their contact. |
@@ -369,7 +369,7 @@ The old code ignores the new columns, so the migration can go first safely.
 
 | Who | Decision | Where it's recorded |
 |---|---|---|
-| RGXM | Record contractor-process approvals for existing contractors (bulk on the Talent list), with the external assessment reference | Talent |
+| RGXM | Nothing routine: contractor-process approval is recorded automatically on agreement acceptance. Record or revoke by hand on Talent only for exceptions (e.g. an external assessment reference) | Talent |
 | RGXM | Appoint a Privacy Officer; enter their contact | Settings → Contractors & legal |
 | Lawyer | Approve the privacy notice and contractor agreement / platform terms (paste the final text, record the review) | Settings → Contractors & legal |
 | Lawyer | Approve optional consent wording (or leave none) | Settings → Contractors & legal |
