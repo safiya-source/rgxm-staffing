@@ -52,9 +52,27 @@ describe("permission matrix", () => {
     expect(canOnProject(otherPm, "project.view", project)).toBe(true);
   });
 
+  it("lets any PM or coordinator do day-to-day work on any project, but keeps money approvals scoped", () => {
+    const outsiders = [
+      { userId: "pm-2", roles: ["project_manager"] as const },
+      { userId: "coord-2", roles: ["staffing_coordinator"] as const },
+    ];
+    for (const who of outsiders) {
+      for (const p of ["shift.manage", "booking.offer", "booking.confirm", "comms.manage", "timesheet.view", "timesheet.prepare", "compensation.record"] as const) {
+        expect(canOnProject(who, p, project)).toBe(true);
+      }
+    }
+    const otherPm = outsiders[0]!;
+    expect(canOnProject(otherPm, "project.edit", project)).toBe(true);
+    expect(canOnProject(otherPm, "booking.override_conflict", project)).toBe(true);
+    for (const p of ["timesheet.approve", "compensation.approve", "compensation.configure", "budget.view", "payments.view", "rates.project_override"] as const) {
+      expect(canOnProject(otherPm, p, project)).toBe(false);
+    }
+  });
+
   it("takes the strongest grant when a user holds several roles", () => {
     expect(resolveGrant(["staffing_coordinator", "finance"], "timesheet.view")).toBe("all");
-    expect(resolveGrant(["staffing_coordinator", "project_manager"], "booking.override_conflict")).toBe("assigned");
+    expect(resolveGrant(["staffing_coordinator", "project_manager"], "timesheet.approve")).toBe("assigned");
     const both = { userId: "coord-9", roles: ["staffing_coordinator", "finance"] as const };
     expect(canAny(both, "payments.manage")).toBe(true);
     expect(canAny(both, "booking.offer")).toBe(true);

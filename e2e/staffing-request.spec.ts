@@ -45,7 +45,7 @@ test("PM creates a staffing request with a new project and venue, then lands on 
   expect(comp).toEqual({ meals_enabled: true, eligible_meals: ["meal_breakfast", "meal_dinner"], mileage_enabled: true, per_diem_enabled: false, bonus_cents: 4000, bonus_conditions: "Per shift when the sampling target is met" });
 });
 
-test("coordinators add shifts to their own projects but can't create projects or venues", async ({ page }) => {
+test("coordinators add shifts to any project but can't create projects or venues", async ({ page }) => {
   await signInAsTeam(page, "coordinator");
   await page.goto("/dashboard/staffing/new");
   await expect(page.getByRole("radio", { name: "New project" })).toHaveCount(0);

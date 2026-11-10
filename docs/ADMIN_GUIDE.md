@@ -17,8 +17,8 @@ privacy and security tasks. Deployment is in DEPLOYMENT.md; the security model i
 | Role | Can |
 |---|---|
 | System Administrator | Everything, including users, settings, privacy requests and the mail log |
-| Project Manager | Create projects. Manage shifts, briefs and offers on **their** projects. Approve hours on their projects (never their own). See those projects' budgets and payables |
-| Staffing Coordinator | Talent directory, offers and bookings, communications on their projects. Import and export talent. No pay totals |
+| Project Manager | Create projects. Edit any project, and manage shifts, briefs, offers, confirmations, messages and hours on **any** project. Approve hours, allowances and bonuses, and see budgets and payables, only on **their** projects (owner, coordinator or Team member; never their own hours) |
+| Staffing Coordinator | Talent directory. Shifts, offers, confirmations, messages and hours on **any** project. Import and export talent. No pay totals or approvals |
 | Finance | Rates and pay setup, payables, payment batches, exports, mark paid, post-approval corrections |
 
    "Their projects" means projects where the person is the owner, the coordinator, or a project member
