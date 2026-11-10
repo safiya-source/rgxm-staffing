@@ -103,3 +103,12 @@ test("finance cannot send offers", async ({ page }) => {
   await page.goto("/dashboard/staffing");
   await expect(page).toHaveURL(/denied=1/);
 });
+
+test("Send offers on the Staffing Requests list opens the offer form for that project", async ({ page }) => {
+  await signInAsTeam(page, "coordinator");
+  await page.goto("/dashboard/staffing");
+  await page.getByRole("link", { name: /^Send offers for Cadbury/ }).click();
+  await expect(page).toHaveURL(/\/dashboard\/staffing\/[0-9a-f-]{36}\?offer=1$/);
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await expect(page.getByRole("dialog").getByText(/^Send offers · /)).toBeVisible();
+});

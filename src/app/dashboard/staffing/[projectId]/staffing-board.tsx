@@ -79,9 +79,11 @@ export function StaffingBoard({
   can,
   group,
   rows,
+  openOffer = false,
 }: {
   projectId: string;
   can: Can;
+  openOffer?: boolean;
   group: { role: string; locationName: string; timezone: string; shifts: GroupShift[] };
   rows: BoardRow[];
 }) {
@@ -89,7 +91,7 @@ export function StaffingBoard({
   const [pending, start] = useTransition();
   const [filter, setFilter] = useState<(typeof FILTERS)[number][0]>("all");
   const [selected, setSelected] = useState<string[]>([]);
-  const [offering, setOffering] = useState(false);
+  const [offering, setOffering] = useState(openOffer && can.offer);
   const [conflict, setConflict] = useState<{ bookingId: string; name: string; conflicts: { projectName: string; when: string }[]; canOverride: boolean } | null>(null);
   const [cancelling, setCancelling] = useState<BoardRow | null>(null);
   const [now] = useState(() => Date.now());

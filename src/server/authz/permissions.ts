@@ -31,9 +31,11 @@ export const PERMISSIONS = {
 
   "project.view": { admin: A, project_manager: A, staffing_coordinator: A, finance: A },
   "project.create": { admin: A, project_manager: A },
-  "project.edit": { admin: A, project_manager: S },
-  "shift.manage": { admin: A, project_manager: S, staffing_coordinator: S },
-  "comms.manage": { admin: A, project_manager: S, staffing_coordinator: S },
+  // Day-to-day project work (shifts, offers, confirmations, messages, hours) is open to every PM and
+  // coordinator on every project. Money approvals stay with the project's own team and Finance.
+  "project.edit": { admin: A, project_manager: A },
+  "shift.manage": { admin: A, project_manager: A, staffing_coordinator: A },
+  "comms.manage": { admin: A, project_manager: A, staffing_coordinator: A },
 
   "talent.view": { admin: A, project_manager: A, staffing_coordinator: A, finance: A },
   "talent.edit": { admin: A, project_manager: A, staffing_coordinator: A },
@@ -47,12 +49,12 @@ export const PERMISSIONS = {
   "rates.edit": { admin: A, finance: A },
   "rates.project_override": { admin: A, project_manager: S },
 
-  "booking.offer": { admin: A, project_manager: S, staffing_coordinator: S },
-  "booking.confirm": { admin: A, project_manager: S, staffing_coordinator: S },
-  "booking.override_conflict": { admin: A, project_manager: S },
+  "booking.offer": { admin: A, project_manager: A, staffing_coordinator: A },
+  "booking.confirm": { admin: A, project_manager: A, staffing_coordinator: A },
+  "booking.override_conflict": { admin: A, project_manager: A },
 
-  "timesheet.view": { admin: A, project_manager: S, staffing_coordinator: S, finance: A },
-  "timesheet.prepare": { admin: A, project_manager: S, staffing_coordinator: S },
+  "timesheet.view": { admin: A, project_manager: A, staffing_coordinator: A, finance: A },
+  "timesheet.prepare": { admin: A, project_manager: A, staffing_coordinator: A },
   "timesheet.approve": { admin: A, project_manager: S },
   "timesheet.correct_after_approval": { admin: A, finance: A },
 
@@ -75,7 +77,7 @@ export const PERMISSIONS = {
 
   // Project compensation (allowances, mileage, bonuses).
   "compensation.configure": { admin: A, project_manager: S },
-  "compensation.record": { admin: A, project_manager: S, staffing_coordinator: S },
+  "compensation.record": { admin: A, project_manager: A, staffing_coordinator: A },
   "compensation.approve": { admin: A, project_manager: S, finance: A },
 } as const satisfies Record<string, Partial<Record<InternalRole, Grant>>>;
 

@@ -32,7 +32,7 @@ had an external penetration test or a legal/privacy review.
 ### Authorisation
 - **Server-side checks only.** Every page, server action and route handler checks the permission matrix
   (`src/server/authz/permissions.ts`) on the server. The browser never talks to the database.
-  - Project-scoped roles (Project Managers, Coordinators) only act on projects they own, coordinate or are members of.
+  - Project Managers and Coordinators do day-to-day work (shifts, offers, confirmations, messages, hours preparation) on every project. Money-related actions (approving hours, allowances and bonuses; budgets, payables and project rate overrides) stay limited to projects they own, coordinate or are members of.
   - Server actions are public HTTP endpoints, so each one authorises itself.
 - **Separation of duties:**
   - nobody verifies or approves their own hours, or records their own attendance as a supervisor or admin;
