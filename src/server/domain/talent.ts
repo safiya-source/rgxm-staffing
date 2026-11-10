@@ -363,7 +363,7 @@ export async function previewImport(csvText: string, opts: { canEditRates: boole
   };
 }
 
-async function lookupIds(tx: Tx, table: typeof skills | typeof languages, names: string[]) {
+export async function lookupIds(tx: Tx, table: typeof skills | typeof languages, names: string[]) {
   const unique = [...new Set(names.map((n) => n.trim()).filter(Boolean))];
   if (!unique.length) return new Map<string, string>();
   const find = () => tx.select().from(table).where(inArray(sql`lower(${table.name})`, unique.map((n) => n.toLowerCase())));

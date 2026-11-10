@@ -25,6 +25,9 @@ export default async function ProfilePage() {
         consents={offered.map((p) => ({ key: p.key, label: p.label, description: p.description, granted: current.get(p.key)?.granted ?? false }))}
       />
       <div className="grid gap-3 border-t pt-6 text-sm">
+        <Link href="/portal/profile/work" className="font-medium hover:underline">
+          Work details (licence, vehicle, travel, experience) →
+        </Link>
         <Link href="/portal/availability" className="font-medium hover:underline">
           Set my availability →
         </Link>

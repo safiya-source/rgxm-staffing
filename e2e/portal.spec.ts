@@ -33,12 +33,33 @@ test("a new Brand Ambassador registers and completes onboarding", async ({ page 
   await page.getByRole("checkbox", { name: /privacy (notice|policy)/i }).click();
   await page.getByRole("button", { name: "Finish setup" }).click();
 
+  // Work details: optional questions straight after setup.
+  await expect(page).toHaveURL(/\/portal\/onboarding\/work$/);
+  await page.getByRole("radiogroup").nth(0).getByLabel("Yes").check();
+  await page.getByRole("radiogroup").nth(1).getByLabel("No").check();
+  await page.getByRole("radiogroup").nth(2).getByLabel("Yes").check();
+  await page.getByLabel("How far are you willing to travel? (km)").fill("150");
+  await page.getByLabel("Years of event experience").fill("4");
+  await page.getByLabel("Languages you speak").fill("English, French");
+  await page.getByRole("button", { name: "Save and continue" }).click();
+
+  // Then prompts for availability and tax details, both skippable.
+  await expect(page).toHaveURL(/\/portal\/onboarding\/next$/);
+  await expect(page.getByRole("link", { name: /Set your availability now/ })).toBeVisible();
+  await expect(page.getByRole("link", { name: /Add tax details/ })).toBeVisible();
+  await page.getByRole("link", { name: "Skip for now and go to Home" }).click();
+
   await expect(page).toHaveURL(/\/portal$/);
   await expect(page.getByRole("heading", { name: "Hi Morgan" })).toBeVisible();
   await expect(page.getByText("No upcoming shifts")).toBeVisible();
 
   const { rows } = await pool.query("select p.city, array_agg(r.role::text) roles from staff_profiles p join staff_roles r on r.staff_id = p.id where p.email = $1 group by p.city", [email]);
   expect(rows[0]).toMatchObject({ city: "Toronto", roles: ["BA"] });
+  const work = await pool.query(
+    "select has_drivers_licence, has_vehicle, willing_to_travel, travel_radius_km, experience_years, (select array_agg(l.name order by l.name) from staff_languages sl join languages l on l.id = sl.language_id where sl.staff_id = p.id) langs from staff_profiles p where p.email = $1",
+    [email],
+  );
+  expect(work.rows[0]).toMatchObject({ has_drivers_licence: true, has_vehicle: false, willing_to_travel: true, travel_radius_km: 150, experience_years: 4, langs: ["English", "French"] });
 });
 
 test("staff set weekly availability and a day off", async ({ page }) => {
