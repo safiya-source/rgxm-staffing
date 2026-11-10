@@ -65,7 +65,7 @@ export async function GET(request: Request) {
   }
 
   const headers = ["first_name", "last_name", "preferred_name", "email", "phone", "city", "province", "status", "roles", "languages", "skills", "experience_years"];
-  if (canSeeRates) headers.push("ba_rate", "tl_rate", "pa_rate", "am_rate");
+  if (canSeeRates) headers.push("ba_rate", "tl_rate", "pa_rate", "am_rate", "ch_rate", "ms_rate", "dn_rate");
   const dollars = (c: number | undefined) => (c === undefined ? "" : (c / 100).toFixed(2));
   const rows = profiles.map((p) => {
     const base: unknown[] = [
@@ -84,7 +84,7 @@ export async function GET(request: Request) {
     ];
     if (canSeeRates) {
       const r = rateMap.get(p.id) ?? {};
-      base.push(dollars(r.BA), dollars(r.TL), dollars(r.PA), dollars(r.AM));
+      base.push(dollars(r.BA), dollars(r.TL), dollars(r.PA), dollars(r.AM), dollars(r.CH), dollars(r.MS), dollars(r.DN));
     }
     return base;
   });

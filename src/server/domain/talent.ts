@@ -249,9 +249,12 @@ export const IMPORT_COLUMNS = [
   "tl_rate",
   "pa_rate",
   "am_rate",
+  "ch_rate",
+  "ms_rate",
+  "dn_rate",
 ] as const;
 
-const RATE_COLUMNS: Record<string, FieldRole> = { ba_rate: "BA", tl_rate: "TL", pa_rate: "PA", am_rate: "AM" };
+const RATE_COLUMNS: Record<string, FieldRole> = { ba_rate: "BA", tl_rate: "TL", pa_rate: "PA", am_rate: "AM", ch_rate: "CH", ms_rate: "MS", dn_rate: "DN" };
 
 const splitList = (v: string | undefined) =>
   (v ?? "")
@@ -320,7 +323,7 @@ export async function previewImport(csvText: string, opts: { canEditRates: boole
 
     const roles = splitList(row.roles).map((r) => r.toUpperCase());
     const badRoles = roles.filter((r) => !FIELD_ROLES.includes(r as FieldRole));
-    if (badRoles.length) rowErrors.push(`roles: unknown ${badRoles.join(", ")} (use BA, TL, PA, AM)`);
+    if (badRoles.length) rowErrors.push(`roles: unknown ${badRoles.join(", ")} (use ${FIELD_ROLES.join(", ")})`);
 
     const rates: Partial<Record<FieldRole, number>> = {};
     if (opts.canEditRates) {

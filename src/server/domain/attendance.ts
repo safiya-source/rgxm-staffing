@@ -271,7 +271,7 @@ export async function getSupervisedTeam(supervisorStaffId: string, opts: { from:
     left join timesheets t on t.booking_id = b.id
     where b.status in ('confirmed', 'completed') and b.staff_id <> ${supervisorStaffId}
       and s.starts_at < ${opts.to.toISOString()}::timestamptz and s.ends_at > ${opts.from.toISOString()}::timestamptz
-      and ((sb.role = 'AM' and b.role <> 'AM') or (sb.role = 'TL' and b.role in ('BA', 'PA')))
+      and ((sb.role = 'AM' and b.role <> 'AM') or (sb.role = 'TL' and b.role not in ('TL', 'AM')))
     order by b.id, sb.role desc`);
   return r.rows.sort((a, b) => new Date(a.starts_at).getTime() - new Date(b.starts_at).getTime() || a.name.localeCompare(b.name));
 }

@@ -99,6 +99,12 @@ describe("supervision", () => {
     expect(supervises("TL", "TL")).toBe(false);
     expect(supervises("AM", "TL")).toBe(true);
     expect(supervises("AM", "AM")).toBe(false);
+    for (const role of ["CH", "MS", "DN"]) {
+      expect(supervises("TL", role)).toBe(true);
+      expect(supervises("AM", role)).toBe(true);
+      expect(supervises(role, "BA")).toBe(false);
+    }
+    expect(supervises("TL", "AM")).toBe(false);
     expect(supervises("BA", "BA")).toBe(false);
   });
 });
