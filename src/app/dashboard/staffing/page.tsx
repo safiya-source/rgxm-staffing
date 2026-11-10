@@ -11,15 +11,21 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { formatInZone } from "@/lib/format";
 import { getStaffingOverview } from "@/server/queries/staffing";
 import { getOrgSettings } from "@/server/settings";
-import { canAny } from "@/server/authz/permissions";
-import { requireInternal, toActor } from "@/server/session";
+import { canAny, canOnProject } from "@/server/authz/permissions";
+import { loadProjectScopes, requireInternal, toActor } from "@/server/session";
 
 export const metadata: Metadata = { title: "Staffing Requests" };
 
 export default async function StaffingPage() {
   const viewer = await requireInternal("booking.offer");
   const canRequest = canAny(toActor(viewer), "shift.manage");
+  const actor = toActor(viewer);
   const [rows, settings] = await Promise.all([getStaffingOverview(), getOrgSettings()]);
+  const scopes = await loadProjectScopes(rows.map((r) => r.id));
+  const canOffer = (projectId: string) => {
+    const scope = scopes.get(projectId);
+    return scope ? canOnProject(actor, "booking.offer", scope) : false;
+  };
   const newRequest = canRequest ? (
     <Button asChild size="sm">
       <Link href="/dashboard/staffing/new">
@@ -42,6 +48,9 @@ export default async function StaffingPage() {
                 <TableHead className="text-right">Filled</TableHead>
                 <TableHead className="text-right">Awaiting reply</TableHead>
                 <TableHead>Needs you</TableHead>
+                <TableHead className="w-0">
+                  <span className="sr-only">Actions</span>
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -71,6 +80,15 @@ export default async function StaffingPage() {
                       {!p.toReview && !p.unreadQuestions && p.confirmed < p.positions && p.offered === 0 ? <Badge tone="warning">Send offers</Badge> : null}
                       {p.confirmed >= p.positions && p.positions > 0 ? <Badge tone="success">Fully staffed</Badge> : null}
                     </div>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {canOffer(p.id) && p.confirmed < p.positions ? (
+                      <Button asChild size="sm" variant="outline">
+                        <Link href={`/dashboard/staffing/${p.id}?offer=1`} aria-label={`Send offers for ${p.name}`}>
+                          <SendIcon /> Send offers
+                        </Link>
+                      </Button>
+                    ) : null}
                   </TableCell>
                 </TableRow>
               ))}

@@ -37,7 +37,11 @@ export default async function ProjectStaffingPage({ params, searchParams }: Page
   const canAddShifts = canOnProject(actor, "shift.manage", scope);
 
   const groups = await getShiftGroups(projectId);
-  const groupKey = typeof sp.group === "string" && groups.some((g) => g.key === sp.group) ? sp.group : groups[0]?.key;
+  // "Send offers" from the Staffing Requests list lands here with ?offer=1: open the offer form on the
+  // first role/location that still has open spots.
+  const openOffer = sp.offer === "1" && can.offer;
+  const firstOpen = groups.find((g) => g.shifts.some((s) => s.confirmed < s.headcount)) ?? groups[0];
+  const groupKey = typeof sp.group === "string" && groups.some((g) => g.key === sp.group) ? sp.group : openOffer ? firstOpen?.key : groups[0]?.key;
   const group = groups.find((g) => g.key === groupKey);
   // Staff messages are only for the project's own team (people who can reply).
   const [board, threads] = await Promise.all([group ? getBoard(group.shifts.map((s) => s.id)) : [], can.reply ? listProjectThreads(projectId) : Promise.resolve([])]);
@@ -114,6 +118,7 @@ export default async function ProjectStaffingPage({ params, searchParams }: Page
                 key={group.key}
                 projectId={projectId}
                 can={can}
+                openOffer={openOffer}
                 group={{
                   role: group.role,
                   locationName: group.locationName,
