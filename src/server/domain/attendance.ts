@@ -306,12 +306,16 @@ async function applyChanges(tx: Tx, t: Timesheet, changes: Changes, ctx: { actor
   const end = set.workedEnd !== undefined ? set.workedEnd : t.workedEnd;
   if (start && end && end <= start) throw new AttendanceError("The end time must be after the start time.");
   if (start && end && end.getTime() - start.getTime() > 24 * 60 * MINUTE) throw new AttendanceError("A shift can't be longer than 24 hours.");
-  // Time corrections need a reason; a staff member simply recording their break doesn't.
-  const timeChanged = rows.some((r) => r.field !== "break_minutes");
-  if ((timeChanged || ctx.stage !== "staff_correction") && rows.length && !ctx.reason.trim()) throw new AttendanceError("Give a reason for the change.");
+  // Changing a recorded time needs a reason. A staff member filling in a time that was never recorded
+  // (they forgot to check in or out) or recording their break doesn't: the timesheet already carries the
+  // missing check-in/out flag for RGXM. Supervisor and RGXM changes always need a reason.
+  const timeCorrected = rows.some((r) => r.field !== "break_minutes" && r.oldValue !== null);
+  if ((timeCorrected || ctx.stage !== "staff_correction") && rows.length && !ctx.reason.trim()) throw new AttendanceError("Give a reason for the change.");
   if (rows.length) {
     await tx.update(timesheets).set(set).where(eq(timesheets.id, t.id));
-    await tx.insert(timesheetAdjustments).values(rows.map((r) => ({ ...r, reason: r.reason || "Break recorded" })));
+    await tx.insert(timesheetAdjustments).values(
+      rows.map((r) => ({ ...r, reason: r.reason || (r.field === "break_minutes" ? "Break recorded" : "Entered by the contractor (no check-in/out recorded)") })),
+    );
   }
   return rows.length > 0;
 }
