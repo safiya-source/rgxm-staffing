@@ -8,6 +8,7 @@ import { sendInvitation } from "@/server/domain/invitations";
 import {
   announcements,
   bookings,
+  compensationItems,
   documents,
   messages,
   messageThreads,
@@ -211,6 +212,26 @@ export const handlers: Record<string, Handler> = {
           href: `/dashboard/timesheets/${c.t.id}`,
         });
       }
+    }
+  },
+
+  "expense.submitted": async (payload, eventId) => {
+    const [c] = await db
+      .select({ staffId: compensationItems.staffId, projectId: compensationItems.projectId, amountCents: compensationItems.amountCents, vendor: compensationItems.vendor, projectName: projects.name })
+      .from(compensationItems)
+      .innerJoin(projects, eq(projects.id, compensationItems.projectId))
+      .where(eq(compensationItems.id, payload.itemId as string));
+    if (!c) return;
+    const person = await staffRecipient(c.staffId);
+    for (const userId of await projectTeam(c.projectId)) {
+      await notify({
+        dedupeKey: `n:${eventId}:${userId}`,
+        userId,
+        type: "expense.submitted",
+        title: `${person.name} submitted an expense to approve`,
+        body: `${formatMoney(c.amountCents)}${c.vendor ? ` at ${c.vendor}` : ""} · ${c.projectName}`,
+        href: `/dashboard/projects/${c.projectId}/compensation`,
+      });
     }
   },
 

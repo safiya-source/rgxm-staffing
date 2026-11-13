@@ -22,8 +22,13 @@ test("PM creates a staffing request with a new project and venue, then lands on 
   await page.getByLabel("Role 2").selectOption({ label: "Team Lead" });
   await page.getByLabel("People per shift").nth(1).fill("1");
   await page.getByLabel("Hourly rate").nth(1).fill("32.50");
-  await page.getByLabel("First day").fill(inDays(30));
-  await page.getByLabel("Last day").fill(inDays(32));
+  // Three days: the next two follow on automatically, and the last one has later times.
+  await page.getByLabel("Day", { exact: true }).fill(inDays(30));
+  await page.getByRole("button", { name: "Add another day" }).click();
+  await page.getByRole("button", { name: "Add another day" }).click();
+  await expect(page.getByLabel("Day 3", { exact: true })).toHaveValue(inDays(32));
+  await page.getByLabel("Start time").nth(2).fill("14:00");
+  await page.getByLabel("End time").nth(2).fill("22:00");
   await expect(page.getByText("3 days × 4 people (3 BA + 1 TL) = 12 positions")).toBeVisible();
   // Allowances, mileage and a bonus, on top of the hourly rates.
   await page.getByRole("checkbox", { name: /Meal allowances/ }).click();
@@ -41,6 +46,8 @@ test("PM creates a staffing request with a new project and venue, then lands on 
   expect(p).toEqual({ status: "staffing", n: 6 });
   const tl = (await pool.query("select distinct s.rate_cents from shifts s join projects p on p.id = s.project_id where p.name = $1 and s.role = 'TL'", [name])).rows;
   expect(tl).toEqual([{ rate_cents: 3250 }]);
+  const late = (await pool.query("select count(*)::int n from shifts s join projects p on p.id = s.project_id where p.name = $1 and to_char(s.starts_at at time zone s.timezone, 'HH24:MI') = '14:00'", [name])).rows[0];
+  expect(late.n).toBe(2); // one BA and one TL shift on the third day
   const comp = (await pool.query("select c.meals_enabled, c.eligible_meals, c.mileage_enabled, c.per_diem_enabled, c.bonus_cents, c.bonus_conditions from project_compensation_settings c join projects p on p.id = c.project_id where p.name = $1", [name])).rows[0];
   expect(comp).toEqual({ meals_enabled: true, eligible_meals: ["meal_breakfast", "meal_dinner"], mileage_enabled: true, per_diem_enabled: false, bonus_cents: 4000, bonus_conditions: "Per shift when the sampling target is met" });
 });

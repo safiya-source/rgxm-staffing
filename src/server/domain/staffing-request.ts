@@ -3,25 +3,47 @@
 import { eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { FIELD_ROLE_NAMES } from "@/lib/roles";
+import { isIsoDate, isLocalTime, MAX_BULK_SHIFTS } from "@/lib/time";
 import { recordAudit } from "@/server/audit";
 import { db } from "@/server/db";
 import { projects } from "@/server/db/schema";
 import { compensationSettingsSchema, saveCompensationSettings } from "./compensation";
 import { createProject, locationSchema, ProjectError, projectSchema, saveLocation } from "./projects";
-import { bulkShiftSchema, createShifts } from "./shifts";
+import { bulkShiftSchema, createShifts, shiftDetailsSchema } from "./shifts";
 
 const blankToNull = (v: unknown) => (typeof v === "string" && v.trim() === "" ? null : v);
 
 /** One role in the request, e.g. 10 Brand Ambassadors at $25. */
 export const requestRoleSchema = bulkShiftSchema.pick({ role: true, headcount: true, rateCents: true });
 
+/** One working day in the request, with its own times (an end at or before the start ends the next day). */
+export const requestDaySchema = z
+  .object({
+    date: z.string().refine(isIsoDate, "Pick a date"),
+    startTime: z.string().refine(isLocalTime, "Enter a start time"),
+    endTime: z.string().refine(isLocalTime, "Enter an end time"),
+  })
+  .refine((d) => d.startTime !== d.endTime, "Start and end time can't be the same");
+
 /**
- * The shift part of the request: the shared days, times and details, plus one or more roles.
- * Each role gets its own shifts on the same days and times.
+ * The shift part of the request: the days (each with its own times), shared details for staff, and
+ * one or more roles. Each role gets a shift on every day.
  */
-export const requestShiftsSchema = bulkShiftSchema
-  .omit({ locationId: true, publish: true, requirementId: true, breakPolicyId: true, role: true, headcount: true, rateCents: true })
+export const requestShiftsSchema = shiftDetailsSchema
+  .omit({ role: true, headcount: true, rateCents: true, requirementId: true, breakPolicyId: true })
   .extend({
+    days: z
+      .array(requestDaySchema)
+      .min(1, "Add at least one day")
+      .max(120)
+      .superRefine((days, ctx) => {
+        const seen = new Set<string>();
+        for (const d of days) {
+          const key = `${d.date} ${d.startTime}-${d.endTime}`;
+          if (seen.has(key)) ctx.addIssue({ code: "custom", message: `${d.date} ${d.startTime}–${d.endTime} is listed twice.` });
+          seen.add(key);
+        }
+      }),
     roles: z
       .array(requestRoleSchema)
       .min(1, "Add at least one role")
@@ -33,6 +55,9 @@ export const requestShiftsSchema = bulkShiftSchema
           seen.add(r.role);
         }
       }),
+  })
+  .superRefine((s, ctx) => {
+    if (s.days.length * s.roles.length > MAX_BULK_SHIFTS) ctx.addIssue({ code: "custom", message: `That would create more than ${MAX_BULK_SHIFTS} shifts.` });
   });
 
 export const staffingRequestSchema = z.object({
@@ -86,16 +111,19 @@ export async function suggestProjectCode(name: string, startDate: string) {
 export async function createStaffingRequest(actorId: string, input: StaffingRequestInput) {
   // `input` is already parsed (rates are in cents). Parsing again would convert the rates a second time.
   const shifts = input.shifts;
+  const dates = shifts.days.map((d) => d.date).sort();
+  const firstDay = dates[0]!;
+  const lastDay = dates.at(-1)!;
   const newProject =
     input.project.mode === "new"
       ? projectSchema.parse({
           name: input.project.name,
-          code: input.project.code || (await suggestProjectCode(input.project.name, shifts.startDate)),
+          code: input.project.code || (await suggestProjectCode(input.project.name, firstDay)),
           clientId: input.project.clientId ?? null,
           newClientName: input.project.clientId ? null : (input.project.newClientName ?? null),
           // The project spans the shifts; it can be edited later.
-          startDate: shifts.startDate,
-          endDate: shifts.endDate,
+          startDate: firstDay,
+          endDate: lastDay,
         })
       : null;
   const newLocation = input.location.mode === "new" ? locationSchema.parse({ ...input.location, mode: undefined }) : null;
@@ -114,10 +142,13 @@ export async function createStaffingRequest(actorId: string, input: StaffingRequ
     }
     const locationId = newLocation ? await saveLocation(actorId, projectId, null, newLocation, tx) : (input.location as { locationId: string }).locationId;
     if (input.compensation) await saveCompensationSettings(actorId, projectId, input.compensation, tx);
-    const { roles, ...common } = shifts;
+    const { roles, days, ...details } = shifts;
     const shiftIds: string[] = [];
     for (const r of roles) {
-      shiftIds.push(...(await createShifts(actorId, projectId, { ...common, ...r, locationId, publish: true }, tx)));
+      for (const d of [...days].sort((a, b) => (a.date + a.startTime).localeCompare(b.date + b.startTime))) {
+        const one = bulkShiftSchema.parse({ ...details, ...r, rateCents: undefined, locationId, startDate: d.date, endDate: d.date, weekdays: [], startTime: d.startTime, endTime: d.endTime, publish: true });
+        shiftIds.push(...(await createShifts(actorId, projectId, { ...one, rateCents: r.rateCents }, tx)));
+      }
     }
     return { projectId, locationId, shiftIds, roles: roles.length, group: `${roles[0]!.role}:${locationId}` };
   });

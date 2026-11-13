@@ -4,7 +4,8 @@ import { createStaffingRequest, staffingRequestSchema, suggestProjectCode } from
 import { makeProject, makeUser, one, pool } from "./fixtures";
 
 let pm: { id: string };
-const shifts = { roles: [{ role: "BA" as const, headcount: 2 }], startDate: "2027-03-10", endDate: "2027-03-12", weekdays: [], startTime: "10:00", endTime: "18:00" };
+const day = (date: string, startTime = "10:00", endTime = "18:00") => ({ date, startTime, endTime });
+const shifts = { roles: [{ role: "BA" as const, headcount: 2 }], days: [day("2027-03-10"), day("2027-03-11"), day("2027-03-12")] };
 
 beforeAll(async () => {
   pm = await makeUser();
@@ -39,7 +40,7 @@ describe("new staffing request shortcut", () => {
     const res = await createStaffingRequest(pm.id, {
       project: { mode: "existing", projectId: p.projectId },
       location: { mode: "existing", locationId: p.locationId },
-      shifts: { ...shifts, roles: [{ role: "TL", headcount: 1 }], weekdays: [3] }, // Wednesdays only: Mar 10
+      shifts: { ...shifts, roles: [{ role: "TL", headcount: 1 }], days: [day("2027-03-10")] },
     });
     expect(res.shiftIds).toHaveLength(1);
     expect(res.projectId).toBe(p.projectId);
@@ -102,11 +103,33 @@ describe("new staffing request shortcut", () => {
       createStaffingRequest(pm.id, {
         project: { mode: "new", name, clientId: null, newClientName: null, code: null },
         location: { mode: "new", name: "Somewhere", city: "", address: "", timezone: "America/Toronto" },
-        // Every day excluded: no matching dates, so shift creation fails after the project and venue were inserted.
-        shifts: { ...shifts, startDate: "2027-03-10", endDate: "2027-03-10", weekdays: [0] },
+        // Same start and end time: shift creation fails after the project and venue were inserted.
+        shifts: { ...shifts, days: [day("2027-03-10", "10:00", "10:00")] },
       }),
-    ).rejects.toThrow(/No dates match/);
+    ).rejects.toThrow(/can't be the same/);
     expect((await one<{ n: number }>("select count(*)::int n from projects where name = $1", [name])).n).toBe(0);
+  });
+
+  it("creates each day with its own times, including one that ends after midnight", async () => {
+    const p = await makeProject();
+    const input = staffingRequestSchema.parse({
+      project: { mode: "existing", projectId: p.projectId },
+      location: { mode: "existing", locationId: p.locationId },
+      shifts: { roles: [{ role: "BA", headcount: 1 }], days: [day("2027-04-02", "09:00", "17:00"), day("2027-04-05", "16:00", "23:00"), day("2027-04-03", "20:00", "02:00")] },
+    });
+    const res = await createStaffingRequest(pm.id, input);
+    expect(res.shiftIds).toHaveLength(3);
+    const rows = (await pool.query("select starts_at, ends_at from shifts where project_id = $1 order by starts_at", [p.projectId])).rows;
+    // Toronto is UTC-4 in April.
+    expect(rows.map((r) => [r.starts_at.toISOString(), r.ends_at.toISOString()])).toEqual([
+      ["2027-04-02T13:00:00.000Z", "2027-04-02T21:00:00.000Z"],
+      ["2027-04-04T00:00:00.000Z", "2027-04-04T06:00:00.000Z"],
+      ["2027-04-05T20:00:00.000Z", "2027-04-06T03:00:00.000Z"],
+    ]);
+    expect(() => staffingRequestSchema.parse({ ...input, shifts: { roles: [{ role: "BA", headcount: 1 }], days: [] } })).toThrow(/at least one day/);
+    expect(() =>
+      staffingRequestSchema.parse({ ...input, shifts: { roles: [{ role: "BA", headcount: 1 }], days: [day("2027-04-02"), day("2027-04-02")] } }),
+    ).toThrow(/listed twice/);
   });
 
   it("refuses an existing venue from a different project", async () => {

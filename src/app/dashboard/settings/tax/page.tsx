@@ -12,7 +12,9 @@ import { TAX_COMPONENTS } from "@/server/db/schema";
 import { getAccountingConfig } from "@/server/domain/billing";
 import { formatRatePpm } from "@/server/domain/money";
 import { getTaxSetup } from "@/server/domain/tax-config";
-import { CATEGORY_LABEL } from "@/server/domain/tax-engine";
+import { CATEGORY_LABEL, NEVER_TAXED_CATEGORIES } from "@/server/domain/tax-engine";
+
+const NEVER_TAXED = new Set<string>(NEVER_TAXED_CATEGORIES);
 import { requireInternal } from "@/server/session";
 import { getOrgSettings } from "@/server/settings";
 import {
@@ -220,8 +222,9 @@ export default async function TaxSettingsPage() {
         <CardHeader>
           <CardTitle>Treatment by compensation category</CardTitle>
           <CardDescription>
-            For each kind of payment: whether GST/HST applies, and how it&apos;s reported at year end. Crew doesn&apos;t assume mileage or per diems are tax-free; until the
-            accountant approves a treatment, lines in that category go to Finance and year-end totals list them as &ldquo;needs accountant decision&rdquo;.
+            For each kind of payment: whether GST/HST applies, and how it&apos;s reported at year end. Expense reimbursements (purchases a contractor made for RGXM,
+            with a receipt) are repaid at cost and never taxed. Until the accountant approves a treatment, year-end totals list that category as &ldquo;needs accountant
+            decision&rdquo;.
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3">
@@ -232,19 +235,27 @@ export default async function TaxSettingsPage() {
                 <Badge tone={t.approvedAt ? "success" : "warning"}>{t.approvedAt ? `Approved ${day(t.approvedAt)}` : "Not approved"}</Badge>
               </div>
               <p className="text-sm text-muted-foreground">
-                Sales tax: {GST_LABEL[t.gstHst]} · Year end: {YEAR_END_LABEL[t.yearEnd]}
+                Sales tax: {NEVER_TAXED.has(t.category) ? "Never charged (RGXM policy)" : GST_LABEL[t.gstHst]} · Year end: {YEAR_END_LABEL[t.yearEnd]}
                 {t.yearEndBox ? ` (box ${t.yearEndBox})` : ""}
                 {t.approvalReference ? ` · ${t.approvalReference}` : ""}
               </p>
               {t.notes ? <p className="text-xs text-muted-foreground">{t.notes}</p> : null}
-              <ActionForm action={saveTreatmentAction} hidden={{ category: t.category }} submitLabel="Save" variant="outline" keep>
-                <NativeSelect name="gstHst" defaultValue={t.gstHst} aria-label="Sales tax" className="w-64">
-                  {Object.entries(GST_LABEL).map(([v, l]) => (
-                    <option key={v} value={v}>
-                      {l}
-                    </option>
-                  ))}
-                </NativeSelect>
+              <ActionForm
+                action={saveTreatmentAction}
+                hidden={NEVER_TAXED.has(t.category) ? { category: t.category, gstHst: "not_taxable" } : { category: t.category }}
+                submitLabel="Save"
+                variant="outline"
+                keep
+              >
+                {NEVER_TAXED.has(t.category) ? null : (
+                  <NativeSelect name="gstHst" defaultValue={t.gstHst} aria-label="Sales tax" className="w-64">
+                    {Object.entries(GST_LABEL).map(([v, l]) => (
+                      <option key={v} value={v}>
+                        {l}
+                      </option>
+                    ))}
+                  </NativeSelect>
+                )}
                 <NativeSelect name="yearEnd" defaultValue={t.yearEnd} aria-label="Year end" className="w-44">
                   {Object.entries(YEAR_END_LABEL).map(([v, l]) => (
                     <option key={v} value={v}>

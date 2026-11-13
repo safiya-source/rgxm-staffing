@@ -1,5 +1,5 @@
 "use client";
-import { ClockIcon } from "lucide-react";
+import { CheckIcon, ClockIcon, PencilIcon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
@@ -99,6 +99,9 @@ export function TimesheetTable({ rows, canApprove }: { rows: Row[]; canApprove: 
               <TableHead>Worked</TableHead>
               <TableHead>Flags</TableHead>
               <TableHead>Status</TableHead>
+              <TableHead className="w-0">
+                <span className="sr-only">Actions</span>
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -155,6 +158,33 @@ export function TimesheetTable({ rows, canApprove }: { rows: Row[]; canApprove: 
                   </TableCell>
                   <TableCell>
                     {status === "no_show" ? <Badge tone="danger">No-show</Badge> : <Badge tone={STATUS_TONE[status]}>{TIMESHEET_STATUS_LABEL[status as TimesheetStatus]}</Badge>}
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex justify-end gap-1.5 whitespace-nowrap">
+                      <Button asChild size="sm" variant="outline">
+                        <Link href={`/dashboard/timesheets/${r.bookingId}#adjust`} aria-label={`Edit ${r.staffName}'s timesheet`}>
+                          <PencilIcon /> Edit
+                        </Link>
+                      </Button>
+                      {canApprove && approvable.some((x) => x.bookingId === r.bookingId) ? (
+                        <Button
+                          size="sm"
+                          disabled={pending}
+                          aria-label={`Approve ${r.staffName}'s hours`}
+                          onClick={() =>
+                            start(async () => {
+                              const res = await bulkApproveAction([r.bookingId]);
+                              if (res.ok) toast.success(`Approved ${r.staffName}'s hours.`);
+                              else toast.error(res.error);
+                              setSelected((s) => s.filter((x) => x !== r.bookingId));
+                              router.refresh();
+                            })
+                          }
+                        >
+                          <CheckIcon /> Approve
+                        </Button>
+                      ) : null}
+                    </div>
                   </TableCell>
                 </TableRow>
               );

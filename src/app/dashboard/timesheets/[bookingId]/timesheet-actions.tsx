@@ -110,7 +110,7 @@ export function TimesheetActions(p: Props) {
       ) : null}
 
       {p.can.prepare && !approved ? (
-        <Card>
+        <Card id="adjust" className="scroll-mt-20">
           <CardHeader>
             <CardTitle>Adjust worked time</CardTitle>
           </CardHeader>
