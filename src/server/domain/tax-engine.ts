@@ -59,8 +59,17 @@ export const CATEGORY_LABEL: Record<string, string> = {
   per_diem: "Full-day per diem",
   mileage: "Mileage",
   bonus: "Bonus",
+  reimbursement: "Expense reimbursement",
   adjustment: "Adjustment",
 };
+
+/**
+ * Reimbursement of an expense the contractor paid on RGXM's behalf (with a receipt) is repaid at cost
+ * and never carries GST/HST, whatever the contractor's registration. Every other category follows the
+ * accountant-approved treatment.
+ */
+export const NEVER_TAXED_CATEGORIES = ["reimbursement"] as const;
+const NEVER_TAXED = new Set<string>(NEVER_TAXED_CATEGORIES);
 
 export function registrationSnapshot(r: TaxContext["registration"]) {
   return `${r.status}:${r.verification}`;
@@ -88,6 +97,9 @@ export function applicableRules(rules: TaxRuleInput[], jurisdiction: string, dat
 
 export function decideTax(ctx: TaxContext, line: { category: string; amountCents: number; workDate: string }): TaxDecision {
   const snap = registrationSnapshot(ctx.registration);
+  if (NEVER_TAXED.has(line.category)) {
+    return { status: "no_tax", lines: [], taxCents: 0, basis: "No GST/HST: reimbursement at cost of an expense paid on RGXM's behalf (receipt on file).", registrationSnapshot: snap };
+  }
   const reg = ctx.registration;
   if (reg.status === "unknown") return review(ctx, "the contractor hasn't said whether they're registered for GST/HST.");
   if (reg.status === "unsure") return review(ctx, "the contractor is unsure whether they're registered for GST/HST.");

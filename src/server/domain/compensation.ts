@@ -245,6 +245,8 @@ export async function listCompensation(projectId: string) {
       tripDate: compensationItems.tripDate,
       businessPurpose: compensationItems.businessPurpose,
       reason: compensationItems.reason,
+      vendor: compensationItems.vendor,
+      hasReceipt: sql<boolean>`${compensationItems.receiptKey} is not null`,
       status: compensationItems.status,
       decisionNote: compensationItems.decisionNote,
       payableItemId: compensationItems.payableItemId,

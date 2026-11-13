@@ -12,7 +12,9 @@ import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/native-select";
+import { choicesToRules, DAY_PART_HINT, DAY_PART_LABEL, DAY_PARTS, rulesToChoices, type DayChoice, type DayPart } from "@/lib/availability";
 import { useFormAction } from "@/lib/use-form-action";
+import { cn } from "@/lib/utils";
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const DAY_INDEX = [1, 2, 3, 4, 5, 6, 0];
@@ -22,12 +24,7 @@ type Exception = { id: string; date: string; kind: "available" | "unavailable"; 
 
 export function AvailabilityEditor({ rules, exceptions }: { rules: Rule[]; exceptions: Exception[] }) {
   const router = useRouter();
-  const [week, setWeek] = useState(() =>
-    DAY_INDEX.map((weekday) => {
-      const r = rules.find((x) => x.weekday === weekday);
-      return { weekday, on: Boolean(r), startTime: r?.startTime ?? "09:00", endTime: r?.endTime ?? "21:00" };
-    }),
-  );
+  const [week, setWeek] = useState<Record<number, DayChoice>>(() => rulesToChoices(rules));
   const [pending, start] = useTransition();
   const [allDay, setAllDay] = useState(true);
   const [state, onSubmit, adding] = useFormAction(async (prev, fd) => {
@@ -39,7 +36,16 @@ export function AvailabilityEditor({ rules, exceptions }: { rules: Rule[]; excep
     return res;
   });
 
-  const set = (i: number, patch: Partial<(typeof week)[number]>) => setWeek((w) => w.map((d, j) => (j === i ? { ...d, ...patch } : d)));
+  // "Open" means any time, so it replaces the parts of the day, and picking a part turns "Open" off.
+  const toggle = (weekday: number, part: DayPart | "open") =>
+    setWeek((w) => {
+      const c = w[weekday]!;
+      const next: DayChoice =
+        part === "open" ? { open: !c.open, parts: [] } : { open: false, parts: c.parts.includes(part) ? c.parts.filter((p) => p !== part) : [...c.parts, part] };
+      return { ...w, [weekday]: next };
+    });
+  const chip = (on: boolean) =>
+    cn("rounded-full border px-3 py-1.5 text-sm", on ? "border-foreground bg-foreground text-background" : "bg-card hover:bg-accent");
 
   return (
     <>
@@ -47,33 +53,38 @@ export function AvailabilityEditor({ rules, exceptions }: { rules: Rule[]; excep
         <h2 id="weekly" className="mb-2 text-sm font-medium text-muted-foreground">
           Usually available
         </h2>
+        <p className="mb-3 text-sm text-muted-foreground">
+          Tap the times you can usually work each day. {DAY_PARTS.map((p) => `${DAY_PART_LABEL[p]} ${DAY_PART_HINT[p]}`).join(" · ")}.
+        </p>
         <Card className="divide-y">
-          {week.map((d, i) => (
-            <div key={d.weekday} className="flex flex-wrap items-center gap-3 px-4 py-3">
-              <label className="flex w-32 items-center gap-2.5 text-[15px]">
-                <Checkbox checked={d.on} onCheckedChange={(c) => set(i, { on: Boolean(c) })} />
-                {DAYS[i]}
-              </label>
-              {d.on ? (
-                <div className="flex items-center gap-2">
-                  <Input type="time" value={d.startTime} onChange={(e) => set(i, { startTime: e.target.value })} className="h-9 w-28" aria-label={`${DAYS[i]} from`} />
-                  <span className="text-muted-foreground">to</span>
-                  <Input type="time" value={d.endTime} onChange={(e) => set(i, { endTime: e.target.value })} className="h-9 w-28" aria-label={`${DAYS[i]} until`} />
+          {DAY_INDEX.map((weekday, i) => {
+            const c = week[weekday]!;
+            return (
+              <div key={weekday} className="grid gap-2 px-4 py-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-[15px] font-medium">{DAYS[i]}</span>
+                  <span className="text-xs text-muted-foreground">{c.open ? "Any time" : c.parts.length ? "" : "Not usually"}</span>
                 </div>
-              ) : (
-                <span className="text-sm text-muted-foreground">Not usually</span>
-              )}
-            </div>
-          ))}
+                <div className="flex flex-wrap gap-1.5" role="group" aria-label={`${DAYS[i]} availability`}>
+                  {DAY_PARTS.map((part) => (
+                    <button key={part} type="button" aria-pressed={c.parts.includes(part)} aria-label={`${DAYS[i]} ${DAY_PART_LABEL[part]}`} onClick={() => toggle(weekday, part)} className={chip(c.parts.includes(part))}>
+                      {DAY_PART_LABEL[part]}
+                    </button>
+                  ))}
+                  <button type="button" aria-pressed={c.open} aria-label={`${DAYS[i]} open availability`} onClick={() => toggle(weekday, "open")} className={chip(c.open)}>
+                    Open availability
+                  </button>
+                </div>
+              </div>
+            );
+          })}
         </Card>
         <Button
           className="mt-3 w-full"
           disabled={pending}
           onClick={() =>
             start(async () => {
-              const res = await saveWeeklyAvailabilityAction(
-                week.filter((d) => d.on).map(({ weekday, startTime, endTime }) => ({ weekday, startTime, endTime })),
-              );
+              const res = await saveWeeklyAvailabilityAction(choicesToRules(week));
               if (res.ok) {
                 toast.success(res.message ?? "Saved");
                 router.refresh();

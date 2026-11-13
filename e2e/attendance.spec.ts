@@ -211,3 +211,44 @@ test("an offline check-in is kept on the phone and syncs when back online", asyn
   // No location shared: recorded and flagged for manual review, never rejected.
   expect(ev.rows).toEqual([{ type: "check_in", within_geofence: false, has_client_id: true }]);
 });
+
+test("Timesheets list: Edit opens the adjust card and Approve approves that row", async ({ page }) => {
+  const projectId = (await pool.query("select id from projects where code = 'DEMO-CAD-2611'")).rows[0].id as string;
+  const jordan = (await pool.query("select id from staff_profiles where email = 'ba.demo@rgxm-demo.test'")).rows[0].id as string;
+  await retireTestShifts();
+  let location = (await pool.query("select id from project_locations where project_id = $1 and name = $2", [projectId, LOCATION])).rows[0]?.id as string | undefined;
+  if (!location) {
+    location = (await pool.query("insert into project_locations (project_id, name, timezone) values ($1, $2, 'America/Toronto') returning id", [projectId, LOCATION])).rows[0].id as string;
+  }
+  // A shift that ended an hour ago, with hours already submitted.
+  const shift = (
+    await pool.query(
+      `insert into shifts (project_id, location_id, role, starts_at, ends_at, timezone, rate_cents, status)
+       values ($1, $2, 'BA', date_trunc('minute', now()) - interval '5 hours', date_trunc('minute', now()) - interval '1 hour', 'America/Toronto', 2500, 'filled') returning id, starts_at, ends_at`,
+      [projectId, location],
+    )
+  ).rows[0];
+  const booking = (
+    await pool.query(
+      `insert into bookings (shift_id, staff_id, project_id, role, starts_at, ends_at, status, agreed_rate_cents, offered_rate_cents, rate_source, confirmed_at)
+       values ($1, $2, $3, 'BA', $4, $5, 'confirmed', 2500, 2500, 'shift', now()) returning id`,
+      [shift.id, jordan, projectId, shift.starts_at, shift.ends_at],
+    )
+  ).rows[0].id as string;
+  await pool.query(
+    `insert into timesheets (booking_id, staff_id, project_id, shift_id, status, worked_start, worked_end, submitted_at) values ($1, $2, $3, $4, 'submitted', $5, $6, now())`,
+    [booking, jordan, projectId, shift.id, shift.starts_at, shift.ends_at],
+  );
+
+  await signInAsTeam(page, "pm");
+  await page.goto(`/dashboard/timesheets?project=${projectId}`);
+  await page.getByRole("link", { name: "Edit Jordan Lee's timesheet" }).first().click();
+  await expect(page).toHaveURL(new RegExp(`/dashboard/timesheets/${booking}#adjust$`));
+  await expect(page.getByRole("heading", { name: "Adjust worked time" })).toBeVisible();
+
+  await page.goto(`/dashboard/timesheets?project=${projectId}`);
+  await page.getByRole("button", { name: "Approve Jordan Lee's hours" }).click();
+  await expect(page.getByText("Approved Jordan Lee's hours.")).toBeVisible();
+  const t = (await pool.query("select status, payable_minutes from timesheets where booking_id = $1", [booking])).rows[0];
+  expect(t).toEqual({ status: "approved", payable_minutes: 240 });
+});

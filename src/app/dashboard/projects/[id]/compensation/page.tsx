@@ -74,7 +74,7 @@ export default async function CompensationPage({ params }: PageProps<"/dashboard
             {items.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
-                  No allowances, mileage or bonuses recorded.
+                  No allowances, mileage, bonuses or expenses recorded.
                 </TableCell>
               </TableRow>
             ) : (
@@ -89,8 +89,15 @@ export default async function CompensationPage({ params }: PageProps<"/dashboard
                         ? `${i.quantity} km × $${Number(i.unitRate).toFixed(2)}/km · trip ${i.tripDate} · ${i.businessPurpose}`
                         : i.category === "bonus"
                           ? i.reason
-                          : `$${Number(i.unitRate).toFixed(2)} rate at the time`}
+                          : i.category === "reimbursement"
+                            ? `Submitted by the contractor · ${i.vendor ?? "Unknown store"} · ${i.businessPurpose}`
+                            : `$${Number(i.unitRate).toFixed(2)} rate at the time`}
                     </p>
+                    {i.hasReceipt ? (
+                      <a href={`/api/expenses/${i.id}/receipt`} target="_blank" rel="noreferrer" className="text-xs font-medium underline underline-offset-2">
+                        View receipt
+                      </a>
+                    ) : null}
                     {i.decisionNote ? <p className="text-xs text-muted-foreground">Note: {i.decisionNote}</p> : null}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">

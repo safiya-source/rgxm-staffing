@@ -196,7 +196,7 @@ export const staffEmailPreferences = pgTable("staff_email_preferences", {
 
 // ───────────────────────────── Project compensation ─────────────────────────────
 
-export const COMPENSATION_CATEGORIES = ["meal_breakfast", "meal_lunch", "meal_dinner", "per_diem", "mileage", "bonus"] as const;
+export const COMPENSATION_CATEGORIES = ["meal_breakfast", "meal_lunch", "meal_dinner", "per_diem", "mileage", "bonus", "reimbursement"] as const;
 export const PAYABLE_CATEGORIES = ["fee", ...COMPENSATION_CATEGORIES, "adjustment"] as const;
 export const COMPENSATION_STATUSES = ["pending", "approved", "rejected", "void"] as const;
 
@@ -227,8 +227,9 @@ export const projectCompensationSettings = pgTable("project_compensation_setting
 });
 
 /**
- * One allowance, mileage claim or bonus for one contractor and work date. The rate and amount are
- * snapshotted when recorded; approval creates the payable (bill line).
+ * One allowance, mileage claim, bonus or expense reimbursement for one contractor and work date. The
+ * rate and amount are snapshotted when recorded; approval creates the payable (bill line).
+ * Reimbursements are submitted by the contractor with a receipt (date = purchase date).
  */
 export const compensationItems = pgTable(
   "compensation_items",
@@ -257,6 +258,11 @@ export const compensationItems = pgTable(
     decidedAt: tstz(),
     decisionNote: text(),
     payableItemId: uuid(),
+    // Expense reimbursements: where it was bought and the receipt the contractor uploaded.
+    vendor: text(),
+    receiptKey: text(),
+    receiptName: text(),
+    receiptContentType: text(),
   },
   (t) => [
     index("compensation_items_project_idx").on(t.projectId, t.workDate),
@@ -273,6 +279,10 @@ export const compensationItems = pgTable(
       sql`${t.category} <> 'mileage' or (${t.tripDate} is not null and length(trim(coalesce(${t.businessPurpose}, ''))) > 0)`,
     ),
     check("compensation_items_bonus", sql`${t.category} <> 'bonus' or length(trim(coalesce(${t.reason}, ''))) > 0`),
+    check(
+      "compensation_items_reimbursement",
+      sql`${t.category} <> 'reimbursement' or (${t.receiptKey} is not null and length(trim(coalesce(${t.businessPurpose}, ''))) > 0 and ${t.amountCents} > 0)`,
+    ),
   ],
 );
 

@@ -92,9 +92,15 @@ You can change any of these per project.
   Later rate changes only affect new items.
 - **Shown separately** in contractor statements, project budgets, payment batches, bank files, accounting
   exports and reports: hourly fees, meals/per diems, mileage, bonuses and taxes.
-- **Tax and year-end treatment are set per category** (Settings → Tax & accounting → *Treatment by
-  category*). Every category starts as "review", so **nothing assumes mileage or per diems are tax-free**.
-  Tax is decided line by line; it is never added to the whole payment.
+- **GST/HST follows the category treatment for fees, allowances, per diems, mileage and bonuses** (they
+  are part of the contractor's taxable supply when the contractor is registered).
+- **Expense reimbursements are never taxed** (RGXM decision, Nov 2026): a purchase the contractor made on
+  RGXM's behalf, submitted with a receipt, is repaid at cost (`NEVER_TAXED_CATEGORIES` in `tax-engine.ts`).
+  Contractors submit them in the portal (Pay → Expenses); RGXM approves them on the project's
+  *Allowances & bonuses* page. **Accountant to confirm** the agent-purchase treatment and how RGXM claims
+  input tax credits on the receipts.
+- **Year-end treatment is set per category** (Settings → Tax & accounting → *Treatment by category*), as is
+  GST/HST for fees and bonuses. Tax is decided line by line; it is never added to the whole payment.
 
 **Waiting on accountant:** sales-tax treatment and year-end treatment for each category.
 
