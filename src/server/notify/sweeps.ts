@@ -13,6 +13,7 @@ const MINUTE = 60_000;
 /** The check-in reminder goes out this many minutes before a shift (the runner may be a few minutes late). */
 export const CHECK_IN_LEAD_MINUTES = 12;
 const CHECK_IN_LATE_MINUTES = 15;
+const CHECK_OUT_LATE_MINUTES = 15;
 
 export async function runSweeps(now = new Date()) {
   // 1. Shift reminders ~24 hours ahead.
@@ -37,6 +38,22 @@ export async function runSweeps(now = new Date()) {
       ),
     );
   for (const b of checkInDue) await enqueue(db, { type: "shift.check_in_reminder", payload: { bookingId: b.id }, dedupeKey: `shift.check_in_reminder:${b.id}` });
+
+  // 1c. Check-out nudge at the scheduled end time, to anyone who checked in but hasn't checked out.
+  // Sent from the end time up to 15 minutes after it (in case the runner is late), once per booking.
+  const checkOutDue = await db
+    .select({ id: bookings.id })
+    .from(bookings)
+    .where(
+      and(
+        eq(bookings.status, "confirmed"),
+        lte(bookings.endsAt, now),
+        gte(bookings.endsAt, new Date(now.getTime() - CHECK_OUT_LATE_MINUTES * MINUTE)),
+        sql`exists (select 1 from ${attendanceEvents} e where e.booking_id = ${bookings.id} and e.type = 'check_in')`,
+        sql`not exists (select 1 from ${attendanceEvents} e where e.booking_id = ${bookings.id} and e.type = 'check_out')`,
+      ),
+    );
+  for (const b of checkOutDue) await enqueue(db, { type: "shift.check_out_reminder", payload: { bookingId: b.id }, dedupeKey: `shift.check_out_reminder:${b.id}` });
 
   // 2. After a shift ends: make sure a timesheet exists, refresh time-based flags, and prompt the staff member once.
   const ended = await db
@@ -63,6 +80,6 @@ export async function runSweeps(now = new Date()) {
   // 3. Privacy retention: every category with an RGXM-set period (legal holds are skipped).
   const retention = await runRetention(now);
   await pruneRateLimits(now);
-  return { reminders: upcoming.length, checkInReminders: checkInDue.length, endedShifts: ended.length, retention };
+  return { reminders: upcoming.length, checkInReminders: checkInDue.length, checkOutReminders: checkOutDue.length, endedShifts: ended.length, retention };
 }
 

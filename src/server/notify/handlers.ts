@@ -194,6 +194,41 @@ export const handlers: Record<string, Handler> = {
     });
   },
 
+  "shift.check_out_reminder": async (payload, eventId) => {
+    const [b] = await loadBookings([payload.bookingId as string]);
+    if (!b || b.status !== "confirmed") return;
+    // Re-check at send time: nothing to nudge if they've already checked out.
+    const [{ checkedOut }] = (await db.execute<{ checkedOut: boolean }>(sql`
+      select exists (select 1 from attendance_events e where e.booking_id = ${b.id} and e.type = 'check_out') as "checkedOut"`)).rows as [{ checkedOut: boolean }];
+    if (checkedOut || b.endsAt.getTime() < Date.now() - 60 * 60_000) return;
+    const person = await staffRecipient(b.staffId);
+    const at = formatInZone(b.endsAt, b.timezone, "h:mm a");
+    await notify({
+      dedupeKey: `n:${eventId}`,
+      userId: person.userId,
+      type: "shift.check_out_reminder",
+      title: `Your shift ended at ${at}. Check out now`,
+      body: `${b.projectName} · ${b.locationName}`,
+      href: `/portal/shifts/${b.id}`,
+      email: {
+        to: person.email,
+        subject: `Don't forget to check out: your shift ended at ${at}`,
+        ...detailEmail({
+          heading: `Time to check out, ${person.name}`,
+          intro:
+            "Your shift has reached its end time. When you leave, open your shift and tap Check out so your hours are recorded. If you're staying later or already left, check out now and adjust your finish time under Your hours.",
+          details: [
+            ["Project", b.projectName],
+            ["When", when(b)],
+            ["Where", [b.locationName, b.address].filter(Boolean).join(", ")],
+          ],
+          actionLabel: "Open shift and check out",
+          url: url(`/portal/shifts/${b.id}`),
+        }),
+      },
+    });
+  },
+
   "timesheet.reminder": async (payload, eventId) => {
     const [b] = await loadBookings([payload.bookingId as string]);
     if (!b) return;
