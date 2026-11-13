@@ -63,12 +63,28 @@ test("a new Brand Ambassador registers and completes onboarding", async ({ page 
 });
 
 test("staff set weekly availability and a day off", async ({ page }) => {
+  // Start from an empty week so the taps below always turn parts on.
+  await pool.query("delete from availability_rules where staff_id = (select id from staff_profiles where email = 'tl.demo@rgxm-demo.test')");
   await signInWithMagicLink(page, "tl.demo@rgxm-demo.test");
   await page.getByRole("link", { name: "Update my availability" }).click();
   await expect(page.getByRole("heading", { name: "My availability" })).toBeVisible();
-  await page.getByRole("checkbox", { name: "Wednesday" }).click();
+  // Wednesday mornings and evenings; Saturday any time (picking a part turns "Open" back off).
+  await page.getByRole("button", { name: "Wednesday Morning" }).click();
+  await page.getByRole("button", { name: "Wednesday Evening" }).click();
+  await page.getByRole("button", { name: "Saturday open availability" }).click();
+  await page.getByRole("button", { name: "Saturday Morning" }).click();
+  await expect(page.getByRole("button", { name: "Saturday open availability" })).toHaveAttribute("aria-pressed", "false");
+  await page.getByRole("button", { name: "Saturday open availability" }).click();
   await page.getByRole("button", { name: "Save weekly availability" }).click();
   await expect(page.getByText("Weekly availability saved.")).toBeVisible();
+  const { rows } = await pool.query(
+    "select r.weekday, to_char(r.start_time, 'HH24:MI') s, to_char(r.end_time, 'HH24:MI') e from availability_rules r join staff_profiles p on p.id = r.staff_id where p.email = 'tl.demo@rgxm-demo.test' and r.weekday in (3, 6) order by 1, 2",
+  );
+  expect(rows).toEqual([
+    { weekday: 3, s: "06:00", e: "12:00" },
+    { weekday: 3, s: "17:00", e: "22:00" },
+    { weekday: 6, s: "00:00", e: "23:59" },
+  ]);
 
   await page.getByLabel("Date", { exact: true }).fill("2026-12-24");
   await page.getByRole("button", { name: "Add date" }).click();

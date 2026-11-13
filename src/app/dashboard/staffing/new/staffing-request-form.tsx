@@ -1,5 +1,5 @@
 "use client";
-import { format, parseISO } from "date-fns";
+import { addDays, format, parseISO } from "date-fns";
 import { PlusIcon, XIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
@@ -14,7 +14,7 @@ import { formatMinutes, formatMoney } from "@/lib/format";
 import { CompensationFields, type CompensationDefaults } from "@/components/app/compensation-fields";
 import { readCompensationForm } from "@/lib/compensation-form";
 import { FIELD_ROLE_NAMES, FIELD_ROLES, type FieldRole } from "@/lib/roles";
-import { COMMON_TIME_ZONES, expandShiftPattern } from "@/lib/time";
+import { COMMON_TIME_ZONES, isIsoDate, MAX_BULK_SHIFTS, shiftInstants } from "@/lib/time";
 import { cn } from "@/lib/utils";
 import { createStaffingRequestAction } from "../actions";
 
@@ -45,20 +45,23 @@ const NEW_COMPENSATION: CompensationDefaults = {
   notes: null,
 };
 
-const DAY_LABELS = ["S", "M", "T", "W", "T", "F", "S"];
-const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const NEW = "__new";
 
 type RoleLine = { key: number; role: FieldRole; headcount: string; rate: string; rateEdited: boolean };
 const toCents = (v: string) => (/^\d{1,4}(\.\d{1,2})?$/.test(v.trim()) ? Math.round(Number(v) * 100) : null);
 
-function previewShifts(s: { startDate: string; endDate: string; weekdays: number[]; startTime: string; endTime: string }, timeZone: string) {
-  if (!s.startDate || !s.endDate) return null;
-  try {
-    return { windows: expandShiftPattern({ startDate: s.startDate, endDate: s.endDate, weekdays: s.weekdays, startTime: s.startTime, endTime: s.endTime, timeZone }), error: null as string | null };
-  } catch (err) {
-    return { windows: [], error: err instanceof Error ? err.message : "Check the dates" };
-  }
+type DayLine = { key: number; date: string; startTime: string; endTime: string };
+
+/** The shifts each role will get: one per day line, in date order. */
+function previewShifts(days: DayLine[], timeZone: string) {
+  const filled = days.filter((d) => isIsoDate(d.date));
+  if (!filled.length) return null;
+  if (filled.some((d) => !d.startTime || !d.endTime)) return { windows: [], error: "Add a start and end time for each day." };
+  if (filled.some((d) => d.startTime === d.endTime)) return { windows: [], error: "A day's start and end time can't be the same." };
+  const windows = filled
+    .map((d) => ({ date: d.date, ...shiftInstants(d.date, d.startTime, d.endTime, timeZone) }))
+    .sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime());
+  return { windows, error: null as string | null };
 }
 
 function Choice({ checked, onSelect, label }: { checked: boolean; onSelect: () => void; label: string }) {
@@ -116,24 +119,28 @@ export function StaffingRequestForm({
   const lines = roles.map((l) => (l.rateEdited ? l : { ...l, rate: rateFor(l.role) }));
   const setLine = (key: number, patch: Partial<RoleLine>) => setRoles((cur) => cur.map((l) => (l.key === key ? { ...l, ...patch } : l)));
   const unusedRole = FIELD_ROLES.find((r) => !roles.some((l) => l.role === r));
+  const [days, setDays] = useState<DayLine[]>(() => [{ key: 1, date: "", startTime: "10:00", endTime: "18:00" }]);
+  const setDay = (key: number, patch: Partial<DayLine>) => setDays((cur) => cur.map((d) => (d.key === key ? { ...d, ...patch } : d)));
+  // A new day starts the day after the last one, with the same times; change either as needed.
+  const addDay = () =>
+    setDays((cur) => {
+      const last = cur.at(-1)!;
+      const next = isIsoDate(last.date) ? format(addDays(parseISO(last.date), 1), "yyyy-MM-dd") : "";
+      return [...cur, { key: Math.max(...cur.map((d) => d.key)) + 1, date: next, startTime: last.startTime, endTime: last.endTime }];
+    });
   const [s, setS] = useState({
-    startDate: "",
-    endDate: "",
-    weekdays: [] as number[],
-    startTime: "10:00",
-    endTime: "18:00",
     reportingLocation: "",
     uniform: "",
     instructions: "",
   });
-  const setShift = (patch: Partial<typeof s>) => setS((cur) => ({ ...cur, ...patch, ...(patch.startDate && (!cur.endDate || cur.endDate < patch.startDate) ? { endDate: patch.startDate } : {}) }));
+  const setShift = (patch: Partial<typeof s>) => setS((cur) => ({ ...cur, ...patch }));
 
   // Keep the venue choice valid when the project changes.
   const venueValue = locationChoice === NEW || existingLocations.some((l) => l.id === locationChoice) ? locationChoice : (existingLocations[0]?.id ?? NEW);
   const usingNewVenue = venueValue === NEW;
   const timezone = usingNewVenue ? nl.timezone : (existingLocations.find((l) => l.id === venueValue)?.timezone ?? defaultTimezone);
 
-  const preview = previewShifts(s, timezone);
+  const preview = previewShifts(days, timezone);
   const headcount = lines.reduce((n, l) => n + (Number(l.headcount) || 0), 0);
   const minutes = preview?.windows.reduce((n, w) => n + w.minutes, 0) ?? 0;
   // Only estimate cost when every role has a rate.
@@ -143,9 +150,9 @@ export function StaffingRequestForm({
   const missing =
     (projectMode === "existing" ? !projectId : np.name.trim().length < 2) ||
     (usingNewVenue ? !canAddVenue || !nl.name.trim() : false) ||
-    !s.startDate ||
-    !s.endDate ||
+    days.some((d) => !isIsoDate(d.date)) ||
     !preview?.windows.length ||
+    preview.windows.length * lines.length > MAX_BULK_SHIFTS ||
     lines.some((l) => !(Number(l.headcount) >= 1));
 
   const selectedProject = projectMode === "existing" ? projects.find((p) => p.id === projectId) : undefined;
@@ -166,11 +173,7 @@ export function StaffingRequestForm({
         location: usingNewVenue ? { mode: "new", ...nl } : { mode: "existing", locationId: venueValue },
         shifts: {
           roles: lines.map((l) => ({ role: l.role, headcount: l.headcount, rateCents: showRates ? l.rate : "" })),
-          startDate: s.startDate,
-          endDate: s.endDate,
-          weekdays: s.weekdays,
-          startTime: s.startTime,
-          endTime: s.endTime,
+          days: days.map((d) => ({ date: d.date, startTime: d.startTime, endTime: d.endTime })),
           reportingLocation: s.reportingLocation,
           uniform: s.uniform,
           instructions: s.instructions,
@@ -292,7 +295,7 @@ export function StaffingRequestForm({
       <Card>
         <CardHeader>
           <CardTitle>3. Shifts</CardTitle>
-          <CardDescription>One shift is created for each matching day.</CardDescription>
+          <CardDescription>Each role gets one shift on every day you add.</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-5">
           <fieldset className="grid gap-3">
@@ -341,39 +344,37 @@ export function StaffingRequestForm({
               {showRates ? <span className="text-xs text-muted-foreground">Rates are pre-filled from the project or company defaults. Leave a rate blank to use each person&apos;s own rate.</span> : null}
             </div>
           </fieldset>
-          <div className="grid gap-4 sm:grid-cols-4">
-            <Field label="First day" htmlFor="r-start">
-              <Input id="r-start" type="date" value={s.startDate} onChange={(e) => setShift({ startDate: e.target.value })} />
-            </Field>
-            <Field label="Last day" htmlFor="r-end">
-              <Input id="r-end" type="date" value={s.endDate} min={s.startDate} onChange={(e) => setShift({ endDate: e.target.value })} />
-            </Field>
-            <Field label="Start time" htmlFor="r-st">
-              <Input id="r-st" type="time" value={s.startTime} onChange={(e) => setShift({ startTime: e.target.value })} />
-            </Field>
-            <Field label="End time" htmlFor="r-et" hint={s.endTime <= s.startTime ? "Ends the next day" : undefined}>
-              <Input id="r-et" type="time" value={s.endTime} onChange={(e) => setShift({ endTime: e.target.value })} />
-            </Field>
-          </div>
-          <fieldset>
-            <legend className="mb-2 text-sm font-medium">Days of the week</legend>
-            <div className="flex flex-wrap items-center gap-1.5">
-              {DAY_LABELS.map((d, i) => {
-                const on = s.weekdays.includes(i);
-                return (
-                  <button
-                    key={i}
-                    type="button"
-                    aria-pressed={on}
-                    aria-label={DAY_NAMES[i]}
-                    onClick={() => setShift({ weekdays: on ? s.weekdays.filter((x) => x !== i) : [...s.weekdays, i].sort() })}
-                    className={cn("size-9 rounded-full border text-sm font-medium", on ? "border-foreground bg-foreground text-background" : "bg-card hover:bg-accent")}
-                  >
-                    {d}
-                  </button>
-                );
-              })}
-              <span className="ml-2 text-xs text-muted-foreground">{s.weekdays.length ? "Only selected days" : "Every day in the range"}</span>
+          <fieldset className="grid gap-3">
+            <legend className="mb-1 text-sm font-medium">Days and times</legend>
+            {days.map((d, i) => (
+              <div key={d.key} className="grid grid-cols-[1fr_auto] items-end gap-2 sm:grid-cols-[2fr_1fr_1fr_auto]">
+                <Field label={i === 0 ? "Day" : `Day ${i + 1}`} htmlFor={`r-day-${d.key}`} className="col-span-2 sm:col-span-1">
+                  <Input id={`r-day-${d.key}`} type="date" value={d.date} onChange={(e) => setDay(d.key, { date: e.target.value })} />
+                </Field>
+                <Field label="Start time" htmlFor={`r-st-${d.key}`}>
+                  <Input id={`r-st-${d.key}`} type="time" value={d.startTime} onChange={(e) => setDay(d.key, { startTime: e.target.value })} />
+                </Field>
+                <Field label="End time" htmlFor={`r-et-${d.key}`} hint={d.endTime && d.endTime <= d.startTime ? "Ends the next day" : undefined}>
+                  <Input id={`r-et-${d.key}`} type="time" value={d.endTime} onChange={(e) => setDay(d.key, { endTime: e.target.value })} />
+                </Field>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  aria-label={`Remove day ${i + 1}`}
+                  disabled={days.length === 1}
+                  onClick={() => setDays((cur) => cur.filter((x) => x.key !== d.key))}
+                  className={cn(days.length === 1 && "invisible")}
+                >
+                  <XIcon />
+                </Button>
+              </div>
+            ))}
+            <div>
+              <Button type="button" variant="outline" size="sm" onClick={addDay}>
+                <PlusIcon /> Add another day
+              </Button>
+              <span className="ml-2 text-xs text-muted-foreground">Each day can have its own times.</span>
             </div>
           </fieldset>
           <details className="rounded-lg border p-3">

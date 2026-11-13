@@ -112,6 +112,18 @@ describe("tax decisions", () => {
     expect(d.basis).toContain("per diem");
   });
 
+  it("never taxes allowances, per diems or mileage, even for a verified registrant with a taxable treatment", () => {
+    for (const category of ["meal_breakfast", "meal_lunch", "meal_dinner", "per_diem", "mileage"]) {
+      const d = decideTax(ctx({ treatment: { gstHst: "taxable", approved: true } }), { ...line, category });
+      expect(d).toMatchObject({ status: "no_tax", taxCents: 0, lines: [] });
+      expect(d.basis).toMatch(/only on hourly fees and bonuses/);
+      // Not even routed to Finance when registration is unclear.
+      expect(decideTax(ctx({ registration: { status: "unsure", verification: "unverified", effectiveDate: null, number: null } }), { ...line, category }).status).toBe("no_tax");
+    }
+    expect(decideTax(ctx({ treatment: { gstHst: "taxable", approved: true } }), { ...line, category: "bonus" }).status).toBe("calculated");
+    expect(decideTax(ctx(), line).status).toBe("calculated");
+  });
+
   it("respects effective dates and registration start dates", () => {
     const rules = [
       { ...ON_HST, id: "old", ratePpm: 120000, effectiveFrom: "2000-01-01", effectiveTo: "2025-12-31" },

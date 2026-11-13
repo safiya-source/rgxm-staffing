@@ -92,9 +92,13 @@ You can change any of these per project.
   Later rate changes only affect new items.
 - **Shown separately** in contractor statements, project budgets, payment batches, bank files, accounting
   exports and reports: hourly fees, meals/per diems, mileage, bonuses and taxes.
-- **Tax and year-end treatment are set per category** (Settings → Tax & accounting → *Treatment by
-  category*). Every category starts as "review", so **nothing assumes mileage or per diems are tax-free**.
-  Tax is decided line by line; it is never added to the whole payment.
+- **GST/HST applies only to hourly fees and bonuses** (RGXM decision, Nov 2026). Meal allowances, per diems
+  and mileage are never taxed, whatever the contractor's registration (`NEVER_TAXED_CATEGORIES` in
+  `tax-engine.ts`). **Accountant to confirm**: allowances a registrant bills as part of their service are
+  often part of the taxable supply under the Excise Tax Act; only true expense reimbursements are usually
+  outside it.
+- **Year-end treatment is set per category** (Settings → Tax & accounting → *Treatment by category*), as is
+  GST/HST for fees and bonuses. Tax is decided line by line; it is never added to the whole payment.
 
 **Waiting on accountant:** sales-tax treatment and year-end treatment for each category.
 
