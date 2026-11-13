@@ -247,7 +247,7 @@ export async function createStaffingRequestAction(input: unknown): Promise<Actio
       viewer = await authorizeInternal("project.create");
     } else {
       viewer = await authorizeProject("shift.manage", parsed.project.projectId);
-      if (parsed.location.mode === "new") await authorizeProject("project.edit", parsed.project.projectId);
+      if (parsed.location.mode === "new") await authorizeProject("location.manage", parsed.project.projectId);
     }
     // Allowances, mileage and bonuses are set by people who may configure project compensation.
     if (parsed.compensation) {

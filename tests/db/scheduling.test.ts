@@ -164,3 +164,30 @@ describe("cost estimates", () => {
     expect(shifts.estimateShiftCents({ ...s, rateCents: null })).toBeNull();
   });
 });
+
+describe("moving a shift to another venue", () => {
+  it("keeps local times at the new venue, tells booked people, and refuses another project's venue", async () => {
+    const [id] = await shifts.createShifts(
+      actor.id,
+      projectId,
+      shifts.bulkShiftSchema.parse({ ...baseShift, locationId: torontoId, startDate: "2026-12-10", endDate: "2026-12-10", startTime: "10:00", endTime: "18:00" }),
+    );
+    const staff = await makeStaff();
+    await book(id!, staff.id, { status: "confirmed" });
+    const before = await one<{ n: number }>("select count(*)::int n from outbox_events where type = 'shift.changed' and payload->>'shiftId' = $1", [id]);
+
+    await shifts.updateShift(actor.id, id!, shifts.shiftUpdateSchema.parse({ ...baseShift, locationId: reginaId, date: "2026-12-10", startTime: "10:00", endTime: "18:00" }));
+    const moved = await one<{ location_id: string; timezone: string; starts_at: string }>("select location_id, timezone, starts_at from shifts where id = $1", [id]);
+    expect(moved).toMatchObject({ location_id: reginaId, timezone: "America/Regina" });
+    // 10:00 in Regina (UTC-6) is 16:00 UTC.
+    expect(new Date(moved.starts_at).toISOString()).toBe("2026-12-10T16:00:00.000Z");
+    const after = await one<{ n: number }>("select count(*)::int n from outbox_events where type = 'shift.changed' and payload->>'shiftId' = $1", [id]);
+    expect(after.n).toBe(before.n + 1);
+
+    const other = await projects.createProject(actor.id, projects.projectSchema.parse({ name: "Other project", code: `OTH-${Date.now() % 1e6}`, newClientName: "Test Client" }));
+    const foreign = await projects.saveLocation(actor.id, other, null, projects.locationSchema.parse({ name: "Elsewhere", timezone: "America/Toronto" }));
+    await expect(
+      shifts.updateShift(actor.id, id!, shifts.shiftUpdateSchema.parse({ ...baseShift, locationId: foreign, date: "2026-12-10", startTime: "10:00", endTime: "18:00" })),
+    ).rejects.toThrow(/isn't part of this project/);
+  });
+});

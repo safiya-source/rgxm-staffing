@@ -58,7 +58,7 @@ describe("permission matrix", () => {
       { userId: "coord-2", roles: ["staffing_coordinator"] as const },
     ];
     for (const who of outsiders) {
-      for (const p of ["shift.manage", "booking.offer", "booking.confirm", "comms.manage", "timesheet.view", "timesheet.prepare", "compensation.record"] as const) {
+      for (const p of ["shift.manage", "location.manage", "booking.offer", "booking.confirm", "comms.manage", "timesheet.view", "timesheet.prepare", "compensation.record"] as const) {
         expect(canOnProject(who, p, project)).toBe(true);
       }
     }

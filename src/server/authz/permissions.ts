@@ -35,6 +35,8 @@ export const PERMISSIONS = {
   // coordinator on every project. Money approvals stay with the project's own team and Finance.
   "project.edit": { admin: A, project_manager: A },
   "shift.manage": { admin: A, project_manager: A, staffing_coordinator: A },
+  // Adding and editing a project's venues (shifts don't always happen at the main activation site).
+  "location.manage": { admin: A, project_manager: A, staffing_coordinator: A },
   "comms.manage": { admin: A, project_manager: A, staffing_coordinator: A },
 
   "talent.view": { admin: A, project_manager: A, staffing_coordinator: A, finance: A },

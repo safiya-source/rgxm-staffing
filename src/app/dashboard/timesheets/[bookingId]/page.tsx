@@ -215,6 +215,7 @@ export default async function TimesheetPage({ params }: PageProps<"/dashboard/ti
           shiftStarted={d.shift.startsAt < new Date()}
           shiftEnded={d.shift.endsAt < new Date()}
           shiftDate={utcToZoned(d.shift.startsAt, tz).date}
+          scheduled={{ start: utcToZoned(d.shift.startsAt, tz).time, end: utcToZoned(d.shift.endsAt, tz).time }}
           defaults={{
             start: utcToZoned(t?.workedStart ?? d.shift.startsAt, tz).time,
             end: utcToZoned(t?.workedEnd ?? d.shift.endsAt, tz).time,

@@ -45,12 +45,13 @@ test("PM creates a staffing request with a new project and venue, then lands on 
   expect(comp).toEqual({ meals_enabled: true, eligible_meals: ["meal_breakfast", "meal_dinner"], mileage_enabled: true, per_diem_enabled: false, bonus_cents: 4000, bonus_conditions: "Per shift when the sampling target is met" });
 });
 
-test("coordinators add shifts to any project but can't create projects or venues", async ({ page }) => {
+test("coordinators add shifts and venues to any project but can't create projects", async ({ page }) => {
   await signInAsTeam(page, "coordinator");
   await page.goto("/dashboard/staffing/new");
   await expect(page.getByRole("radio", { name: "New project" })).toHaveCount(0);
   await page.getByLabel("Project").selectOption({ label: "Cadbury Sampling Activation (DEMO-CAD-2611)" });
-  await expect(page.getByLabel("Venue").locator("option", { hasText: "New venue" })).toHaveCount(0);
+  // Shifts don't always happen at the main activation site, so coordinators can add a venue.
+  await expect(page.getByLabel("Venue").locator("option", { hasText: "New venue" })).toHaveCount(1);
   // Allowances and bonuses are set by PMs and Admins.
   await expect(page.getByText("4. Allowances, mileage & bonus")).toHaveCount(0);
 });

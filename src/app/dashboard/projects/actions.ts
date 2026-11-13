@@ -78,7 +78,7 @@ export async function setProjectStatusAction(projectId: string, status: string, 
 
 export async function saveLocationAction(projectId: string, locationId: string | null, _prev: ActionResult, fd: FormData): Promise<ActionResult> {
   return runAction(async () => {
-    const viewer = await authorizeProject("project.edit", uuid.parse(projectId));
+    const viewer = await authorizeProject("location.manage", uuid.parse(projectId));
     const input = projects.locationSchema.parse({
       name: fd.get("name"),
       address: fd.get("address"),
@@ -101,7 +101,7 @@ export async function saveLocationAction(projectId: string, locationId: string |
 
 export async function deleteLocationAction(projectId: string, locationId: string): Promise<ActionResult> {
   return runAction(async () => {
-    const viewer = await authorizeProject("project.edit", uuid.parse(projectId));
+    const viewer = await authorizeProject("location.manage", uuid.parse(projectId));
     await guard(() => projects.deleteLocation(viewer.userId, projectId, uuid.parse(locationId)));
     revalidatePath(`/dashboard/projects/${projectId}`, "layout");
     return { ok: true, message: "Location removed." };

@@ -211,7 +211,7 @@ export function ShiftBoard(props: {
           onClose={() => setCreating(false)}
         />
       ) : null}
-      {editing ? <EditShiftDialog shift={editing} requirements={props.requirements} breakPolicies={props.breakPolicies} showRates={props.showRates} onClose={() => setEditing(null)} /> : null}
+      {editing ? <EditShiftDialog shift={editing} locations={props.locations} requirements={props.requirements} breakPolicies={props.breakPolicies} showRates={props.showRates} onClose={() => setEditing(null)} /> : null}
       {duplicating ? <DuplicateShiftDialog shift={duplicating} onClose={() => setDuplicating(null)} /> : null}
       {cancelling ? <CancelShiftDialog shift={cancelling} onClose={() => setCancelling(null)} /> : null}
     </div>

@@ -75,7 +75,7 @@ export default async function ProjectSetupPage({ params }: PageProps<"/dashboard
             <CardTitle>Locations</CardTitle>
           </CardHeader>
           <CardContent>
-            <LocationsSection projectId={id} locations={setup.locations} canEdit={canEdit} />
+            <LocationsSection projectId={id} locations={setup.locations} canEdit={canOnProject(actor, "location.manage", scope)} />
           </CardContent>
         </Card>
         {showRates ? (
