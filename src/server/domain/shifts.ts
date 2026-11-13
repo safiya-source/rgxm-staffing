@@ -134,6 +134,8 @@ export const shiftUpdateSchema = shiftDetailsSchema.extend({
   date: isoDate,
   startTime: localTime,
   endTime: localTime,
+  // Optional: move the shift to another of the project's venues. Times stay local to the new venue.
+  locationId: z.string().uuid().optional(),
 });
 export type ShiftUpdateInput = z.infer<typeof shiftUpdateSchema>;
 
@@ -159,8 +161,11 @@ export async function updateShift(actorId: string, shiftId: string, input: Shift
       await assertRequirement(tx, before.projectId, input.requirementId);
       const confirmed = await confirmedCount(tx, shiftId);
       if (input.headcount < confirmed) throw new ShiftError(`${confirmed} people are already confirmed; headcount can't go below that.`);
-      const { startsAt, endsAt } = shiftInstants(input.date, input.startTime, input.endTime, before.timezone);
+      const loc = input.locationId && input.locationId !== before.locationId ? await loadLocation(tx, before.projectId, input.locationId) : null;
+      const timezone = loc?.timezone ?? before.timezone;
+      const { startsAt, endsAt } = shiftInstants(input.date, input.startTime, input.endTime, timezone);
       const values = {
+        ...(loc ? { locationId: loc.id, timezone } : {}),
         role: input.role,
         headcount: input.headcount,
         rateCents: input.rateCents ?? null,
@@ -185,6 +190,7 @@ export async function updateShift(actorId: string, shiftId: string, input: Shift
       await recordAudit({ actorId, action: "shift.update", entityType: "shift", entityId: shiftId, projectId: before.projectId, before, after: values }, tx);
       // Tell people with a live offer or booking when what they'd see has changed.
       const visibleChange =
+        Boolean(loc) ||
         before.startsAt.getTime() !== startsAt.getTime() ||
         before.endsAt.getTime() !== endsAt.getTime() ||
         before.reportingLocation !== values.reportingLocation ||

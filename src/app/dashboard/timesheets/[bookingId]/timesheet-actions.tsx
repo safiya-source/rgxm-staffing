@@ -20,6 +20,7 @@ type Props = {
   shiftStarted: boolean;
   shiftEnded: boolean;
   shiftDate: string;
+  scheduled: { start: string; end: string };
   defaults: { start: string; end: string; breakMinutes: number; computedMinutes: number | null; payableMinutes: number | null };
   can: { prepare: boolean; approve: boolean; correct: boolean; noShow: boolean };
   isOwn: boolean;
@@ -114,6 +115,27 @@ export function TimesheetActions(p: Props) {
             <CardTitle>Adjust worked time</CardTitle>
           </CardHeader>
           <CardContent className="grid gap-3">
+            <p className="text-sm text-muted-foreground">
+              Fix a late or missed check-in or check-out. Scheduled {p.scheduled.start}–{p.scheduled.end}.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                onClick={() => setTimes({ ...times, start: p.scheduled.start, reason: times.reason || "Started on time; checked in late" })}
+              >
+                Use scheduled start
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                onClick={() => setTimes({ ...times, start: p.scheduled.start, end: p.scheduled.end, reason: times.reason || "Worked the scheduled shift; check-in/out times were wrong" })}
+              >
+                Use scheduled times
+              </Button>
+            </div>
             <div className="grid grid-cols-3 gap-2">
               <Field label="Start" htmlFor="adj-start">
                 <Input id="adj-start" type="time" value={times.start} onChange={(e) => setTimes({ ...times, start: e.target.value })} />

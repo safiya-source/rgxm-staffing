@@ -1,11 +1,12 @@
 import { expect, test } from "@playwright/test";
+import { demoDate } from "../src/lib/demo-dates";
 import { writeFileSync } from "node:fs";
 import { pool, signInAsTeam } from "./helpers";
 
 
 test("coordinator finds available Toronto BAs and saves them to a list", async ({ page }) => {
   await signInAsTeam(page, "coordinator");
-  await page.goto("/dashboard/talent?role=BA&city=Toronto&availableOn=2026-11-14&noConflicts=1");
+  await page.goto(`/dashboard/talent?role=BA&city=Toronto&availableOn=${demoDate("2026-11-14")}&noConflicts=1`);
   await expect(page.getByRole("heading", { name: "Talent" })).toBeVisible();
   const rows = page.getByRole("row");
   expect(await rows.count()).toBeGreaterThan(5);
