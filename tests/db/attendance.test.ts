@@ -1,6 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { db } from "@/server/db";
 import * as a from "@/server/domain/attendance";
+import { handlers } from "@/server/notify/handlers";
+import { processOutbox } from "@/server/notify/outbox";
 import { runSweeps } from "@/server/notify/sweeps";
 import { book, makeProject, makeShift, makeUser, one, pool } from "./fixtures";
 
@@ -130,6 +132,23 @@ describe("timesheet review", () => {
     expect(adj.rows[0]).toMatchObject({ old_value: "0", new_value: "30" });
   });
 
+  it("lets someone who never checked in or out fill in their times and submit without a reason", async () => {
+    const p = await booked(-9 * 60, 8);
+    const t = await a.ensureTimesheet(db, p.bookingId);
+    await a.staffEditTimesheet(p, t.id, { workedStart: p.start, workedEnd: p.end, breakMinutes: 0, note: "I submitted my hours after my shift." }, "");
+    await a.submitTimesheet(p, t.id);
+    const after = await timesheetOf(p.bookingId);
+    expect(after.status).toBe("submitted");
+    const adj = await pool.query("select field, old_value, reason from timesheet_adjustments where timesheet_id = $1 order by field", [t.id]);
+    expect(adj.rows).toEqual([
+      { field: "worked_end", old_value: null, reason: "Entered by the contractor (no check-in/out recorded)" },
+      { field: "worked_start", old_value: null, reason: "Entered by the contractor (no check-in/out recorded)" },
+    ]);
+    // Changing those times again is a correction, which does need a reason.
+    await pool.query("update timesheets set status = 'needs_review' where id = $1", [t.id]);
+    await expect(a.staffEditTimesheet(p, t.id, { workedStart: new Date(p.start.getTime() + 30 * MIN) }, "")).rejects.toThrow(/reason/);
+  });
+
   it("treats re-entering a recorded time to the minute as no change (no reason needed)", async () => {
     const p = await finished();
     const t = await timesheetOf(p.bookingId);
@@ -246,5 +265,27 @@ describe("sweeps", () => {
       { type: "shift.reminder", booking: soon.bookingId },
       { type: "timesheet.reminder", booking: missed.bookingId },
     ]);
+  });
+
+  it("nudges people to check in about 10 minutes before the shift, once, and only if they haven't", async () => {
+    await pool.query("delete from outbox_events");
+    const dueSoon = await booked(8);
+    const lateNoCheckIn = await booked(-10);
+    const alreadyIn = await booked(5);
+    await a.recordAttendance(staffActor(alreadyIn), alreadyIn.bookingId, { type: "check_in" });
+    const later = await booked(60);
+    const longAgo = await booked(-120);
+    const ids = [dueSoon, lateNoCheckIn, alreadyIn, later, longAgo].map((x) => x.bookingId);
+
+    await runSweeps();
+    await runSweeps();
+    const queued = await pool.query("select payload->>'bookingId' as booking from outbox_events where type = 'shift.check_in_reminder' and payload->>'bookingId' = any($1)", [ids]);
+    expect(queued.rows.map((r) => r.booking).sort()).toEqual([dueSoon.bookingId, lateNoCheckIn.bookingId].sort());
+
+    // If they check in before the message goes out, it isn't sent.
+    await a.recordAttendance(staffActor(dueSoon), dueSoon.bookingId, { type: "check_in" });
+    await processOutbox(handlers, { limit: 500 });
+    const sent = await pool.query("select user_id, title from notifications where type = 'shift.check_in_reminder' and user_id = any($1)", [[dueSoon.userId, lateNoCheckIn.userId]]);
+    expect(sent.rows).toEqual([{ user_id: lateNoCheckIn.userId, title: expect.stringMatching(/^Your shift started at .*\. Check in now$/) }]);
   });
 });

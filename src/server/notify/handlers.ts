@@ -156,6 +156,44 @@ export const handlers: Record<string, Handler> = {
     });
   },
 
+  "shift.check_in_reminder": async (payload, eventId) => {
+    const [b] = await loadBookings([payload.bookingId as string]);
+    if (!b || b.status !== "confirmed") return;
+    // Re-check at send time: nothing to nudge if they've checked in, or the shift started long ago.
+    const [{ checkedIn }] = (await db.execute<{ checkedIn: boolean }>(sql`
+      select exists (select 1 from attendance_events e where e.booking_id = ${b.id} and e.type = 'check_in') as "checkedIn"`)).rows as [{ checkedIn: boolean }];
+    if (checkedIn || b.startsAt.getTime() < Date.now() - 30 * 60_000) return;
+    const person = await staffRecipient(b.staffId);
+    const started = b.startsAt.getTime() <= Date.now();
+    const at = formatInZone(b.startsAt, b.timezone, "h:mm a");
+    await notify({
+      dedupeKey: `n:${eventId}`,
+      userId: person.userId,
+      type: "shift.check_in_reminder",
+      title: started ? `Your shift started at ${at}. Check in now` : `Your shift starts at ${at}. Check in when you arrive`,
+      body: `${b.projectName} · ${b.locationName}`,
+      href: `/portal/shifts/${b.id}`,
+      email: {
+        to: person.email,
+        subject: started ? `Don't forget to check in: your shift started at ${at}` : `Check in when you arrive: your shift starts at ${at}`,
+        ...detailEmail({
+          heading: started ? `${person.name}, please check in` : `Almost time, ${person.name}`,
+          intro: started
+            ? "Your shift has started and you haven't checked in yet. Open your shift and tap Check in so your hours are recorded."
+            : "When you arrive, open your shift and tap Check in so your hours are recorded from the start.",
+          details: [
+            ["Project", b.projectName],
+            ["When", when(b)],
+            ["Where", [b.locationName, b.address].filter(Boolean).join(", ")],
+            ...(b.reportingLocation ? ([["Report to", b.reportingLocation]] as [string, string][]) : []),
+          ],
+          actionLabel: "Open shift and check in",
+          url: url(`/portal/shifts/${b.id}`),
+        }),
+      },
+    });
+  },
+
   "timesheet.reminder": async (payload, eventId) => {
     const [b] = await loadBookings([payload.bookingId as string]);
     if (!b) return;
