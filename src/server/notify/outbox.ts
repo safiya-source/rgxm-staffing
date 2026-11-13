@@ -17,6 +17,7 @@ export type OutboxEvent =
   | { type: "document.published"; payload: { documentId: string; version: number } }
   | { type: "message.posted"; payload: { messageId: string } }
   | { type: "shift.reminder"; payload: { bookingId: string } }
+  | { type: "shift.check_in_reminder"; payload: { bookingId: string } }
   | { type: "timesheet.reminder"; payload: { bookingId: string } }
   | { type: "timesheet.submitted"; payload: { timesheetId: string } }
   | { type: "timesheet.needs_review"; payload: { timesheetId: string } }

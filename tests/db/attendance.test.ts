@@ -1,6 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { db } from "@/server/db";
 import * as a from "@/server/domain/attendance";
+import { handlers } from "@/server/notify/handlers";
+import { processOutbox } from "@/server/notify/outbox";
 import { runSweeps } from "@/server/notify/sweeps";
 import { book, makeProject, makeShift, makeUser, one, pool } from "./fixtures";
 
@@ -246,5 +248,27 @@ describe("sweeps", () => {
       { type: "shift.reminder", booking: soon.bookingId },
       { type: "timesheet.reminder", booking: missed.bookingId },
     ]);
+  });
+
+  it("nudges people to check in about 10 minutes before the shift, once, and only if they haven't", async () => {
+    await pool.query("delete from outbox_events");
+    const dueSoon = await booked(8);
+    const lateNoCheckIn = await booked(-10);
+    const alreadyIn = await booked(5);
+    await a.recordAttendance(staffActor(alreadyIn), alreadyIn.bookingId, { type: "check_in" });
+    const later = await booked(60);
+    const longAgo = await booked(-120);
+    const ids = [dueSoon, lateNoCheckIn, alreadyIn, later, longAgo].map((x) => x.bookingId);
+
+    await runSweeps();
+    await runSweeps();
+    const queued = await pool.query("select payload->>'bookingId' as booking from outbox_events where type = 'shift.check_in_reminder' and payload->>'bookingId' = any($1)", [ids]);
+    expect(queued.rows.map((r) => r.booking).sort()).toEqual([dueSoon.bookingId, lateNoCheckIn.bookingId].sort());
+
+    // If they check in before the message goes out, it isn't sent.
+    await a.recordAttendance(staffActor(dueSoon), dueSoon.bookingId, { type: "check_in" });
+    await processOutbox(handlers, { limit: 500 });
+    const sent = await pool.query("select user_id, title from notifications where type = 'shift.check_in_reminder' and user_id = any($1)", [[dueSoon.userId, lateNoCheckIn.userId]]);
+    expect(sent.rows).toEqual([{ user_id: lateNoCheckIn.userId, title: expect.stringMatching(/^Your shift started at .*\. Check in now$/) }]);
   });
 });
