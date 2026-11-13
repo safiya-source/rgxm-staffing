@@ -132,6 +132,23 @@ describe("timesheet review", () => {
     expect(adj.rows[0]).toMatchObject({ old_value: "0", new_value: "30" });
   });
 
+  it("lets someone who never checked in or out fill in their times and submit without a reason", async () => {
+    const p = await booked(-9 * 60, 8);
+    const t = await a.ensureTimesheet(db, p.bookingId);
+    await a.staffEditTimesheet(p, t.id, { workedStart: p.start, workedEnd: p.end, breakMinutes: 0, note: "I submitted my hours after my shift." }, "");
+    await a.submitTimesheet(p, t.id);
+    const after = await timesheetOf(p.bookingId);
+    expect(after.status).toBe("submitted");
+    const adj = await pool.query("select field, old_value, reason from timesheet_adjustments where timesheet_id = $1 order by field", [t.id]);
+    expect(adj.rows).toEqual([
+      { field: "worked_end", old_value: null, reason: "Entered by the contractor (no check-in/out recorded)" },
+      { field: "worked_start", old_value: null, reason: "Entered by the contractor (no check-in/out recorded)" },
+    ]);
+    // Changing those times again is a correction, which does need a reason.
+    await pool.query("update timesheets set status = 'needs_review' where id = $1", [t.id]);
+    await expect(a.staffEditTimesheet(p, t.id, { workedStart: new Date(p.start.getTime() + 30 * MIN) }, "")).rejects.toThrow(/reason/);
+  });
+
   it("treats re-entering a recorded time to the minute as no change (no reason needed)", async () => {
     const p = await finished();
     const t = await timesheetOf(p.bookingId);
