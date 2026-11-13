@@ -45,9 +45,14 @@ export default async function Page() {
         <h1 className="text-[22px] font-semibold">Payments</h1>
         <p className="mt-1 text-sm text-muted-foreground">Each approved shift, allowance or bonus appears here with its fee, any tax and the total you&apos;re paid.</p>
         {terms?.description ? <p className="mt-2 text-sm text-muted-foreground">When you&apos;re paid: {terms.description}</p> : null}
-        <Link href="/portal/invoices" className="mt-2 inline-block text-sm font-medium underline underline-offset-2">
-          My invoices →
-        </Link>
+        <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1">
+          <Link href="/portal/invoices" className="text-sm font-medium underline underline-offset-2">
+            My invoices →
+          </Link>
+          <Link href="/portal/expenses" className="text-sm font-medium underline underline-offset-2">
+            Submit an expense for reimbursement →
+          </Link>
+        </div>
       </div>
       {lines.length === 0 ? (
         <EmptyState icon={WalletIcon} title="No payments yet" description="After your first shift is approved, you'll see the amount and when it's paid." />

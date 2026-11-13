@@ -222,8 +222,8 @@ export default async function TaxSettingsPage() {
         <CardHeader>
           <CardTitle>Treatment by compensation category</CardTitle>
           <CardDescription>
-            For each kind of payment: whether GST/HST applies, and how it&apos;s reported at year end. RGXM charges GST/HST only on hourly fees and bonuses, so meal
-            allowances, per diems and mileage are never taxed. Until the accountant approves a treatment, year-end totals list that category as &ldquo;needs accountant
+            For each kind of payment: whether GST/HST applies, and how it&apos;s reported at year end. Expense reimbursements (purchases a contractor made for RGXM,
+            with a receipt) are repaid at cost and never taxed. Until the accountant approves a treatment, year-end totals list that category as &ldquo;needs accountant
             decision&rdquo;.
           </CardDescription>
         </CardHeader>

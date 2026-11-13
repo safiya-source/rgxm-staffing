@@ -59,14 +59,16 @@ export const CATEGORY_LABEL: Record<string, string> = {
   per_diem: "Full-day per diem",
   mileage: "Mileage",
   bonus: "Bonus",
+  reimbursement: "Expense reimbursement",
   adjustment: "Adjustment",
 };
 
 /**
- * RGXM policy: GST/HST is charged only on hourly fees and bonuses. Meal allowances, per diems and
- * mileage are never taxed, whatever the contractor's registration or the category treatment says.
+ * Reimbursement of an expense the contractor paid on RGXM's behalf (with a receipt) is repaid at cost
+ * and never carries GST/HST, whatever the contractor's registration. Every other category follows the
+ * accountant-approved treatment.
  */
-export const NEVER_TAXED_CATEGORIES = ["meal_breakfast", "meal_lunch", "meal_dinner", "per_diem", "mileage"] as const;
+export const NEVER_TAXED_CATEGORIES = ["reimbursement"] as const;
 const NEVER_TAXED = new Set<string>(NEVER_TAXED_CATEGORIES);
 
 export function registrationSnapshot(r: TaxContext["registration"]) {
@@ -96,8 +98,7 @@ export function applicableRules(rules: TaxRuleInput[], jurisdiction: string, dat
 export function decideTax(ctx: TaxContext, line: { category: string; amountCents: number; workDate: string }): TaxDecision {
   const snap = registrationSnapshot(ctx.registration);
   if (NEVER_TAXED.has(line.category)) {
-    const label = (CATEGORY_LABEL[line.category] ?? line.category).toLowerCase();
-    return { status: "no_tax", lines: [], taxCents: 0, basis: `No GST/HST on ${label}: RGXM charges GST/HST only on hourly fees and bonuses.`, registrationSnapshot: snap };
+    return { status: "no_tax", lines: [], taxCents: 0, basis: "No GST/HST: reimbursement at cost of an expense paid on RGXM's behalf (receipt on file).", registrationSnapshot: snap };
   }
   const reg = ctx.registration;
   if (reg.status === "unknown") return review(ctx, "the contractor hasn't said whether they're registered for GST/HST.");

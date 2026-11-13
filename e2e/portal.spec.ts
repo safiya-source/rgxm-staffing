@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { pool, signInWithMagicLink } from "./helpers";
+import { pool, signInAsTeam, signInWithMagicLink } from "./helpers";
 
 
 test("existing staff member signs in with a magic link", async ({ page }) => {
@@ -109,4 +109,51 @@ test("a contractor adds their tax details (no SIN is asked for)", async ({ page 
   await expect(page.getByText("Tax details saved.")).toBeVisible();
   await page.reload();
   await expect(page.getByLabel("Street address")).toHaveValue("100 Queen St W");
+});
+
+test("a contractor claims an expense with a receipt, and RGXM approves it with no tax added", async ({ page, browser }) => {
+  // Jordan needs a confirmed shift on the project to claim against.
+  const projectId = (await pool.query("select id from projects where code = 'DEMO-CAD-2611'")).rows[0].id as string;
+  const jordan = (await pool.query("select id from staff_profiles where email = 'ba.demo@rgxm-demo.test'")).rows[0].id as string;
+  const shift = (await pool.query("select id from shifts where project_id = $1 and status <> 'cancelled' order by starts_at limit 1", [projectId])).rows[0].id as string;
+  const existing = (await pool.query("select id from bookings where shift_id = $1 and staff_id = $2 and status in ('confirmed', 'completed')", [shift, jordan])).rows[0];
+  if (!existing) {
+    await pool.query(
+      `insert into bookings (shift_id, staff_id, project_id, role, starts_at, ends_at, status, agreed_rate_cents, offered_rate_cents, rate_source, confirmed_at)
+       select s.id, $2, s.project_id, s.role, s.starts_at, s.ends_at, 'confirmed', 2500, 2500, 'shift', now() from shifts s where s.id = $1
+       on conflict do nothing`,
+      [shift, jordan],
+    );
+  }
+  const vendor = `E2E Hardware ${Date.now()}`;
+
+  await signInWithMagicLink(page, "ba.demo@rgxm-demo.test");
+  await page.goto("/portal/payments");
+  await page.getByRole("link", { name: /Submit an expense for reimbursement/ }).click();
+  await expect(page.getByRole("heading", { name: "Expenses" })).toBeVisible();
+  await page.getByLabel("Project").selectOption({ label: "Cadbury Sampling Activation" });
+  await page.getByLabel("Total paid (CAD)").fill("18.75");
+  await page.getByLabel("Store or vendor").fill(vendor);
+  await page.getByLabel("What was it for?").fill("Zip ties and tape for the banner");
+  const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.from("receipt")]);
+  await page.getByLabel("Receipt").setInputFiles({ name: "receipt.png", mimeType: "image/png", buffer: png });
+  await page.getByRole("button", { name: "Submit for reimbursement" }).click();
+  await expect(page.getByText("Expense submitted. RGXM will review it.")).toBeVisible();
+  await expect(page.getByText(`${vendor} · $18.75`)).toBeVisible();
+  await expect(page.getByText("Waiting for RGXM").first()).toBeVisible();
+
+  // RGXM sees it with the receipt and approves it.
+  const rgxm = await (await browser.newContext()).newPage();
+  await signInAsTeam(rgxm, "pm");
+  await rgxm.goto(`/dashboard/projects/${projectId}/compensation`);
+  const row = rgxm.getByRole("row").filter({ hasText: vendor });
+  await expect(row.getByRole("link", { name: "View receipt" })).toBeVisible();
+  const receipt = await rgxm.request.get(await row.getByRole("link", { name: "View receipt" }).getAttribute("href").then((h) => h!));
+  expect(receipt.status()).toBe(200);
+  expect(Buffer.from(await receipt.body())).toEqual(png);
+  await row.getByRole("button", { name: "Approve" }).click();
+  await expect(row.getByText("No tax")).toBeVisible();
+
+  const item = (await pool.query("select c.status, p.tax_cents::int tax, p.total_cents::int total from compensation_items c join payable_items p on p.id = c.payable_item_id where c.vendor = $1", [vendor])).rows[0];
+  expect(item).toEqual({ status: "approved", tax: 0, total: 1875 });
 });

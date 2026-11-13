@@ -228,7 +228,14 @@ export async function createPayableForCompensation(tx: Tx, compensationItemId: s
       baseCents: i.amountCents,
       quantity: i.quantity,
       unitRate: i.unitRate,
-      description: i.category === "mileage" ? `${label}: ${i.quantity} km on ${i.tripDate} (${i.businessPurpose})` : i.category === "bonus" ? `${label}: ${i.reason}` : label,
+      description:
+        i.category === "mileage"
+          ? `${label}: ${i.quantity} km on ${i.tripDate} (${i.businessPurpose})`
+          : i.category === "bonus"
+            ? `${label}: ${i.reason}`
+            : i.category === "reimbursement"
+              ? `${label}: ${i.vendor ? `${i.vendor} · ` : ""}${i.businessPurpose} (receipt on file, no GST/HST)`
+              : label,
       currency: c.currency,
       calcInputs: { compensationItemId: i.id, unitRate: i.unitRate, quantity: i.quantity, shiftId: i.shiftId },
     },
