@@ -82,6 +82,10 @@ Schedule it **every minute** (5 minutes at most). With Vercel Cron, add a `verce
 Check Vercel's documentation for your plan's cron frequency and for how it sends `CRON_SECRET`. Any external
 scheduler that can send the header works too.
 
+**RGXM production uses Supabase `pg_cron`, every minute.** See [SCHEDULER.md](SCHEDULER.md). GitHub's
+scheduled workflow is throttled to about once an hour, too slow for the check-in reminder, so it is only a
+backup.
+
 ### Staging (demo data)
 
 A demo staging site uses the same setup with three differences:
