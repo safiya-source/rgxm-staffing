@@ -14,7 +14,7 @@ import { formatInZone } from "@/lib/format";
 import { FIELD_ROLE_NAMES, FIELD_ROLES, type FieldRole } from "@/lib/roles";
 import { expandShiftPattern, utcToZoned } from "@/lib/time";
 import { cancelShiftAction, duplicateShiftAction, updateShiftAction } from "../../actions";
-import type { BreakPolicyOption, RequirementOption, ShiftItem } from "./types";
+import type { BreakPolicyOption, LocationOption, RequirementOption, ShiftItem } from "./types";
 
 function useFinish(onClose: () => void) {
   const router = useRouter();
@@ -32,12 +32,14 @@ function describe(shift: ShiftItem) {
 
 export function EditShiftDialog({
   shift,
+  locations,
   requirements,
   breakPolicies,
   showRates,
   onClose,
 }: {
   shift: ShiftItem;
+  locations: LocationOption[];
   requirements: RequirementOption[];
   breakPolicies: BreakPolicyOption[];
   showRates: boolean;
@@ -49,6 +51,7 @@ export function EditShiftDialog({
   const startLocal = utcToZoned(new Date(shift.startsAt), shift.timezone);
   const endLocal = utcToZoned(new Date(shift.endsAt), shift.timezone);
   const [f, setF] = useState({
+    locationId: shift.locationId,
     date: startLocal.date,
     startTime: startLocal.time,
     endTime: endLocal.time,
@@ -76,6 +79,23 @@ export function EditShiftDialog({
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4">
+          <Field
+            label="Venue"
+            htmlFor="e-venue"
+            hint={
+              f.locationId !== shift.locationId
+                ? `Moves this shift to the new venue.${shift.confirmed > 0 ? " Confirmed people are told where to go." : ""} Add venues in the project's Setup.`
+                : "Where this shift happens. Add more venues in the project's Setup."
+            }
+          >
+            <NativeSelect id="e-venue" value={f.locationId} onChange={(e) => set({ locationId: e.target.value })}>
+              {(locations.some((l) => l.id === shift.locationId) ? locations : [{ id: shift.locationId, name: shift.locationName, timezone: shift.timezone }, ...locations]).map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.name}
+                </option>
+              ))}
+            </NativeSelect>
+          </Field>
           <div className="grid gap-4 sm:grid-cols-3">
             <Field label="Date" htmlFor="e-date">
               <Input id="e-date" type="date" value={f.date} onChange={(e) => set({ date: e.target.value })} />
@@ -154,6 +174,7 @@ export function EditShiftDialog({
               start(async () => {
                 setError(undefined);
                 const res = await updateShiftAction(shift.id, {
+                  ...(f.locationId !== shift.locationId ? { locationId: f.locationId } : {}),
                   date: f.date,
                   startTime: f.startTime,
                   endTime: f.endTime,

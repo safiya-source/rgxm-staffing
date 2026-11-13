@@ -7,6 +7,7 @@
 import "dotenv/config";
 import { hashPassword } from "better-auth/crypto";
 import { eq } from "drizzle-orm";
+import { demoDate } from "../src/lib/demo-dates";
 import { expandShiftPattern } from "../src/lib/time";
 import { db } from "../src/server/db";
 import { seedCompletedProject } from "./seed-completed";
@@ -202,7 +203,7 @@ async function main() {
       const days = i % 3 === 0 ? [0, 4, 5, 6] : i % 3 === 1 ? [1, 2, 3, 4, 5] : [0, 1, 2, 3, 4, 5, 6];
       await tx.insert(availabilityRules).values(days.map((weekday) => ({ staffId: person.id, weekday, startTime: "08:00", endTime: "22:00" })));
     }
-    await tx.insert(availabilityExceptions).values({ staffId: staff[2]!.id, date: "2026-11-13", kind: "unavailable", note: "Exam" });
+    await tx.insert(availabilityExceptions).values({ staffId: staff[2]!.id, date: demoDate("2026-11-13"), kind: "unavailable", note: "Exam" });
 
     // ─── Saved lists ───
     const lists: [string, string, (s: (typeof staff)[number]) => boolean][] = [
@@ -237,8 +238,8 @@ async function main() {
         description: "Four-day sampling activation at CF Toronto Eaton Centre (acceptance-test scenario).",
         ownerId: internalIds.pm,
         coordinatorId: internalIds.coordinator,
-        startDate: "2026-11-12",
-        endDate: "2026-11-15",
+        startDate: demoDate("2026-11-12"),
+        endDate: demoDate("2026-11-15"),
         status: "staffing",
         budgetCents: 1_500_000,
         isDemo: true,
@@ -268,8 +269,8 @@ async function main() {
         role,
         quantity,
         defaultRateCents: BASE_RATES[role],
-        startDate: "2026-11-12",
-        endDate: "2026-11-15",
+        startDate: demoDate("2026-11-12"),
+        endDate: demoDate("2026-11-15"),
       })),
     );
 
@@ -281,7 +282,7 @@ async function main() {
       ["AM", 1, "09:00", "19:00"],
     ];
     for (const [role, headcount, startTime, endTime] of cadShifts) {
-      const windows = expandShiftPattern({ startDate: "2026-11-12", endDate: "2026-11-15", weekdays: [], startTime, endTime, timeZone: "America/Toronto" });
+      const windows = expandShiftPattern({ startDate: demoDate("2026-11-12"), endDate: demoDate("2026-11-15"), weekdays: [], startTime, endTime, timeZone: "America/Toronto" });
       await tx.insert(shifts).values(
         windows.map((w) => ({
           projectId: cad!.id,
@@ -311,8 +312,8 @@ async function main() {
         description: "Two-location pop-up in Toronto.",
         ownerId: internalIds.ops,
         coordinatorId: internalIds.ops,
-        startDate: "2026-12-04",
-        endDate: "2026-12-06",
+        startDate: demoDate("2026-12-04"),
+        endDate: demoDate("2026-12-06"),
         status: "draft",
         budgetCents: 1_200_000,
         isDemo: true,

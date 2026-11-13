@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { demoDate } from "../src/lib/demo-dates";
 import { pool, signInAsTeam } from "./helpers";
 
 
@@ -61,11 +62,12 @@ test("PM builds a project: details, location, requirement, then a run of shifts"
 
 test("schedule calendar shows seeded Cadbury shifts with coverage", async ({ page }) => {
   await signInAsTeam(page, "coordinator");
-  await page.goto("/dashboard/schedule?view=week&date=2026-11-12");
-  await expect(page.getByRole("heading", { name: "Nov 9 – Nov 15, 2026" })).toBeVisible();
+  // Demo dates move forward with today's date (src/lib/demo-dates.ts).
+  await page.goto(`/dashboard/schedule?view=week&date=${demoDate("2026-11-12")}`);
+  await expect(page.getByRole("heading", { name: /^[A-Z][a-z]{2} \d{1,2} – [A-Z][a-z]{2} \d{1,2}, \d{4}$/ })).toBeVisible();
   await expect(page.getByRole("link", { name: /10:00am BA \d+\/10/ }).first()).toBeVisible();
   await page.getByRole("link", { name: "month" }).click();
-  await expect(page.getByRole("heading", { name: "November 2026" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /^[A-Z][a-z]+ \d{4}$/ })).toBeVisible();
 });
 
 test("finance can view projects but not create or edit them", async ({ page }) => {
@@ -77,4 +79,25 @@ test("finance can view projects but not create or edit them", async ({ page }) =
   await expect(page.getByRole("button", { name: /Move to/ })).toHaveCount(0);
   await page.getByRole("link", { name: "Shifts", exact: true }).click();
   await expect(page.getByRole("button", { name: "Create shifts" })).toHaveCount(0);
+});
+
+test("a shift can be moved to another of the project's venues", async ({ page }) => {
+  const { rows } = await pool.query("select id from projects where code = 'DEMO-TB-2612'");
+  const { rows: locs } = await pool.query("select id from project_locations where project_id = $1 order by name", [rows[0].id]);
+  // A shift of our own at the first venue, so the test doesn't depend on other specs.
+  await pool.query(
+    "insert into shifts (project_id, location_id, role, starts_at, ends_at, timezone, headcount, status) values ($1, $2, 'BA', $3, $4, 'America/Toronto', 1, 'open')",
+    [rows[0].id, locs[0].id, `${demoDate("2026-12-04")}T15:00:00Z`, `${demoDate("2026-12-04")}T21:00:00Z`],
+  );
+  await signInAsTeam(page, "coordinator");
+  await page.goto(`/dashboard/projects/${rows[0].id}/shifts`);
+  await page.getByRole("button", { name: "Shift actions" }).first().click();
+  await page.getByRole("menuitem", { name: "Edit" }).click();
+  const venue = page.getByRole("dialog").getByLabel("Venue");
+  const current = await venue.inputValue();
+  const other = await venue.locator("option").evaluateAll((opts, cur) => (opts as HTMLOptionElement[]).map((o) => o.value).find((v) => v !== cur), current);
+  await venue.selectOption(other!);
+  await expect(page.getByRole("dialog").getByText(/Moves this shift to the new venue/)).toBeVisible();
+  await page.getByRole("button", { name: "Save shift" }).click();
+  await expect(page.getByText("Shift updated.")).toBeVisible();
 });
