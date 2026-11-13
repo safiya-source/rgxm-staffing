@@ -288,4 +288,27 @@ describe("sweeps", () => {
     const sent = await pool.query("select user_id, title from notifications where type = 'shift.check_in_reminder' and user_id = any($1)", [[dueSoon.userId, lateNoCheckIn.userId]]);
     expect(sent.rows).toEqual([{ user_id: lateNoCheckIn.userId, title: expect.stringMatching(/^Your shift started at .*\. Check in now$/) }]);
   });
+
+  it("nudges people to check out at the scheduled end time, once, and only if they checked in and haven't checked out", async () => {
+    await pool.query("delete from outbox_events");
+    const rgxmActor = { kind: "rgxm" as const, userId: rgxm.id };
+    // Shifts of 1 hour, ending 2 minutes ago (in window), 40 minutes ago (too late), or in 10 minutes (not yet).
+    const justEnded = await booked(-62, 1);
+    const leftAlready = await booked(-62, 1);
+    const neverIn = await booked(-62, 1);
+    const longAgo = await booked(-100, 1);
+    const stillOn = await booked(-50, 1);
+    for (const p of [justEnded, leftAlready, longAgo, stillOn]) await a.recordAttendance(rgxmActor, p.bookingId, { type: "check_in", occurredAt: p.start, note: "test" });
+    await a.recordAttendance(rgxmActor, leftAlready.bookingId, { type: "check_out", occurredAt: new Date(leftAlready.end.getTime() - MIN), note: "test" });
+    const ids = [justEnded, leftAlready, neverIn, longAgo, stillOn].map((x) => x.bookingId);
+
+    await runSweeps();
+    await runSweeps();
+    const queued = await pool.query("select payload->>'bookingId' as booking from outbox_events where type = 'shift.check_out_reminder' and payload->>'bookingId' = any($1)", [ids]);
+    expect(queued.rows.map((r) => r.booking)).toEqual([justEnded.bookingId]);
+
+    await processOutbox(handlers, { limit: 500 });
+    const sent = await pool.query("select title, href from notifications where type = 'shift.check_out_reminder' and user_id = $1", [justEnded.userId]);
+    expect(sent.rows).toEqual([{ title: expect.stringMatching(/^Your shift ended at .*\. Check out now$/), href: `/portal/shifts/${justEnded.bookingId}` }]);
+  });
 });
