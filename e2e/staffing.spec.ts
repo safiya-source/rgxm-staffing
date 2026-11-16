@@ -112,3 +112,37 @@ test("Send offers on the Staffing Requests list opens the offer form for that pr
   await expect(page.getByRole("dialog")).toBeVisible();
   await expect(page.getByRole("dialog").getByText(/^Send offers · /)).toBeVisible();
 });
+
+test("Book directly confirms someone straight away, without an offer", async ({ page }) => {
+  const projectId = (await pool.query("select id from projects where code = 'DEMO-CAD-2611'")).rows[0].id as string;
+  // An active, approved Brand Ambassador with no booking on this project yet.
+  const { rows } = await pool.query(
+    `select p.id, p.first_name || ' ' || p.last_name as name from staff_profiles p
+       join staff_roles r on r.staff_id = p.id and r.role = 'BA'
+      where p.status = 'active' and p.is_demo and p.email <> 'ba.demo@rgxm-demo.test'
+        and exists (select 1 from contractor_approvals a where a.staff_id = p.id and a.revoked_at is null)
+        and not exists (select 1 from bookings b where b.staff_id = p.id and b.project_id = $1 and b.status not in ('cancelled', 'declined'))
+      order by p.last_name limit 1`,
+    [projectId],
+  );
+  const who = rows[0] as { id: string; name: string };
+
+  await signInAsTeam(page, "coordinator");
+  await page.goto(`/dashboard/staffing/${projectId}`);
+  await page.getByRole("link", { name: /^Brand Ambassador · Toronto Eaton Centre/ }).click();
+  await page.getByRole("button", { name: "Book directly" }).click();
+  await expect(page.getByRole("dialog").getByText(/already agreed this with/)).toBeVisible();
+  // Only the first shift, so the count is predictable.
+  const shiftBoxes = page.getByRole("dialog").locator("fieldset").first().getByRole("checkbox");
+  const n = await shiftBoxes.count();
+  for (let i = 1; i < n; i++) if (await shiftBoxes.nth(i).isChecked()) await shiftBoxes.nth(i).click();
+  await page.getByLabel("Filter candidates by name").fill(who.name.split(" ")[0]!);
+  await page.getByRole("checkbox", { name: `Select ${who.name}` }).click();
+  await page.getByLabel("How was it agreed?").selectOption("in_person");
+  await page.getByLabel("Note (optional)").fill("Walked in this morning");
+  await page.getByRole("button", { name: /^Book 1 shift for 1 person$/ }).click();
+  await expect(page.getByText(/Booked 1 shift for 1 person/)).toBeVisible();
+
+  const b = (await pool.query("select status, (select reason from booking_status_history h where h.booking_id = b.id) reason from bookings b where staff_id = $1 and project_id = $2", [who.id, projectId])).rows;
+  expect(b).toEqual([{ status: "confirmed", reason: "Booked directly: agreed in person (Walked in this morning)" }]);
+});

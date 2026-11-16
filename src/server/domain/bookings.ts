@@ -101,14 +101,20 @@ export async function resolveRates(tx: Tx | typeof db, shiftRows: { id: string; 
 
 // ─── Offers ─────────────────────────────────────────────────────────────────
 
-export type SkipReason = "not_active" | "not_qualified" | "already_on_shift" | "no_rate" | "conflict";
+export type SkipReason = "not_active" | "not_qualified" | "already_on_shift" | "no_rate" | "conflict" | "full" | "not_ready";
 export const SKIP_REASON_LABEL: Record<SkipReason, string> = {
   not_active: "isn't active",
   not_qualified: "isn't qualified for the role",
   already_on_shift: "already has an offer or booking on this shift",
   no_rate: "has no rate for this role",
   conflict: "is already confirmed for an overlapping shift",
+  full: "couldn't be added because the shift is full",
+  not_ready: "hasn't finished onboarding (contractor approval or agreements)",
 };
+
+/** People can be added up to this long after a shift ends (hired on the spot, entered afterwards). */
+export const LATE_BOOKING_DAYS = 14;
+const lateBookingCutoff = () => new Date(Date.now() - LATE_BOOKING_DAYS * 24 * 60 * 60 * 1000);
 
 /**
  * Sends offers for one or more shifts to one or more people. Offers are only invitations to
@@ -141,10 +147,13 @@ export async function sendOffers(
     for (const s of shiftRows) {
       // Full shifts can still be offered so people can be waitlisted.
       if (s.status !== "open" && s.status !== "filled") throw new BookingError(`Only published shifts can be offered (one is ${s.status}). Publish drafts first.`);
-      if (s.startsAt < new Date()) throw new BookingError("One of the shifts has already started.");
+      // A shift that has started can still be offered (last-minute hires); one that has ended can't.
+      if (s.endsAt < new Date()) throw new BookingError("One of the shifts has already ended. Use Book directly to add someone after the fact.");
     }
-    if (input.responseDeadline && input.responseDeadline > shiftRows.reduce((m, s) => (s.startsAt < m ? s.startsAt : m), shiftRows[0]!.startsAt)) {
-      throw new BookingError("The response deadline must be before the first shift starts.");
+    const firstStart = shiftRows.reduce((m, s) => (s.startsAt < m ? s.startsAt : m), shiftRows[0]!.startsAt);
+    const firstEnd = shiftRows.reduce((m, s) => (s.endsAt < m ? s.endsAt : m), shiftRows[0]!.endsAt);
+    if (input.responseDeadline && input.responseDeadline > (firstStart > new Date() ? firstStart : firstEnd)) {
+      throw new BookingError("The response deadline must be before the first shift starts (or ends, if it's already under way).");
     }
     const projectId = shiftRows[0]!.projectId;
 
@@ -241,6 +250,109 @@ export async function sendOffers(
     );
     return { created: created.length, people: new Set(created.map((c) => c.staffId)).size, skipped };
   });
+}
+
+export const AGREED_VIA = ["text", "phone", "in_person", "email", "other"] as const;
+export type AgreedVia = (typeof AGREED_VIA)[number];
+export const AGREED_VIA_LABEL: Record<AgreedVia, string> = { text: "Text message", phone: "Phone call", in_person: "In person", email: "Email", other: "Other" };
+const AGREED_VIA_PHRASE: Record<AgreedVia, string> = { text: "by text message", phone: "by phone", in_person: "in person", email: "by email", other: "another way" };
+
+/**
+ * Books people straight onto shifts, skipping offer → interested → confirm, when RGXM has already
+ * agreed it with them (by text, in person, …). Same checks as a confirmation (active, qualified,
+ * rate, capacity, overlaps, onboarding); anyone who fails one is skipped with the reason. Works for
+ * shifts that have started or ended (up to LATE_BOOKING_DAYS ago) so on-the-spot hires can be added
+ * afterwards. Each booking records how it was agreed.
+ */
+export async function bookDirectly(
+  actorId: string,
+  input: { shiftIds: string[]; staffIds: string[]; agreedVia: AgreedVia; note?: string | null; projectId?: string },
+) {
+  if (!input.shiftIds.length) throw new BookingError("Choose at least one shift.");
+  if (!input.staffIds.length) throw new BookingError("Choose at least one person.");
+  if (input.staffIds.length > 100) throw new BookingError("Book at most 100 people at a time.");
+  if (!(AGREED_VIA as readonly string[]).includes(input.agreedVia)) throw new BookingError("Say how it was agreed.");
+  const note = input.note?.trim().slice(0, 300) || null;
+  const reason = `Booked directly: agreed ${AGREED_VIA_PHRASE[input.agreedVia]}${note ? ` (${note})` : ""}`;
+
+  try {
+    return await db.transaction(async (tx) => {
+      const shiftRows = await tx.select().from(shifts).where(inArray(shifts.id, input.shiftIds)).for("update");
+      if (shiftRows.length !== new Set(input.shiftIds).size) throw new BookingError("Some shifts weren't found.");
+      const projectIds = new Set(shiftRows.map((s) => s.projectId));
+      if (projectIds.size !== 1) throw new BookingError("Book shifts from one project at a time.");
+      if (input.projectId && !projectIds.has(input.projectId)) throw new BookingError("Those shifts aren't part of this project.");
+      for (const s of shiftRows) {
+        if (!["open", "filled", "live"].includes(s.status)) throw new BookingError(`Only published shifts can be booked (one is ${s.status}).`);
+        if (s.endsAt < lateBookingCutoff()) throw new BookingError(`One of the shifts ended more than ${LATE_BOOKING_DAYS} days ago.`);
+      }
+      const projectId = shiftRows[0]!.projectId;
+      const staffIds = [...new Set(input.staffIds)];
+      const people = await tx.select({ id: staffProfiles.id, status: staffProfiles.status }).from(staffProfiles).where(inArray(staffProfiles.id, staffIds));
+      const qualified = await tx.select({ staffId: staffRoles.staffId, role: staffRoles.role }).from(staffRoles).where(inArray(staffRoles.staffId, staffIds));
+      const existing = await tx
+        .select({ shiftId: bookings.shiftId, staffId: bookings.staffId })
+        .from(bookings)
+        .where(and(inArray(bookings.shiftId, input.shiftIds), inArray(bookings.staffId, staffIds), inArray(bookings.status, ACTIVE_STATUSES)));
+      const rates = await resolveRates(tx, shiftRows, staffIds);
+      const ready = new Map<string, boolean>();
+      for (const id of staffIds) ready.set(id, (await bookingBlockers(tx, id)).length === 0);
+
+      const now = new Date();
+      const created: { id: string; staffId: string; shiftId: string }[] = [];
+      const skipped: { staffId: string; shiftId: string; reason: SkipReason }[] = [];
+      for (const s of [...shiftRows].sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime())) {
+        const [{ n }] = (await tx.select({ n: count() }).from(bookings).where(and(eq(bookings.shiftId, s.id), eq(bookings.status, "confirmed")))) as [{ n: number }];
+        let filled = n;
+        for (const staffId of staffIds) {
+          const skip = (r: SkipReason) => skipped.push({ staffId, shiftId: s.id, reason: r });
+          const person = people.find((p) => p.id === staffId);
+          if (!person || person.status !== "active") { skip("not_active"); continue; }
+          if (!qualified.some((q) => q.staffId === staffId && q.role === s.role)) { skip("not_qualified"); continue; }
+          if (existing.some((e) => e.shiftId === s.id && e.staffId === staffId)) { skip("already_on_shift"); continue; }
+          if (!ready.get(staffId)) { skip("not_ready"); continue; }
+          const rate = rates.get(`${s.id}:${staffId}`);
+          if (!rate) { skip("no_rate"); continue; }
+          if (filled >= s.headcount) { skip("full"); continue; }
+          if ((await findConflicts(tx, staffId, s)).length) { skip("conflict"); continue; }
+          const [row] = await tx
+            .insert(bookings)
+            .values({
+              shiftId: s.id,
+              staffId,
+              projectId,
+              role: s.role,
+              startsAt: s.startsAt,
+              endsAt: s.endsAt,
+              status: "confirmed",
+              offeredRateCents: rate.rateCents,
+              agreedRateCents: rate.rateCents,
+              rateSource: rate.source,
+              currency: s.currency,
+              offeredAt: now,
+              offeredBy: actorId,
+              confirmedAt: now,
+              confirmedBy: actorId,
+            })
+            .returning({ id: bookings.id });
+          await tx.insert(bookingStatusHistory).values({ bookingId: row!.id, fromStatus: null, toStatus: "confirmed", actorId, reason });
+          await enqueue(tx, { type: "booking.confirmed", payload: { bookingId: row!.id }, dedupeKey: `booking.confirmed:${row!.id}` });
+          created.push({ id: row!.id, staffId, shiftId: s.id });
+          filled++;
+        }
+        if (filled >= s.headcount && s.status === "open") await tx.update(shifts).set({ status: "filled" }).where(eq(shifts.id, s.id));
+      }
+      await recordAudit(
+        { actorId, action: "booking.direct", entityType: "shift", projectId, after: { shiftIds: input.shiftIds, booked: created.length, skipped: skipped.length, agreedVia: input.agreedVia }, reason },
+        tx,
+      );
+      return { created: created.length, people: new Set(created.map((c) => c.staffId)).size, skipped };
+    });
+  } catch (err) {
+    const code = (err as { code?: string; cause?: { code?: string } })?.code ?? (err as { cause?: { code?: string } })?.cause?.code;
+    if (code === "23P01") throw new BookingError("Someone was just confirmed for an overlapping shift. Try again.");
+    throw err;
+  }
 }
 
 /** Staff response to an offer. "More info" keeps the offer open and posts their question. */
@@ -362,7 +474,8 @@ export async function confirmBooking(actorId: string, bookingId: string, opts: {
       // Lock the shift so concurrent confirmations can't exceed headcount.
       const [s] = await tx.select().from(shifts).where(eq(shifts.id, b.shiftId)).for("update");
       if (!s || s.status === "cancelled") throw new BookingError("This shift has been cancelled.");
-      if (s.endsAt < new Date()) throw new BookingError("This shift has already ended.");
+      if (s.status === "completed") throw new BookingError("This shift is completed.");
+      if (s.endsAt < lateBookingCutoff()) throw new BookingError(`This shift ended more than ${LATE_BOOKING_DAYS} days ago.`);
       const [{ n }] = (await tx
         .select({ n: count() })
         .from(bookings)

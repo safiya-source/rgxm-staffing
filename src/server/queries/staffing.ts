@@ -65,7 +65,10 @@ export type ShiftGroup = {
 };
 
 /** Upcoming, published shifts grouped by role and location (one group = one staffing request). */
-export async function getShiftGroups(projectId: string, now = new Date()): Promise<ShiftGroup[]> {
+export async function getShiftGroups(projectId: string, now = new Date(), opts: { pastDays?: number } = {}): Promise<ShiftGroup[]> {
+  // Shifts that ended in the last day stay visible so on-the-spot hires can be added afterwards;
+  // pastDays widens that (e.g. 14 to add someone to last week's shift).
+  const since = new Date(now.getTime() - (opts.pastDays ?? 1) * 24 * 60 * 60 * 1000);
   const rows = await db
     .select({
       id: shifts.id,
@@ -83,7 +86,7 @@ export async function getShiftGroups(projectId: string, now = new Date()): Promi
     })
     .from(shifts)
     .innerJoin(projectLocations, eq(projectLocations.id, shifts.locationId))
-    .where(and(eq(shifts.projectId, projectId), inArray(shifts.status, ["open", "filled", "live"]), gte(shifts.endsAt, now)))
+    .where(and(eq(shifts.projectId, projectId), inArray(shifts.status, ["open", "filled", "live"]), gte(shifts.endsAt, since)))
     .orderBy(asc(shifts.startsAt));
   const groups = new Map<string, ShiftGroup>();
   for (const r of rows) {
