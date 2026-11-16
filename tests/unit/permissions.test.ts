@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  assertDifferentApprover,
   assertNotOwnTimesheet,
   canAny,
   canOnProject,
@@ -91,8 +90,4 @@ describe("separation of duties", () => {
     expect(() => assertNotOwnTimesheet("user-1", null)).not.toThrow();
   });
 
-  it("requires a second person to approve a payment batch", () => {
-    expect(() => assertDifferentApprover("fin-1", "fin-1")).toThrow(SeparationOfDutiesError);
-    expect(() => assertDifferentApprover("fin-1", "fin-2")).not.toThrow();
-  });
 });

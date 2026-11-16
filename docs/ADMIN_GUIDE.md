@@ -79,7 +79,7 @@ person) before acting.
 
 1. Approved hours appear in *Payments → Ready to pay*, split into **Contractors** and **Employees (payroll)**.
 2. Create a batch (optionally for one pay period). This locks those hours.
-3. **A second person** (Finance or admin) approves the batch.
+3. Someone in Finance or an admin approves the batch. This can be the person who created it.
 4. Generate the export once: generic CSV, QuickBooks-style bills CSV (contractors) or Excel. Import it into your
    accounting or payroll system. The platform never sends money.
 5. After paying, **Mark paid** with the date, and tick any payments that bounced (with a reason) so they can go

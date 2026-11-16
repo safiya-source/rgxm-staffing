@@ -62,7 +62,7 @@ async function approvedPayable() {
   }
 }
 
-test("finance batches, a second person approves, export once, mark paid, staff see it", async ({ browser }) => {
+test("finance batches and approves it, export once, mark paid, staff see it", async ({ browser }) => {
   test.setTimeout(180_000);
   const { payableId, timesheetId, projectId } = await approvedPayable();
 
@@ -75,17 +75,13 @@ test("finance batches, a second person approves, export once, mark paid, staff s
   await expect(section.getByRole("checkbox", { name: /Select Jordan Lee/ }).first()).toBeChecked();
   await section.getByRole("button", { name: /Create batch/ }).click();
   await expect(fin).toHaveURL(/\/dashboard\/payments\/batches\//);
-  const batchUrl = fin.url();
-  await expect(fin.getByText(/You created it, so you can't approve it/)).toBeVisible();
+  await expect(fin.getByText(/You created this batch/)).toBeVisible();
   await expect.poll(async () => (await pool.query("select status from timesheets where id = $1", [timesheetId])).rows[0].status).toBe("locked");
 
-  // 2. An admin (second person) approves it.
-  const admin = await (await browser.newContext()).newPage();
-  await signInAsTeam(admin, "admin");
-  await admin.goto(batchUrl);
-  await admin.getByRole("button", { name: "Approve batch" }).click();
-  await admin.getByRole("button", { name: "Confirm" }).click();
-  await expect(admin.getByText("Batch approved. It can now be exported.")).toBeVisible();
+  // 2. The same person approves it (RGXM allows creators to approve their own batches).
+  await fin.getByRole("button", { name: "Approve batch" }).click();
+  await fin.getByRole("button", { name: "Confirm" }).click();
+  await expect(fin.getByText("Batch approved. It can now be exported.")).toBeVisible();
 
   // 3. Finance exports once; the file is marked as demo and includes our payable.
   await fin.reload();
