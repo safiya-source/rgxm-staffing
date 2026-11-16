@@ -35,7 +35,7 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/dashboa
 
   return (
     <>
-      <PageHeader title="Payments" description="Approved hours, allowances and expenses become pay lines here. Settle GST/HST, batch the lines, have a second person approve, export the bank file, then record what the bank paid." />
+      <PageHeader title="Payments" description="Approved hours, allowances and expenses become pay lines here. Settle GST/HST, batch and approve the lines, export the bank file, then record what the bank paid." />
       <details className="-mt-2 mb-4 max-w-3xl text-sm text-muted-foreground">
         <summary className="cursor-pointer">Good to know</summary>
         <p className="mt-1">

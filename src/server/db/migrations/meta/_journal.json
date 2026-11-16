@@ -134,6 +134,13 @@
       "when": 1794544949425,
       "tag": "0018_expense_reimbursements",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1794864292338,
+      "tag": "0019_self_approve_batches",
+      "breakpoints": true
     }
   ]
 }

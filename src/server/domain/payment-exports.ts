@@ -4,6 +4,7 @@
 import ExcelJS from "exceljs";
 import { toCsv } from "@/lib/csv";
 import { centsToDecimal, minutesToDecimalHours, type BatchType } from "./pay-rules";
+import { tallyByProject, tallySheetRows } from "./project-tally";
 import { CATEGORY_LABEL } from "./tax-engine";
 
 export const EXPORT_FORMATS = ["csv_generic", "xlsx"] as const;
@@ -89,6 +90,31 @@ export async function buildExport(format: ExportFormat, batch: ExportBatch, rows
     ws.addRow(r.map((v, i) => (NUMERIC_COLUMNS.has(i) && v !== "" ? Number(v) : v)));
   }
   ws.columns.forEach((c) => (c.width = 16));
+  addProjectSheet(wb, rows.map((r) => ({ projectCode: r.projectCode, projectName: r.projectName, staffName: r.staffName, subtotalCents: r.subtotalCents, taxCents: r.hstCents, totalCents: r.totalCents })), batch.isDemo);
   const buf = Buffer.from(await wb.xlsx.writeBuffer());
   return { data: buf, fileName: `${base}.xlsx`, contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", rowCount: data.length };
+}
+
+/** A "By project" sheet: each contractor's total per project, with project subtotals. */
+export function addProjectSheet(wb: ExcelJS.Workbook, lines: Parameters<typeof tallyByProject>[0], isDemo: boolean) {
+  const ws = wb.addWorksheet(isDemo ? "By project (DEMO)" : "By project");
+  const rows = tallySheetRows(tallyByProject(lines), (c) => Number(centsToDecimal(c)));
+  rows.forEach((r, i) => {
+    const row = ws.addRow(r);
+    if (i === 0 || String(r[0] ?? "").endsWith("subtotal") || r[0] === "Batch total") row.font = { bold: true };
+  });
+  for (const col of [4, 5, 6]) ws.getColumn(col).numFmt = "#,##0.00";
+  ws.getColumn(1).width = 36;
+  ws.getColumn(2).width = 26;
+  for (const col of [3, 4, 5, 6]) ws.getColumn(col).width = 14;
+  if (isDemo) ws.addRow(["DEMO - DO NOT PAY"]);
+}
+
+/** A standalone pay summary by project (Excel) to share with the finance team. Not a bank file. */
+export async function buildProjectSummary(batch: ExportBatch, lines: Parameters<typeof tallyByProject>[0]) {
+  const wb = new ExcelJS.Workbook();
+  wb.creator = "RGXM Crew";
+  addProjectSheet(wb, lines, batch.isDemo);
+  const data = Buffer.from(await wb.xlsx.writeBuffer());
+  return { data, fileName: `${batch.isDemo ? "DEMO-" : ""}${batch.reference}-by-project.xlsx` };
 }

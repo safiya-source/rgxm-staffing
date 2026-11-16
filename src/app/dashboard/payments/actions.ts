@@ -40,7 +40,7 @@ export async function createBatchAction(input: { type: string; periodDate: strin
       return pay.createBatch(viewer.userId, { type, payPeriodId: period?.id ?? null, payableIds: ids });
     });
     refresh();
-    return { ok: true, message: `Batch ${batch.reference} created with ${ids.length} item${ids.length === 1 ? "" : "s"}. A second person needs to approve it.`, data: { batchId: batch.id } };
+    return { ok: true, message: `Batch ${batch.reference} created with ${ids.length} item${ids.length === 1 ? "" : "s"}. Review it, then approve it to export.`, data: { batchId: batch.id } };
   });
 }
 

@@ -1,6 +1,7 @@
 import { ArrowLeftIcon } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Fragment } from "react";
 import { notFound } from "next/navigation";
 import { DemoBadge, StatusBadge } from "@/components/app/status-badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,6 +10,7 @@ import { formatInZone, formatMinutes, formatMoney } from "@/lib/format";
 import { EXPORT_FORMAT_LABEL } from "@/server/domain/payment-exports";
 import { BATCH_TYPE_LABEL } from "@/server/domain/pay-rules";
 import { CATEGORY_LABEL } from "@/server/domain/tax-engine";
+import { tallyByProject } from "@/server/domain/project-tally";
 import { getBatchDetail } from "@/server/queries/payments";
 import { requireInternal } from "@/server/session";
 import { AttemptBadge, BatchActions, LineReconcile, SupersedeExport } from "./batch-actions";
@@ -27,6 +29,7 @@ export default async function BatchPage({ params }: PageProps<"/dashboard/paymen
   const removed = b.items.filter((i) => ["removed", "voided"].includes(i.state));
   const liveExport = b.exports.find((e) => !e.e.supersededAt && e.e.purpose === "bank");
   const tax = shown.reduce((n, i) => n + i.taxCents, 0);
+  const tally = tallyByProject(shown.map((i) => ({ projectCode: i.projectCode, projectName: i.projectName, staffName: i.staffName, subtotalCents: i.baseCents, taxCents: i.taxCents, totalCents: i.amountCents })));
 
   return (
     <div className="grid gap-6">
@@ -77,7 +80,12 @@ export default async function BatchPage({ params }: PageProps<"/dashboard/paymen
       ) : null}
 
       <div className="grid gap-6 xl:grid-cols-[1fr_340px]">
-        <Card className="overflow-hidden">
+        <div className="grid content-start gap-6">
+          <ProjectTotals batchId={b.id} currency={b.currency} tally={tally} />
+          <Card className="overflow-hidden">
+          <CardHeader>
+            <CardTitle>All lines</CardTitle>
+          </CardHeader>
           <Table>
             <TableHeader>
               <TableRow className="hover:bg-transparent">
@@ -138,7 +146,8 @@ export default async function BatchPage({ params }: PageProps<"/dashboard/paymen
               </ul>
             </div>
           ) : null}
-        </Card>
+          </Card>
+        </div>
 
         <div className="grid content-start gap-4">
           <BatchActions
@@ -174,5 +183,66 @@ export default async function BatchPage({ params }: PageProps<"/dashboard/paymen
         </div>
       </div>
     </div>
+  );
+}
+
+function ProjectTotals({ batchId, currency, tally }: { batchId: string; currency: string; tally: ReturnType<typeof tallyByProject> }) {
+  const money = (c: number) => formatMoney(c, currency);
+  return (
+    <Card className="overflow-hidden" role="region" aria-label="Totals by project">
+      <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3">
+        <CardTitle>Totals by project</CardTitle>
+        <a href={`/api/payments/batches/${batchId}/summary`} className="text-sm font-medium underline-offset-4 hover:underline">
+          Download summary (Excel)
+        </a>
+      </CardHeader>
+      <Table>
+        <TableHeader>
+          <TableRow className="hover:bg-transparent">
+            <TableHead>Contractor</TableHead>
+            <TableHead className="text-right">Lines</TableHead>
+            <TableHead className="text-right">Before tax</TableHead>
+            <TableHead className="text-right">Tax</TableHead>
+            <TableHead className="text-right">Total</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {tally.projects.map((p) => (
+            <Fragment key={p.projectCode}>
+              <TableRow className="bg-muted/40 hover:bg-muted/40">
+                <TableCell colSpan={5} className="font-medium">
+                  {p.projectCode} · {p.projectName}
+                </TableCell>
+              </TableRow>
+              {p.people.map((w) => (
+                <TableRow key={w.staffName}>
+                  <TableCell className="pl-6">{w.staffName}</TableCell>
+                  <TableCell className="text-right tabular-nums">{w.lines}</TableCell>
+                  <TableCell className="text-right tabular-nums">{money(w.subtotalCents)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{money(w.taxCents)}</TableCell>
+                  <TableCell className="text-right font-medium tabular-nums">{money(w.totalCents)}</TableCell>
+                </TableRow>
+              ))}
+              <TableRow className="hover:bg-transparent">
+                <TableCell className="pl-6 font-medium">{p.projectCode} subtotal</TableCell>
+                <TableCell className="text-right tabular-nums">{p.people.reduce((n, w) => n + w.lines, 0)}</TableCell>
+                <TableCell className="text-right font-medium tabular-nums">{money(p.subtotalCents)}</TableCell>
+                <TableCell className="text-right font-medium tabular-nums">{money(p.taxCents)}</TableCell>
+                <TableCell className="text-right font-semibold tabular-nums">{money(p.totalCents)}</TableCell>
+              </TableRow>
+            </Fragment>
+          ))}
+          {tally.projects.length > 1 ? (
+            <TableRow className="border-t-2 hover:bg-transparent">
+              <TableCell className="font-semibold">Batch total</TableCell>
+              <TableCell />
+              <TableCell className="text-right font-semibold tabular-nums">{money(tally.subtotalCents)}</TableCell>
+              <TableCell className="text-right font-semibold tabular-nums">{money(tally.taxCents)}</TableCell>
+              <TableCell className="text-right font-semibold tabular-nums">{money(tally.totalCents)}</TableCell>
+            </TableRow>
+          ) : null}
+        </TableBody>
+      </Table>
+    </Card>
   );
 }
