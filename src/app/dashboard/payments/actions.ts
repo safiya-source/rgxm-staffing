@@ -9,6 +9,7 @@ import * as billing from "@/server/domain/billing";
 import { EXPORT_FORMATS } from "@/server/domain/payment-exports";
 import * as pay from "@/server/domain/payments";
 import * as yearEnd from "@/server/domain/t4a";
+import { TaxConfigError, verifyGstRegistration } from "@/server/domain/tax-config";
 import { kickOutbox } from "@/server/notify/run";
 import { authorizeInternal, requireFreshAuth } from "@/server/session";
 
@@ -18,7 +19,7 @@ async function guard<T>(fn: () => Promise<T>): Promise<T> {
   try {
     return await fn();
   } catch (err) {
-    if (err instanceof pay.PaymentError || err instanceof billing.BillingError || err instanceof yearEnd.YearEndError) throw new UserFacingError(err.message);
+    if (err instanceof pay.PaymentError || err instanceof billing.BillingError || err instanceof yearEnd.YearEndError || err instanceof TaxConfigError) throw new UserFacingError(err.message);
     throw err;
   }
 }
@@ -159,6 +160,38 @@ export async function overrideLineTaxAction(formData: FormData): Promise<ActionR
     await guard(() => pay.overrideLineTax(viewer.userId, payableId, { reason: str(formData, "reason"), ruleIds }));
     refresh();
     return { ok: true, message: "Tax decision recorded. The line can now be batched." };
+  });
+}
+
+/** One tax decision for several lines (the tax review groups a contractor's lines together). */
+export async function decideTaxForLinesAction(formData: FormData): Promise<ActionResult> {
+  return runAction(async () => {
+    const viewer = await authorizeInternal("payments.manage");
+    await requireFreshAuth(viewer);
+    const ids = z.array(uuid).min(1).max(500).parse(formData.getAll("payableId").map(String));
+    const choice = str(formData, "choice");
+    if (!choice) throw new UserFacingError("Choose the tax to charge, or No GST/HST.");
+    const ruleIds = choice === "none" ? [] : z.array(uuid).min(1).max(4).parse(choice.split(","));
+    await guard(() => pay.overrideLinesTax(viewer.userId, ids, { reason: str(formData, "reason"), ruleIds }));
+    refresh();
+    return { ok: true, message: `Tax decision recorded for ${ids.length} line${ids.length === 1 ? "" : "s"}. ${ids.length === 1 ? "It's" : "They're"} ready to pay.` };
+  });
+}
+
+/** Finance confirms (or can't confirm) a contractor's GST/HST answer, then their waiting lines are recalculated. */
+export async function verifyGstAndRecalculateAction(formData: FormData): Promise<ActionResult> {
+  return runAction(async () => {
+    const viewer = await authorizeInternal("tax.verify_registration");
+    await requireFreshAuth(viewer);
+    const staffId = uuid.parse(str(formData, "staffId"));
+    const outcome = z.enum(["verified", "rejected"]).parse(str(formData, "outcome"));
+    await guard(() => verifyGstRegistration(viewer.userId, staffId, { outcome, reference: str(formData, "reference") }));
+    await guard(() => pay.refreshClassifications(viewer.userId, { staffId }));
+    refresh();
+    revalidatePath(`/dashboard/talent/${staffId}`);
+    const left = (await pay.reviewLinesFor(staffId)).length;
+    if (outcome === "rejected") return { ok: true, message: "Recorded as not verified. Decide the tax for their lines below." };
+    return { ok: true, message: left ? `Verified. ${left} line${left === 1 ? " still needs" : "s still need"} a tax decision for another reason.` : "Verified. Their lines are recalculated and ready to pay." };
   });
 }
 

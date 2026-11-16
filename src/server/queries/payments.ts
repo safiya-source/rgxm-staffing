@@ -39,6 +39,9 @@ export async function getReadyPayables(scope: string[] | null) {
         (${payableItems.taxStatus} in ('legacy_hst', 'legacy_none') and ((${payableItems.taxCents} > 0) <> coalesce(${staffSensitive.taxRegistered}, false)))
         or (${payableItems.taxStatus} in ('calculated', 'no_tax', 'review_required') and ${payableItems.registrationSnapshot} is distinct from
             (coalesce(${staffSensitive.gstRegistrationStatus}, 'unknown') || ':' || coalesce(${staffSensitive.gstVerificationStatus}, 'unverified')))))`,
+      gstStatus: sql<string>`coalesce(${staffSensitive.gstRegistrationStatus}, 'unknown')`,
+      gstVerification: sql<string>`coalesce(${staffSensitive.gstVerificationStatus}, 'unverified')`,
+      gstNumber: staffSensitive.gstHstNumber,
       category: payableItems.category,
       description: payableItems.description,
       baseCents: payableItems.baseCents,
