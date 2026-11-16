@@ -268,3 +268,70 @@ describe("briefing documents", () => {
     expect(listed).toMatchObject({ version: 2, audience: 1, acknowledged: 0 });
   });
 });
+
+describe("late additions and booking directly", () => {
+  const ago = (hours: number) => new Date(Date.now() - hours * 3600_000);
+  async function shiftAt(start: Date, hours = 8, headcount = 2) {
+    const s = await makeShift(project, start.toISOString(), new Date(start.getTime() + hours * 3600_000).toISOString());
+    await pool.query("update shifts set status = 'open', rate_cents = 2500, headcount = $2 where id = $1", [s.id, headcount]);
+    return s.id;
+  }
+  async function approved(opts: Parameters<typeof person>[0] = {}) {
+    const p = await person(opts);
+    await pool.query("insert into contractor_approvals (staff_id, approved_by, approved_on) values ($1, $2, current_date)", [p.staffId, rgxm.id]);
+    return p;
+  }
+
+  it("offers a shift that has already started, but not one that has ended", async () => {
+    const started = await shiftAt(ago(2));
+    const ended = await shiftAt(ago(10), 8);
+    const p = await approved();
+    expect((await b.sendOffers(rgxm.id, { shiftIds: [started], staffIds: [p.staffId], responseDeadline: null })).created).toBe(1);
+    await expect(b.sendOffers(rgxm.id, { shiftIds: [ended], staffIds: [p.staffId], responseDeadline: null })).rejects.toThrow(/already ended.*Book directly/);
+  });
+
+  it("confirms someone after the shift has ended (up to 14 days)", async () => {
+    const s = await shiftAt(ago(4), 6);
+    const p = await approved();
+    await b.sendOffers(rgxm.id, { shiftIds: [s], staffIds: [p.staffId], responseDeadline: null });
+    // The shift then finishes before anyone confirms them.
+    await pool.query("update shifts set ends_at = now() - interval '30 minutes' where id = $1", [s]);
+    const row = await bookingOf(s, p.staffId);
+    await pool.query("update bookings set status = 'interested' where id = $1", [row.id]);
+    await b.confirmBooking(rgxm.id, row.id);
+    expect((await bookingOf(s, p.staffId)).status).toBe("confirmed");
+  });
+
+  it("books people straight onto shifts, records how it was agreed, notifies them and skips who can't be booked", async () => {
+    const s = await shiftAt(ago(1), 8, 2);
+    const ok = await approved();
+    const ok2 = await approved();
+    const third = await approved();
+    const wrongRole = await approved({ roles: ["PA"] });
+    const res = await b.bookDirectly(rgxm.id, { shiftIds: [s], staffIds: [ok.staffId, wrongRole.staffId, ok2.staffId, third.staffId], agreedVia: "text", note: "Came in at 11" });
+    expect(res.created).toBe(2);
+    expect(res.skipped).toEqual(
+      expect.arrayContaining([
+        { staffId: wrongRole.staffId, shiftId: s, reason: "not_qualified" },
+        { staffId: third.staffId, shiftId: s, reason: "full" },
+      ]),
+    );
+    const row = await bookingOf(s, ok.staffId);
+    expect(row).toMatchObject({ status: "confirmed", offered_rate_cents: 2500, agreed_rate_cents: 2500, rate_source: "shift" });
+    const history = await one<{ from_status: string | null; to_status: string; reason: string }>("select from_status, to_status, reason from booking_status_history where booking_id = $1", [row.id]);
+    expect(history).toEqual({ from_status: null, to_status: "confirmed", reason: "Booked directly: agreed by text message (Came in at 11)" });
+    expect((await one<{ n: number }>("select count(*)::int n from outbox_events where type = 'booking.confirmed' and payload->>'bookingId' = $1", [row.id])).n).toBe(1);
+    expect((await one<{ status: string }>("select status from shifts where id = $1", [s])).status).toBe("filled");
+
+    // Already on the shift, or double-booked elsewhere: skipped.
+    const overlapping = await shiftAt(ago(1), 8, 5);
+    const again = await b.bookDirectly(rgxm.id, { shiftIds: [overlapping], staffIds: [ok.staffId], agreedVia: "in_person" });
+    expect(again).toMatchObject({ created: 0, skipped: [{ staffId: ok.staffId, shiftId: overlapping, reason: "conflict" }] });
+  });
+
+  it("won't book onto shifts that ended more than 14 days ago", async () => {
+    const old = await shiftAt(ago(24 * 20));
+    const p = await approved();
+    await expect(b.bookDirectly(rgxm.id, { shiftIds: [old], staffIds: [p.staffId], agreedVia: "phone" })).rejects.toThrow(/more than 14 days/);
+  });
+});

@@ -15,7 +15,8 @@ import { FIELD_ROLE_NAMES, type FieldRole } from "@/lib/roles";
 import { utcToZoned } from "@/lib/time";
 import { cn } from "@/lib/utils";
 import type { Candidate } from "@/server/queries/staffing";
-import { findCandidatesAction, sendOffersAction } from "../actions";
+import { bookDirectlyAction, findCandidatesAction, sendOffersAction } from "../actions";
+import { NativeSelect } from "@/components/ui/native-select";
 import type { GroupShift } from "./staffing-board";
 
 const EXISTING_LABEL: Record<string, string> = {
@@ -40,14 +41,22 @@ export function OfferBuilder({
   projectId,
   group,
   showRates,
+  canBookDirectly = false,
+  initialMode = "offer",
   onClose,
 }: {
   projectId: string;
   group: { role: string; locationName: string; timezone: string; shifts: GroupShift[] };
   showRates: boolean;
+  /** People with confirm rights can skip offer → interested → confirm when it was already agreed. */
+  canBookDirectly?: boolean;
+  initialMode?: "offer" | "book";
   onClose: () => void;
 }) {
   const router = useRouter();
+  const [mode, setMode] = useState<"offer" | "book">(canBookDirectly ? initialMode : "offer");
+  const [agreedVia, setAgreedVia] = useState("text");
+  const [agreedNote, setAgreedNote] = useState("");
   const [shiftIds, setShiftIds] = useState(group.shifts.filter((s) => s.confirmed < s.headcount).map((s) => s.id).concat(group.shifts.every((s) => s.confirmed >= s.headcount) ? group.shifts.map((s) => s.id) : []));
   const [q, setQ] = useState("");
   const [hideConflicts, setHideConflicts] = useState(true);
@@ -99,6 +108,17 @@ export function OfferBuilder({
 
   function send() {
     setError(undefined);
+    if (mode === "book") {
+      startSending(async () => {
+        const res = await bookDirectlyAction(projectId, { shiftIds: chosenShifts.map((s) => s.id), staffIds: selectedRows.map((c) => c.id), agreedVia, note: agreedNote });
+        if (!res.ok) return setError(res.error);
+        toast.success(res.message ?? "Booked");
+        for (const s of res.data?.skipped ?? []) toast.info(s);
+        router.refresh();
+        onClose();
+      });
+      return;
+    }
     startSending(async () => {
       const pairs = selectedRows.flatMap((c) => offerable(c).map((s) => ({ shiftId: s.id, staffId: c.id })));
       const res = await sendOffersAction(projectId, { shiftIds, staffIds: selectedRows.map((c) => c.id), pairs, deadlineDate, deadlineTime, skipConflicts: true });
@@ -115,12 +135,38 @@ export function OfferBuilder({
       <DialogContent className="flex max-h-[94dvh] max-w-5xl flex-col gap-4 overflow-hidden">
         <DialogHeader>
           <DialogTitle>
-            Send offers · {FIELD_ROLE_NAMES[group.role as FieldRole]} at {group.locationName}
+            {mode === "book" ? "Book directly" : "Send offers"} · {FIELD_ROLE_NAMES[group.role as FieldRole]} at {group.locationName}
           </DialogTitle>
           <DialogDescription>
-            An offer asks people if they&apos;re available. Nobody is booked until you confirm them.
+            {mode === "book"
+              ? "For people you've already agreed this with (by text, phone or in person). They're confirmed straight away and notified. No offer or reply needed."
+              : "An offer asks people if they're available. Nobody is booked until you confirm them."}
           </DialogDescription>
         </DialogHeader>
+        {canBookDirectly ? (
+          <div className="flex w-fit rounded-lg border p-0.5 text-sm" role="radiogroup" aria-label="How to add people">
+            {(
+              [
+                ["offer", "Send offers (they reply)"],
+                ["book", "Book directly (already agreed)"],
+              ] as const
+            ).map(([m, label]) => (
+              <button
+                key={m}
+                type="button"
+                role="radio"
+                aria-checked={mode === m}
+                onClick={() => {
+                  setMode(m);
+                  setError(undefined);
+                }}
+                className={cn("rounded-md px-3 py-1.5", mode === m ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground")}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        ) : null}
 
         <fieldset>
           <legend className="mb-2 text-sm font-medium">Shifts to offer</legend>
@@ -241,6 +287,22 @@ export function OfferBuilder({
         </div>
 
         <div className="flex flex-col gap-3 border-t pt-3 sm:flex-row sm:items-end sm:justify-between">
+          {mode === "book" ? (
+            <div className="flex flex-wrap items-end gap-3">
+              <Field label="How was it agreed?" htmlFor="agreed-via">
+                <NativeSelect id="agreed-via" value={agreedVia} onChange={(e) => setAgreedVia(e.target.value)} className="h-9 w-44">
+                  <option value="text">Text message</option>
+                  <option value="phone">Phone call</option>
+                  <option value="in_person">In person</option>
+                  <option value="email">Email</option>
+                  <option value="other">Other</option>
+                </NativeSelect>
+              </Field>
+              <Field label="Note (optional)" htmlFor="agreed-note">
+                <Input id="agreed-note" value={agreedNote} onChange={(e) => setAgreedNote(e.target.value)} maxLength={300} placeholder="e.g. Came in at 11am, agreed with Sam" className="h-9 w-72" />
+              </Field>
+            </div>
+          ) : (
           <div>
             <div className="flex items-end gap-3">
               <Field label="Respond by" htmlFor="deadline-date">
@@ -252,10 +314,19 @@ export function OfferBuilder({
             </div>
             <p className="mt-1.5 text-[13px] text-muted-foreground">{group.timezone.replace("_", " ")} time · leave blank for no deadline</p>
           </div>
+          )}
           <div className="flex flex-col items-end gap-2">
             {error ? <FormMessage>{error}</FormMessage> : null}
             <Button disabled={sending || offerCount === 0} onClick={send}>
-              {sending ? "Sending…" : offerCount ? `Send ${offerCount} offer${offerCount === 1 ? "" : "s"} to ${selectedRows.length} ${selectedRows.length === 1 ? "person" : "people"}` : "Select people"}
+              {sending
+                ? mode === "book"
+                  ? "Booking…"
+                  : "Sending…"
+                : offerCount
+                  ? mode === "book"
+                    ? `Book ${offerCount} shift${offerCount === 1 ? "" : "s"} for ${selectedRows.length} ${selectedRows.length === 1 ? "person" : "people"}`
+                    : `Send ${offerCount} offer${offerCount === 1 ? "" : "s"} to ${selectedRows.length} ${selectedRows.length === 1 ? "person" : "people"}`
+                  : "Select people"}
             </Button>
           </div>
         </div>
