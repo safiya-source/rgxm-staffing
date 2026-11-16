@@ -37,7 +37,7 @@ had an external penetration test or a legal/privacy review.
 - **Separation of duties:**
   - nobody verifies or approves their own hours, or records their own attendance as a supervisor or admin;
   - Team Leads and Activation Managers only verify people on an overlapping shift at the same venue;
-  - payment batches need a second person to approve them (also a database check constraint).
+  - payment batches must be approved before export. Since 2026-11-16 (RGXM decision) the creator may approve their own batch; the audit log records it as "Approved by the person who created it".
 - **Restricted fields:**
   - rates are only visible with `rates.view`;
   - legal/business name and GST/HST number only with `rates.edit`;

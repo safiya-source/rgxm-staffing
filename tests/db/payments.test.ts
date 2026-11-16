@@ -104,7 +104,7 @@ describe("payment batches", () => {
     expect(payroll.reference).toMatch(/^PAY-/);
   });
 
-  it("lock their timesheets, need a second approver, and export once (duplicate protection)", async () => {
+  it("lock their timesheets, can be approved by their creator, and export once (duplicate protection)", async () => {
     const x = await approved();
     const y = await approved();
     const period = await pay.ensurePayPeriod(db, new Date().toISOString().slice(0, 10));
@@ -116,9 +116,10 @@ describe("payment batches", () => {
     await expect(a.correctApprovedTimesheet(pm.id, x.timesheetId, { payableMinutes: 400, reason: "x" })).rejects.toThrow(/payment batch/);
     await expect(pay.createBatch(finance.id, { type: "contractor", payPeriodId: null, payableIds: [x.payable.id] })).rejects.toThrow(/already in a batch/);
 
-    await expect(pay.exportBatch(finance.id, batch.id, "csv_generic")).rejects.toThrow(/approve/);
-    await expect(pay.approveBatch(finance.id, batch.id)).rejects.toThrow(/someone other than its creator/);
-    await pay.approveBatch(finance2.id, batch.id);
+    await expect(pay.exportBatch(finance.id, batch.id, "csv_generic")).rejects.toThrow(/Approve this batch/);
+    // The creator can approve their own batch; the audit log notes it.
+    await pay.approveBatch(finance.id, batch.id);
+    expect((await pool.query("select reason from audit_log where entity_id = $1 and action = 'batch.approved'", [batch.id])).rows[0].reason).toMatch(/person who created it/);
 
     const first = await pay.exportBatch(finance.id, batch.id, "csv_generic");
     expect(first.rowCount).toBe(2);

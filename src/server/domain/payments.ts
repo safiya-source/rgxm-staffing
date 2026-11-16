@@ -14,7 +14,6 @@
 import { createHash } from "node:crypto";
 import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { recordAudit } from "@/server/audit";
-import { assertDifferentApprover } from "@/server/authz/permissions";
 import { db, type Tx } from "@/server/db";
 import {
   bills,
@@ -556,14 +555,16 @@ export async function removeFromBatch(actorId: string, batchId: string, payableI
   });
 }
 
-/** Four-eyes approval: someone other than the creator (also a DB check). Fingerprints the batch. */
+/**
+ * Approval before export. The creator may approve their own batch (RGXM's choice); the audit log
+ * records when they do. Fingerprints the batch so later changes cancel the approval.
+ */
 export async function approveBatch(actorId: string, batchId: string) {
   await db.transaction(async (tx) => {
     const b = await lockBatch(tx, batchId);
-    assertDifferentApprover(b.createdBy, actorId);
     const [{ n }] = (await tx.execute<{ n: number }>(sql`select count(*)::int n from payment_batch_items where batch_id = ${batchId} and active`)).rows as [{ n: number }];
     if (!n) throw new PaymentError("This batch is empty.");
-    await moveBatch(tx, b, "approved", actorId, { approvedBy: actorId, approvedAt: new Date(), approvalFingerprint: await batchFingerprint(tx, batchId) });
+    await moveBatch(tx, b, "approved", actorId, { approvedBy: actorId, approvedAt: new Date(), approvalFingerprint: await batchFingerprint(tx, batchId) }, b.createdBy === actorId ? "Approved by the person who created it" : null);
   });
 }
 
@@ -635,7 +636,7 @@ async function exportRows(tx: Tx | typeof db, batchId: string): Promise<ExportRo
 
 /**
  * Generates the bank payment file once. The approval must still match the batch (people, amounts,
- * payment details, lines); otherwise the approval is cancelled and a second person must approve
+ * payment details, lines); otherwise the approval is cancelled and the batch must be approved
  * again. The first export finalizes the bills. While a live export exists another is refused.
  */
 export async function exportBatch(actorId: string, batchId: string, format: ExportFormat) {
@@ -648,10 +649,10 @@ export async function exportBatch(actorId: string, batchId: string, format: Expo
     await invalidateApproval(tx, b, actorId, "Recipients, amounts, payment details or lines changed after approval.");
     return true;
   });
-  if (invalidated) throw new PaymentError("Something in this batch changed after it was approved (a recipient, amount, payment detail or line). The approval was cancelled; a second person needs to approve it again.");
+  if (invalidated) throw new PaymentError("Something in this batch changed after it was approved (a recipient, amount, payment detail or line). The approval was cancelled; approve it again before exporting.");
   return db.transaction(async (tx) => {
     const b = await lockBatch(tx, batchId);
-    if (b.status !== "approved" && b.status !== "exported") throw new PaymentError(b.status === "draft" ? "A second person needs to approve this batch before export." : `This batch is ${b.status}.`);
+    if (b.status !== "approved" && b.status !== "exported") throw new PaymentError(b.status === "draft" ? "Approve this batch before exporting it." : `This batch is ${b.status}.`);
     if (b.status === "exported" && b.submittedAt) throw new PaymentError("This batch was already submitted to the bank.");
     const live = await tx.select().from(paymentExports).where(and(eq(paymentExports.batchId, batchId), isNull(paymentExports.supersededAt), eq(paymentExports.purpose, "bank")));
     if (live.length) throw new PaymentError("This batch has already been exported. Download the existing file, or void that export (with a reason) to generate a new one.");

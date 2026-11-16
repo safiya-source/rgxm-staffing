@@ -181,7 +181,7 @@ describe("payables and batches (rules 16, 17)", () => {
     await expect(pool.query("update payable_items set status = 'pending' where id = $1", [p.id])).rejects.toThrow(/only move to disputed/);
   });
 
-  it("keeps a payable in only one active batch and requires a second approver", async () => {
+  it("keeps a payable in only one active batch", async () => {
     const p = await payable(await makeTimesheet());
     const creator = await makeUser();
     const batch = (ref: string) =>
@@ -192,7 +192,7 @@ describe("payables and batches (rules 16, 17)", () => {
     await expect(
       pool.query("insert into payment_batch_items (batch_id, payable_item_id, amount_cents) values ($1, $2, 20000)", [b2.id, p.id]),
     ).rejects.toThrow(/payment_batch_items_active_uq/);
-    await expect(pool.query("update payment_batches set approved_by = created_by where id = $1", [b1.id])).rejects.toThrow(/four_eyes/);
+    await expect(pool.query("update payment_batches set approved_by = created_by where id = $1", [b1.id])).resolves.toBeTruthy(); // creators may approve their own batch
   });
 
   it("allows only one live export per batch and format", async () => {

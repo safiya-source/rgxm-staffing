@@ -1,0 +1,1 @@
+ALTER TABLE "payment_batches" DROP CONSTRAINT "payment_batches_four_eyes";

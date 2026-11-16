@@ -120,6 +120,7 @@ export async function getBatchDetail(batchId: string) {
         payableId: payableItems.id,
         staffName,
         projectCode: projects.code,
+        projectName: projects.name,
         serviceDate: payableItems.serviceDate,
         payableMinutes: payableItems.payableMinutes,
         rateCents: payableItems.rateCents,

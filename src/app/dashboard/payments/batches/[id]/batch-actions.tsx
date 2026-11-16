@@ -73,9 +73,8 @@ export function BatchActions({ batch: b, items }: { batch: BatchInfo; items: { p
       <CardContent className="grid gap-5">
         {stepUpDialog}
         {b.status === "draft" ? (
-          b.isOwn ? (
-            <p className="text-sm text-muted-foreground">Waiting for a second person in Finance or an admin to approve this batch. You created it, so you can&apos;t approve it.</p>
-          ) : (
+          <div className="grid gap-2">
+            {b.isOwn ? <p className="text-sm text-muted-foreground">You created this batch. Check the people, amounts and payment details, then approve it yourself.</p> : null}
             <ConfirmButton
               title="Approve this batch?"
               description="You're confirming the people, amounts and payment details are correct. If any of these change before export, your approval is cancelled automatically."
@@ -84,7 +83,7 @@ export function BatchActions({ batch: b, items }: { batch: BatchInfo; items: { p
             >
               Approve batch
             </ConfirmButton>
-          )
+          </div>
         ) : null}
 
         {b.status === "approved" || (b.status === "exported" && !b.hasLiveExport && !b.submitted) ? (
@@ -178,7 +177,7 @@ export function BatchActions({ batch: b, items }: { batch: BatchInfo; items: { p
               ))}
             </NativeSelect>
             <Input aria-label="Reason for removing" placeholder="Reason" value={remove.reason} onChange={(e) => setRemove({ ...remove, reason: e.target.value })} />
-            {b.status === "approved" ? <p className="text-xs text-warning">Removing an item cancels the approval; a second person must approve again.</p> : null}
+            {b.status === "approved" ? <p className="text-xs text-warning">Removing an item cancels the approval; approve it again before exporting.</p> : null}
             <Button variant="outline" disabled={pending || !remove.payableId || !remove.reason.trim()} onClick={() => run(() => removeFromBatchAction(b.id, remove.payableId, remove.reason), () => setRemove({ payableId: "", reason: "" }))}>
               Remove from batch
             </Button>

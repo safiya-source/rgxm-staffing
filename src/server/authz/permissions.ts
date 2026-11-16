@@ -141,9 +141,3 @@ export function assertNotOwnTimesheet(actorUserId: string, timesheetOwnerUserId:
   }
 }
 
-/** Payment batches need a second person to approve them. */
-export function assertDifferentApprover(creatorUserId: string, approverUserId: string) {
-  if (creatorUserId === approverUserId) {
-    throw new SeparationOfDutiesError("A payment batch must be approved by someone other than its creator.");
-  }
-}

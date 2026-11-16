@@ -1056,7 +1056,7 @@ export const paymentBatches = pgTable(
     voidReason: text(),
     createdAt: createdAt(),
   },
-  (t) => [check("payment_batches_four_eyes", sql`${t.approvedBy} is null or ${t.approvedBy} <> ${t.createdBy}`)],
+  // RGXM decided (2026-11-16) that the person who creates a batch may also approve it.
 );
 
 export const paymentBatchItems = pgTable(
