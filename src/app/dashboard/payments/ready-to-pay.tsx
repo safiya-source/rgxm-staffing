@@ -184,10 +184,16 @@ function BatchSection({ type, demo, rows, periods }: { type: BatchType; demo: bo
   );
 }
 
-export function ReadyToPay({ rows, periods, canManage }: { rows: Row[]; periods: Period[]; canManage: boolean }) {
+export function ReadyToPay({ rows, periods, canManage, waitingOnTax = 0 }: { rows: Row[]; periods: Period[]; canManage: boolean; waitingOnTax?: number }) {
   const router = useRouter();
   const [pending, start] = useTransition();
-  if (rows.length === 0) return <EmptyState icon={WalletIcon} title="Nothing ready to batch" description="Approved hours and compensation show up here once their tax is settled." />;
+  if (rows.length === 0) {
+    return waitingOnTax ? (
+      <EmptyState icon={WalletIcon} title="Nothing ready yet" description=" Lines appear here as soon as their GST/HST is settled in step 1 above." />
+    ) : (
+      <EmptyState icon={WalletIcon} title="Nothing ready to pay" description="Approved hours, allowances and expenses show up here once their timesheets are approved." />
+    );
+  }
   if (!canManage) {
     return (
       <Card className="overflow-hidden">

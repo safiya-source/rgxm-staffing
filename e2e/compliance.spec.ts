@@ -89,11 +89,12 @@ test("once RGXM publishes its documents, a contractor accepts each one and keeps
     const fin = await (await page.context().browser()!.newContext()).newPage();
     await signInAsTeam(fin, "finance");
     await fin.goto("/dashboard/payments");
-    const card = fin.locator("div.rounded-lg.border").filter({ hasText: "Jordan Lee" }).filter({ has: fin.getByRole("button", { name: "Record tax decision" }) }).first();
-    await card.getByRole("checkbox", { name: /HST 13% \(ON\)/ }).check();
-    await card.getByLabel("Reason").fill("Registered contractor; 13% Ontario HST confirmed");
-    await card.getByRole("button", { name: "Record tax decision" }).click();
-    await expect(fin.getByText("Tax decision recorded. The line can now be batched.")).toBeVisible();
+    const card = fin.getByRole("region", { name: "Jordan Lee" });
+    const hst = await card.locator("option", { hasText: "HST 13% (ON)" }).first().getAttribute("value");
+    await card.getByLabel("Tax to charge for Jordan Lee").selectOption(hst!);
+    await card.getByLabel("Reason for Jordan Lee").fill("Registered contractor; 13% Ontario HST confirmed");
+    await card.getByRole("button", { name: /^Apply to \d+ lines?$/ }).click();
+    await expect(fin.getByText(/Tax decision recorded for \d+ lines?\./)).toBeVisible();
     await page.goto("/portal/invoices");
     await page.getByRole("link", { name: /CRW-B-/ }).first().click();
     await expect(page.getByRole("heading", { name: "Contractor Invoice — Prepared by RGXM on behalf of Jordan Lee Events Inc." })).toBeVisible();

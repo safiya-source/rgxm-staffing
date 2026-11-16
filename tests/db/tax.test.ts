@@ -115,6 +115,30 @@ describe("tax on bill lines", () => {
     await expect(pay.overrideLineTax(finance.id, fixed.id, { reason: "Changing my mind again", ruleIds: [] })).rejects.toThrow(/before the line is batched/);
   });
 
+  it("settles one contractor's lines together: one decision for several lines, or verify and recalculate just theirs", async () => {
+    const a = await contractor();
+    const l1 = await approved(a.staffId);
+    const l2 = await approved(a.staffId, undefined, 3);
+    const done = await pay.overrideLinesTax(finance.id, [l1.id, l2.id], { reason: "Confirmed by phone they're not registered", ruleIds: [] });
+    expect(done.map((d) => d.taxStatus)).toEqual(["finance_override", "finance_override"]);
+    // All or nothing: a bad line rolls back the good one.
+    const b = await contractor();
+    const l3 = await approved(b.staffId);
+    await expect(pay.overrideLinesTax(finance.id, [l3.id, l1.id], { reason: "Confirmed by phone they're not registered", ruleIds: [] })).rejects.toThrow(/before the line is batched/);
+    expect((await pay.reviewLinesFor(b.staffId)).map((r) => r.id)).toEqual([l3.id]);
+
+    // Verifying a "no" answer and recalculating only that person's lines clears their review.
+    const other = await contractor();
+    const l4 = await approved(other.staffId);
+    await saveTaxDetails(b.userId, b.staffId, notRegistered, { bySelf: true });
+    await saveTaxDetails(other.userId, other.staffId, notRegistered, { bySelf: true });
+    await taxConfig.verifyGstRegistration(finance.id, b.staffId, { outcome: "verified", reference: "Confirmed by email" });
+    await taxConfig.verifyGstRegistration(finance.id, other.staffId, { outcome: "verified", reference: "Confirmed by email" });
+    await pay.refreshClassifications(finance.id, { staffId: b.staffId });
+    expect(await pay.reviewLinesFor(b.staffId)).toEqual([]);
+    expect((await pay.reviewLinesFor(other.staffId)).map((r) => r.id)).toEqual([l4.id]);
+  });
+
   it("adds no tax for a verified non-registrant", async () => {
     const who = await contractor();
     await saveTaxDetails(who.userId, who.staffId, notRegistered, { bySelf: true });
