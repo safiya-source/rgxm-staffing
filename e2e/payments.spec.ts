@@ -76,6 +76,13 @@ test("finance batches and approves it, export once, mark paid, staff see it", as
   await section.getByRole("button", { name: /Create batch/ }).click();
   await expect(fin).toHaveURL(/\/dashboard\/payments\/batches\//);
   await expect(fin.getByText(/You created this batch/)).toBeVisible();
+  // Each contractor's total is tallied by project, and the summary downloads as Excel.
+  const totals = fin.getByRole("region", { name: "Totals by project" });
+  await expect(totals.getByText(/subtotal$/).first()).toBeVisible();
+  await expect(totals.getByRole("cell", { name: "Jordan Lee" }).first()).toBeVisible();
+  const summaryDownload = fin.waitForEvent("download");
+  await totals.getByRole("link", { name: "Download summary (Excel)" }).click();
+  expect((await summaryDownload).suggestedFilename()).toMatch(/-by-project\.xlsx$/);
   await expect.poll(async () => (await pool.query("select status from timesheets where id = $1", [timesheetId])).rows[0].status).toBe("locked");
 
   // 2. The same person approves it (RGXM allows creators to approve their own batches).
