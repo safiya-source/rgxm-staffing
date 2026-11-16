@@ -280,7 +280,21 @@ export async function replacePayableAfterCorrection(tx: Tx, timesheetId: string,
  * and recreated with Finance's decision (chosen from configured rules) and the reason is audited.
  */
 export async function overrideLineTax(actorId: string, payableId: string, override: TaxOverride) {
+  return db.transaction((tx) => overrideInTx(tx, actorId, payableId, override));
+}
+
+/** The same tax decision for several lines (e.g. all of one contractor's lines), all or nothing. */
+export async function overrideLinesTax(actorId: string, payableIds: string[], override: TaxOverride) {
+  if (!payableIds.length) throw new PaymentError("Choose at least one line.");
   return db.transaction(async (tx) => {
+    const out = [];
+    for (const id of payableIds) out.push(await overrideInTx(tx, actorId, id, override));
+    return out;
+  });
+}
+
+async function overrideInTx(tx: Tx, actorId: string, payableId: string, override: TaxOverride) {
+  {
     const [p] = await tx.select().from(payableItems).where(eq(payableItems.id, payableId)).for("update");
     if (!p) throw new PaymentError("Line not found.");
     if (p.status !== "pending" || p.billId) throw new PaymentError("Tax can only be corrected before the line is batched and billed. Take it out of the batch first, or use an adjustment.");
@@ -288,22 +302,30 @@ export async function overrideLineTax(actorId: string, payableId: string, overri
     const next = await recreate(tx, p, actorId, override);
     await recordAudit({ actorId, action: "payable.tax_override", entityType: "payable", entityId: next.id, projectId: p.projectId, before: { payableId: p.id, taxCents: p.taxCents, taxStatus: p.taxStatus }, after: { taxCents: next.taxCents, ruleIds: override.ruleIds }, reason: override.reason.trim() }, tx);
     return next;
-  });
+  }
 }
 
+
+/** Unbatched lines for one contractor still waiting on a Finance tax decision. */
+export async function reviewLinesFor(staffId: string) {
+  return db
+    .select({ id: payableItems.id })
+    .from(payableItems)
+    .where(and(eq(payableItems.staffId, staffId), eq(payableItems.status, "pending"), isNull(payableItems.billId), eq(payableItems.taxStatus, "review_required")));
+}
 
 /**
  * Recalculates unbatched, unbilled lines whose basis changed (classification, GST/HST answer or
  * Finance verification) and lines waiting for tax review that may now be calculated automatically.
  */
-export async function refreshClassifications(actorId: string) {
+export async function refreshClassifications(actorId: string, opts: { staffId?: string } = {}) {
   return db.transaction(async (tx) => {
     const stale = await tx
       .select({ p: payableItems })
       .from(payableItems)
       .innerJoin(staffProfiles, eq(staffProfiles.id, payableItems.staffId))
       .leftJoin(staffSensitive, eq(staffSensitive.staffId, payableItems.staffId))
-      .where(and(eq(payableItems.status, "pending"), isNull(payableItems.billId), sql`${payableItems.category} <> 'adjustment'`, sql`(${staleLine} or ${payableItems.taxStatus} = 'review_required')`))
+      .where(and(eq(payableItems.status, "pending"), isNull(payableItems.billId), sql`${payableItems.category} <> 'adjustment'`, sql`(${staleLine} or ${payableItems.taxStatus} = 'review_required')`, opts.staffId ? eq(payableItems.staffId, opts.staffId) : undefined))
       .for("update", { of: payableItems });
     let changed = 0;
     for (const { p } of stale) {
@@ -311,7 +333,7 @@ export async function refreshClassifications(actorId: string) {
       const next = await recreate(tx, p, actorId);
       if (next.taxCents !== p.taxCents || next.taxStatus !== p.taxStatus || next.classification !== p.classification) changed++;
     }
-    await recordAudit({ actorId, action: "payables.refresh", entityType: "payable", after: { recalculated: stale.length, changed } }, tx);
+    await recordAudit({ actorId, action: "payables.refresh", entityType: "payable", after: { recalculated: stale.length, changed, staffId: opts.staffId ?? null } }, tx);
     return stale.length;
   });
 }
