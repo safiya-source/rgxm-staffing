@@ -96,6 +96,32 @@ export async function sendOffersAction(
   });
 }
 
+/** Books people straight onto shifts when it was already agreed with them (skips offer → interested → confirm). */
+export async function bookDirectlyAction(
+  projectId: string,
+  input: { shiftIds: string[]; staffIds: string[]; agreedVia: string; note?: string },
+): Promise<ActionResult<{ skipped: string[] }>> {
+  return runAction(async () => {
+    const viewer = await authorizeProject("booking.confirm", uuid.parse(projectId));
+    await rateLimit("offers.send", viewer.userId);
+    const shiftIds = z.array(uuid).min(1).max(60).parse(input.shiftIds);
+    const staffIds = z.array(uuid).min(1).max(100).parse(input.staffIds);
+    const agreedVia = z.enum(b.AGREED_VIA).parse(input.agreedVia);
+    const note = z.string().max(300).optional().parse(input.note);
+    const res = await guard(() => b.bookDirectly(viewer.userId, { shiftIds, staffIds, agreedVia, note, projectId }));
+    kickOutbox();
+    refresh(projectId);
+    const reasons = [...new Set(res.skipped.map((s) => b.SKIP_REASON_LABEL[s.reason]))];
+    return {
+      ok: res.created > 0,
+      ...(res.created > 0
+        ? { message: `Booked ${res.created} shift${res.created === 1 ? "" : "s"} for ${res.people} ${res.people === 1 ? "person" : "people"}. They've been notified.` }
+        : { error: `Nobody was booked: someone ${reasons.join("; someone ")}.` }),
+      data: { skipped: res.skipped.length ? [`${res.skipped.length} skipped: someone ${reasons.join("; someone ")}.`] : [] },
+    } as ActionResult<{ skipped: string[] }>;
+  });
+}
+
 type Op = "shortlist" | "unshortlist" | "waitlist" | "release" | "withdraw";
 
 export async function bookingOpAction(bookingId: string, op: Op, reason?: string): Promise<ActionResult> {

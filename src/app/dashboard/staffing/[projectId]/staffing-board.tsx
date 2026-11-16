@@ -1,6 +1,6 @@
 "use client";
 import { TimeAgo } from "@/components/app/time-ago";
-import { AlertTriangleIcon, MessageCircleQuestionIcon, SendIcon } from "lucide-react";
+import { AlertTriangleIcon, MessageCircleQuestionIcon, SendIcon, UserCheckIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
@@ -91,7 +91,7 @@ export function StaffingBoard({
   const [pending, start] = useTransition();
   const [filter, setFilter] = useState<(typeof FILTERS)[number][0]>("all");
   const [selected, setSelected] = useState<string[]>([]);
-  const [offering, setOffering] = useState(openOffer && can.offer);
+  const [offering, setOffering] = useState<false | "offer" | "book">(openOffer && can.offer ? "offer" : false);
   const [conflict, setConflict] = useState<{ bookingId: string; name: string; conflicts: { projectName: string; when: string }[]; canOverride: boolean } | null>(null);
   const [cancelling, setCancelling] = useState<BoardRow | null>(null);
   const [now] = useState(() => Date.now());
@@ -173,11 +173,18 @@ export function StaffingBoard({
             {confirmed}/{positions} positions confirmed across {group.shifts.length} shift{group.shifts.length === 1 ? "" : "s"}
           </p>
         </div>
-        {can.offer ? (
-          <Button onClick={() => setOffering(true)}>
-            <SendIcon /> Send offers
-          </Button>
-        ) : null}
+        <div className="flex flex-wrap gap-2">
+          {can.confirm ? (
+            <Button variant="outline" onClick={() => setOffering("book")}>
+              <UserCheckIcon /> Book directly
+            </Button>
+          ) : null}
+          {can.offer ? (
+            <Button onClick={() => setOffering("offer")}>
+              <SendIcon /> Send offers
+            </Button>
+          ) : null}
+        </div>
       </div>
 
       <dl className="grid grid-cols-4 gap-2 sm:grid-cols-8">
@@ -336,7 +343,9 @@ export function StaffingBoard({
         </Card>
       )}
 
-      {offering ? <OfferBuilder projectId={projectId} group={group} showRates={can.rates} onClose={() => setOffering(false)} /> : null}
+      {offering ? (
+        <OfferBuilder projectId={projectId} group={group} showRates={can.rates} canBookDirectly={can.confirm} initialMode={offering} onClose={() => setOffering(false)} />
+      ) : null}
 
       <ConflictDialog state={conflict} pending={pending} onClose={() => setConflict(null)} onOverride={(reason) => conflict && confirm(conflict.bookingId, conflict.name, reason)} />
       <CancelDialog

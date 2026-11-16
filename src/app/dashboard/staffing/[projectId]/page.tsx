@@ -36,7 +36,9 @@ export default async function ProjectStaffingPage({ params, searchParams }: Page
   };
   const canAddShifts = canOnProject(actor, "shift.manage", scope);
 
-  const groups = await getShiftGroups(projectId);
+  // Shifts from the last day always show (on-the-spot hires); ?past=1 shows the last 14 days.
+  const showPast = sp.past === "1";
+  const groups = await getShiftGroups(projectId, new Date(), { pastDays: showPast ? 14 : 1 });
   // "Send offers" from the Staffing Requests list lands here with ?offer=1: open the offer form on the
   // first role/location that still has open spots.
   const openOffer = sp.offer === "1" && can.offer;
@@ -61,6 +63,12 @@ export default async function ProjectStaffingPage({ params, searchParams }: Page
           </h1>
         </div>
         <div className="flex items-center gap-4">
+          <Link
+            href={showPast ? `/dashboard/staffing/${projectId}` : `/dashboard/staffing/${projectId}?past=1`}
+            className="text-sm text-muted-foreground hover:text-foreground"
+          >
+            {showPast ? "Hide past shifts" : "Show past 14 days"}
+          </Link>
           <Link href={`/dashboard/projects/${projectId}/shifts`} className="text-sm text-muted-foreground hover:text-foreground">
             Manage shifts →
           </Link>
@@ -100,7 +108,7 @@ export default async function ProjectStaffingPage({ params, searchParams }: Page
                 return (
                   <Link
                     key={g.key}
-                    href={`/dashboard/staffing/${projectId}?group=${encodeURIComponent(g.key)}`}
+                    href={`/dashboard/staffing/${projectId}?group=${encodeURIComponent(g.key)}${showPast ? "&past=1" : ""}`}
                     aria-current={active ? "true" : undefined}
                     className={cn("rounded-lg border bg-card px-3 py-2 text-sm hover:border-ring/40", active && "border-foreground/40 ring-1 ring-foreground/10")}
                   >
