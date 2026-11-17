@@ -73,17 +73,18 @@ export type RateInputs = {
 
 /**
  * Which hourly rate applies to an offer. Precedence:
- *   1. a person-specific project override (authorised — rule 3)
- *   2. the rate posted on the shift
- *   3. a project-wide override for the role
- *   4. the person's default rate for the role
+ *   1. a person-specific project override (authorised — rule 3): for when their usual rate doesn't apply
+ *   2. the person's own default rate for the role (RGXM, 2026-11-17: a personal rate normally applies
+ *      on every project, over the shift's or project's rate)
+ *   3. the rate posted on the shift
+ *   4. a project-wide override for the role
  * Returns null when no rate is known; such people can't be offered the shift.
  */
 export function resolveRate(r: RateInputs): { rateCents: number; source: RateSource } | null {
   if (r.projectStaffRate != null) return { rateCents: r.projectStaffRate, source: "project_staff" };
+  if (r.staffDefaultRate != null) return { rateCents: r.staffDefaultRate, source: "default" };
   if (r.shiftRate != null) return { rateCents: r.shiftRate, source: "shift" };
   if (r.projectRoleRate != null) return { rateCents: r.projectRoleRate, source: "project_role" };
-  if (r.staffDefaultRate != null) return { rateCents: r.staffDefaultRate, source: "default" };
   return null;
 }
 
@@ -91,7 +92,7 @@ export const RATE_SOURCE_LABEL: Record<RateSource, string> = {
   project_staff: "Project rate for this person",
   shift: "Shift rate",
   project_role: "Project rate for the role",
-  default: "Their default rate",
+  default: "Their personal rate",
 };
 
 /** Half-open interval overlap: back-to-back shifts don't conflict. */

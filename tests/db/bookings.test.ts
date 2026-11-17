@@ -66,8 +66,10 @@ describe("sending offers", () => {
         { staffId: wrongRole.staffId, shiftId: s1, reason: "not_qualified" },
       ]),
     );
-    expect(await bookingOf(s1, ok.staffId)).toMatchObject({ status: "offered", offered_rate_cents: 2500, rate_source: "shift" });
+    // Their personal rate applies over the shift's rate; someone without one gets the shift's rate.
+    expect(await bookingOf(s1, ok.staffId)).toMatchObject({ status: "offered", offered_rate_cents: 2600, rate_source: "default" });
     expect(await bookingOf(s2, ok.staffId)).toMatchObject({ offered_rate_cents: 2600, rate_source: "default" });
+    expect(await bookingOf(s1, noRate.staffId)).toMatchObject({ offered_rate_cents: 2500, rate_source: "shift" });
 
     // Re-sending doesn't duplicate.
     const again = await b.sendOffers(rgxm.id, { shiftIds: [s1], staffIds: [ok.staffId], responseDeadline: null });
@@ -112,7 +114,7 @@ describe("responses and confirmation", () => {
     await pool.query("update staff_rates set effective_to = now() where staff_id = $1", [p.staffId]);
     await pool.query("insert into staff_rates (staff_id, role, rate_cents) values ($1, 'BA', 9900)", [p.staffId]);
     await b.confirmBooking(rgxm.id, offer.id);
-    expect(await bookingOf(s, p.staffId)).toMatchObject({ status: "confirmed", agreed_rate_cents: 2500 });
+    expect(await bookingOf(s, p.staffId)).toMatchObject({ status: "confirmed", agreed_rate_cents: 2600 });
   });
 
   it("won't let someone respond to another person's offer, or after the deadline", async () => {
@@ -317,7 +319,7 @@ describe("late additions and booking directly", () => {
       ]),
     );
     const row = await bookingOf(s, ok.staffId);
-    expect(row).toMatchObject({ status: "confirmed", offered_rate_cents: 2500, agreed_rate_cents: 2500, rate_source: "shift" });
+    expect(row).toMatchObject({ status: "confirmed", offered_rate_cents: 2600, agreed_rate_cents: 2600, rate_source: "default" });
     const history = await one<{ from_status: string | null; to_status: string; reason: string }>("select from_status, to_status, reason from booking_status_history where booking_id = $1", [row.id]);
     expect(history).toEqual({ from_status: null, to_status: "confirmed", reason: "Booked directly: agreed by text message (Came in at 11)" });
     expect((await one<{ n: number }>("select count(*)::int n from outbox_events where type = 'booking.confirmed' and payload->>'bookingId' = $1", [row.id])).n).toBe(1);
@@ -341,7 +343,7 @@ describe("late additions and booking directly", () => {
     expect(res).toMatchObject({ created: 1, skipped: [] });
     const row = await bookingOf(s, p.staffId);
     expect(row.id).toBe(offer.id);
-    expect(row).toMatchObject({ status: "confirmed", agreed_rate_cents: 2500 });
+    expect(row).toMatchObject({ status: "confirmed", agreed_rate_cents: 2600 });
     const h = await one<{ from_status: string }>("select from_status from booking_status_history where booking_id = $1 and to_status = 'confirmed'", [row.id]);
     expect(h.from_status).toBe("offered");
     // Booking them again does nothing.

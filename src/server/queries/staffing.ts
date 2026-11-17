@@ -255,3 +255,17 @@ export async function getProjectRates(projectId: string) {
     .where(and(eq(projectRates.projectId, projectId), isNull(projectRates.revokedAt)))
     .orderBy(asc(projectRates.role));
 }
+
+/** People a project-specific rate can be set for: anyone with a personal rate, or offered/booked on the project. */
+export async function getProjectRatePeople(projectId: string) {
+  const rows = await db.execute<{ id: string; name: string; rates: string | null }>(sql`
+    select sp.id, coalesce(sp.preferred_name, sp.first_name) || ' ' || sp.last_name as name,
+      (select string_agg(r.role::text || ' ' || to_char(r.rate_cents / 100.0, 'FM999990.00'), ', ' order by r.role) from staff_rates r where r.staff_id = sp.id and r.effective_to is null) as rates
+    from staff_profiles sp
+    where sp.status = 'active' and sp.anonymized_at is null
+      and (exists (select 1 from staff_rates r where r.staff_id = sp.id and r.effective_to is null)
+        or exists (select 1 from bookings b where b.staff_id = sp.id and b.project_id = ${projectId}))
+    order by sp.last_name, sp.first_name
+    limit 500`);
+  return rows.rows;
+}

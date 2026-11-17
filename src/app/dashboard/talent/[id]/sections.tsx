@@ -299,7 +299,7 @@ export function RatesCard({ staffId, rates, roles, canEdit }: { staffId: string;
 
   return (
     <div className="grid gap-3">
-      {current.length === 0 ? <p className="text-sm text-muted-foreground">No default rates set.</p> : null}
+      {current.length === 0 ? <p className="text-sm text-muted-foreground">No personal rates set: offers use the shift or project rate.</p> : null}
       <ul className="grid gap-1.5 text-sm">
         {current.map((r) => (
           <li key={r.id} className="flex justify-between gap-3">

@@ -45,15 +45,18 @@ describe("rate resolution (rule 3)", () => {
   const none = { projectStaffRate: null, shiftRate: null, projectRoleRate: null, staffDefaultRate: null };
   it("follows the documented precedence", () => {
     expect(resolveRate({ projectStaffRate: 3200, shiftRate: 2500, projectRoleRate: 2700, staffDefaultRate: 2600 })).toEqual({ rateCents: 3200, source: "project_staff" });
-    expect(resolveRate({ ...none, shiftRate: 2500, projectRoleRate: 2700, staffDefaultRate: 2600 })).toEqual({ rateCents: 2500, source: "shift" });
-    expect(resolveRate({ ...none, projectRoleRate: 2700, staffDefaultRate: 2600 })).toEqual({ rateCents: 2700, source: "project_role" });
+    // A person's own rate beats the shift's and the project's role rate.
+    expect(resolveRate({ ...none, shiftRate: 2500, projectRoleRate: 2700, staffDefaultRate: 3250 })).toEqual({ rateCents: 3250, source: "default" });
+    expect(resolveRate({ ...none, shiftRate: 2500, projectRoleRate: 2700 })).toEqual({ rateCents: 2500, source: "shift" });
+    expect(resolveRate({ ...none, projectRoleRate: 2700 })).toEqual({ rateCents: 2700, source: "project_role" });
     expect(resolveRate({ ...none, staffDefaultRate: 2600 })).toEqual({ rateCents: 2600, source: "default" });
   });
   it("returns null when no rate is known", () => {
     expect(resolveRate(none)).toBeNull();
   });
   it("treats zero as a real rate, not a missing one", () => {
-    expect(resolveRate({ ...none, shiftRate: 0, staffDefaultRate: 2600 })).toEqual({ rateCents: 0, source: "shift" });
+    expect(resolveRate({ ...none, shiftRate: 0, projectRoleRate: 2600 })).toEqual({ rateCents: 0, source: "shift" });
+    expect(resolveRate({ ...none, projectStaffRate: 0, staffDefaultRate: 2600 })).toEqual({ rateCents: 0, source: "project_staff" });
   });
 });
 

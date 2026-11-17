@@ -270,8 +270,11 @@ export default async function StaffProfilePage({ params }: PageProps<"/dashboard
           {detail.rates ? (
             <Card>
               <CardHeader>
-                <CardTitle>Default rates</CardTitle>
-                <CardDescription>Confidential. Never visible to other staff.</CardDescription>
+                <CardTitle>Personal rates</CardTitle>
+                <CardDescription>
+                  Used automatically for this person&apos;s offers on every project, over the shift or project rate. To pay them differently on one project, set a rate for them in
+                  that project&apos;s Setup. Confidential: never visible to other staff.
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 <RatesCard
