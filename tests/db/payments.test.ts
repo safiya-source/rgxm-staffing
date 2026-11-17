@@ -104,6 +104,28 @@ describe("payment batches", () => {
     expect(payroll.reference).toMatch(/^PAY-/);
   });
 
+  it("take a rate-correction adjustment on a line before export, added to the same batch", async () => {
+    const x = await approved({ rate: 2800 });
+    const y = await approved();
+    const batch = await pay.createBatch(finance.id, { type: "contractor", payPeriodId: null, payableIds: [x.payable.id, y.payable.id] });
+    await pay.approveBatch(finance.id, batch.id);
+    // 8 h at $28 should have been $32.50: $36.00 more.
+    await expect(pay.adjustBatchLine(finance.id, { batchId: batch.id, payableId: x.payable.id, newRateCents: 2800, reason: "Personal PA rate" })).rejects.toThrow(/already paid/);
+    const adj = await pay.adjustBatchLine(finance.id, { batchId: batch.id, payableId: x.payable.id, newRateCents: 3250, reason: "Personal PA rate" });
+    expect(adj).toMatchObject({ category: "adjustment", baseCents: 3600, adjustsPayableId: x.payable.id, status: "pending" });
+    expect(adj.description).toMatch(/Rate correction \$28\.00 to \$32\.50\/h for 8\.00 h: Personal PA rate/);
+    expect(await status("payable_items", adj.id)).toBe("batched");
+    const b = await one<{ status: string; total_cents: number }>("select status, total_cents::int from payment_batches where id = $1", [batch.id]);
+    // Adding to an approved batch cancels the approval.
+    expect(b).toEqual({ status: "draft", total_cents: x.payable.total_cents + y.payable.total_cents + adj.totalCents });
+    await expect(pay.adjustBatchLine(finance.id, { batchId: batch.id, payableId: adj.id, amountCents: 100, reason: "Another one" })).rejects.toThrow(/original line/);
+    // It exports with the batch, its own row in the bank file.
+    await pay.approveBatch(finance.id, batch.id);
+    const file = await pay.exportBatch(finance.id, batch.id, "csv_generic");
+    expect(file.rowCount).toBe(3);
+    await expect(pay.adjustBatchLine(finance.id, { batchId: batch.id, payableId: y.payable.id, amountCents: 500, reason: "Too late now" })).rejects.toThrow(/hasn't been exported/);
+  });
+
   it("lock their timesheets, can be approved by their creator, and export once (duplicate protection)", async () => {
     const x = await approved();
     const y = await approved();
