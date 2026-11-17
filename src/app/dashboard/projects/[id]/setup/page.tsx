@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { canAny, canOnProject } from "@/server/authz/permissions";
 import { getProjectHeader, getProjectSetup, getServiceCategoryOptions, projectTaxWarnings } from "@/server/queries/projects";
-import { getProjectRates } from "@/server/queries/staffing";
+import { getProjectRatePeople, getProjectRates } from "@/server/queries/staffing";
 import { loadProjectScopes, requireInternal, toActor } from "@/server/session";
 import { updateProjectAction } from "../../actions";
 import { ProjectForm } from "../../project-form";
@@ -22,7 +22,7 @@ export default async function ProjectSetupPage({ params }: PageProps<"/dashboard
   const canEdit = canOnProject(actor, "project.edit", scope);
   const showRates = canAny(actor, "rates.view");
   const p = header!.project;
-  const overrides = showRates ? await getProjectRates(id) : [];
+  const [overrides, ratePeople] = showRates ? await Promise.all([getProjectRates(id), getProjectRatePeople(id)]) : [[], []];
   const [serviceCategories, taxWarnings, compSettings] = await Promise.all([getServiceCategoryOptions(), projectTaxWarnings(p), getCompensationSettings(id)]);
   const canConfigureComp = canOnProject(actor, "compensation.configure", scope);
 
@@ -84,7 +84,7 @@ export default async function ProjectSetupPage({ params }: PageProps<"/dashboard
               <CardTitle>Project rate overrides</CardTitle>
             </CardHeader>
             <CardContent>
-              <RateOverrides projectId={id} overrides={overrides} canEdit={canOnProject(actor, "rates.project_override", scope)} />
+              <RateOverrides projectId={id} overrides={overrides} people={ratePeople} canEdit={canOnProject(actor, "rates.project_override", scope)} />
             </CardContent>
           </Card>
         ) : null}

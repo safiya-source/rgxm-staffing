@@ -15,6 +15,7 @@ import {
   staffRates,
   staffRoles,
   staffSkills,
+  staffSensitive,
 } from "@/server/db/schema";
 
 const csvList = z
@@ -170,7 +171,7 @@ export function talentWhere(f: TalentFilters, opts: { canFilterRates: boolean; t
   return conds.length ? and(...conds) : undefined;
 }
 
-export async function searchTalent(f: TalentFilters, opts: { canSeeRates: boolean; timeZone: string; limit?: number }) {
+export async function searchTalent(f: TalentFilters, opts: { canSeeRates: boolean; canSeeTax?: boolean; timeZone: string; limit?: number }) {
   const where = talentWhere(f, { canFilterRates: opts.canSeeRates, timeZone: opts.timeZone });
   const limit = opts.limit ?? PAGE_SIZE;
   const p = staffProfiles;
@@ -212,9 +213,24 @@ export async function searchTalent(f: TalentFilters, opts: { canSeeRates: boolea
     rates = r.reduce((m, x) => m.set(x.staffId, [...(m.get(x.staffId) ?? []), x]), new Map<string, { role: string; rateCents: number }[]>());
   }
 
+  // GST/HST status (Finance and admins): whether they charge HST and whether it's confirmed.
+  type Gst = { status: "yes" | "no" | "unsure" | "unknown"; verification: "unverified" | "verified" | "rejected"; number: string | null };
+  const gst = new Map<string, Gst>();
+  if (opts.canSeeTax && rows.length) {
+    const g = await db
+      .select({ staffId: staffSensitive.staffId, status: staffSensitive.gstRegistrationStatus, verification: staffSensitive.gstVerificationStatus, number: staffSensitive.gstHstNumber })
+      .from(staffSensitive)
+      .where(inArray(staffSensitive.staffId, rows.map((x) => x.id)));
+    for (const x of g) gst.set(x.staffId, { status: x.status as Gst["status"], verification: x.verification as Gst["verification"], number: x.number });
+  }
+
   return {
     total: total?.n ?? 0,
-    rows: rows.map((r) => ({ ...r, rates: rates.get(r.id) ?? [] })),
+    rows: rows.map((r) => ({
+      ...r,
+      rates: rates.get(r.id) ?? [],
+      gst: opts.canSeeTax ? (gst.get(r.id) ?? ({ status: "unknown", verification: "unverified", number: null } as Gst)) : null,
+    })),
   };
 }
 

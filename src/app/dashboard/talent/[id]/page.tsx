@@ -18,6 +18,7 @@ import { updateStaffAction } from "../actions";
 import { StaffForm } from "../staff-form";
 import { InviteButton } from "./invite-button";
 import { OnboardingCard } from "./onboarding-card";
+import { TaxIndicator } from "./tax-indicator";
 import { PrivacyCard } from "./privacy-card";
 import { CertificationsEditor, EmergencyContact, NotesCard, PaySetup, RatesCard, RolesEditor, StatusControl, TagsEditor } from "./sections";
 
@@ -91,6 +92,10 @@ export default async function StaffProfilePage({ params }: PageProps<"/dashboard
           </div>
         ) : null}
       </div>
+
+      {detail.pay?.gst ? (
+        <TaxIndicator gst={{ status: detail.pay.gst.status, verification: detail.pay.gst.verification, number: detail.pay.tax?.gstHstNumber ?? null }} canVerify={canAny(actor, "tax.verify_registration")} />
+      ) : null}
 
       <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-5">
         {[
@@ -265,8 +270,11 @@ export default async function StaffProfilePage({ params }: PageProps<"/dashboard
           {detail.rates ? (
             <Card>
               <CardHeader>
-                <CardTitle>Default rates</CardTitle>
-                <CardDescription>Confidential. Never visible to other staff.</CardDescription>
+                <CardTitle>Personal rates</CardTitle>
+                <CardDescription>
+                  Used automatically for this person&apos;s offers on every project, over the shift or project rate. To pay them differently on one project, set a rate for them in
+                  that project&apos;s Setup. Confidential: never visible to other staff.
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 <RatesCard

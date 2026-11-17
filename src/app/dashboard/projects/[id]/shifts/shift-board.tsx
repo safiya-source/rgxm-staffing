@@ -24,6 +24,8 @@ import type { BreakPolicyOption, LocationOption, RequirementOption, ShiftItem, T
 export function ShiftBoard(props: {
   projectId: string;
   canManage: boolean;
+  /** Can open the Staffing board (offers, bookings): rows link there. */
+  canStaff?: boolean;
   showRates: boolean;
   defaultRates: Partial<Record<FieldRole, number>>;
   includeCancelled: boolean;
@@ -142,7 +144,18 @@ export function ShiftBoard(props: {
                 const overnight = utcToZoned(new Date(s.endsAt), s.timezone).date !== date;
                 const full = s.confirmed >= s.headcount;
                 return (
-                  <div key={s.id} className={`flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 ${s.status === "cancelled" ? "opacity-60" : ""}`}>
+                  <div
+                    key={s.id}
+                    className={`relative flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 ${s.status === "cancelled" ? "opacity-60" : ""} ${props.canStaff && s.status !== "cancelled" && s.status !== "draft" ? "hover:bg-accent/50" : ""}`}
+                  >
+                    {props.canStaff && s.status !== "cancelled" && s.status !== "draft" ? (
+                      // The whole row opens this shift's staffing (who's offered, confirmed; add people).
+                      <Link
+                        href={`/dashboard/staffing/${props.projectId}?shift=${s.id}`}
+                        className="absolute inset-0 rounded-[inherit] focus-visible:outline-2 focus-visible:outline-ring"
+                        aria-label={`Open staffing for ${FIELD_ROLE_NAMES[s.role]}, ${formatInZone(s.startsAt, s.timezone, "EEE MMM d, h:mm a")}`}
+                      />
+                    ) : null}
                     <div className="w-44 shrink-0">
                       <p className="font-medium tabular-nums">
                         {formatInZone(s.startsAt, s.timezone, "h:mm a")} – {formatInZone(s.endsAt, s.timezone, "h:mm a")}
@@ -169,6 +182,7 @@ export function ShiftBoard(props: {
                       <StatusBadge kind="shift" status={s.status} />
                     </div>
                     {props.canManage && s.status !== "cancelled" && s.status !== "completed" ? (
+                      <div className="relative z-10">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button variant="ghost" size="icon" aria-label="Shift actions">
@@ -187,6 +201,7 @@ export function ShiftBoard(props: {
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
+                      </div>
                     ) : (
                       <span className="w-9" />
                     )}

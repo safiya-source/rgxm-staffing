@@ -262,7 +262,8 @@ const AGREED_VIA_PHRASE: Record<AgreedVia, string> = { text: "by text message", 
  * agreed it with them (by text, in person, …). Same checks as a confirmation (active, qualified,
  * rate, capacity, overlaps, onboarding); anyone who fails one is skipped with the reason. Works for
  * shifts that have started or ended (up to LATE_BOOKING_DAYS ago) so on-the-spot hires can be added
- * afterwards. Each booking records how it was agreed.
+ * afterwards. Each booking records how it was agreed. Someone with an open offer on the shift (offered,
+ * interested, waiting) has that offer confirmed directly, since RGXM has agreed it with them.
  */
 export async function bookDirectly(
   actorId: string,
@@ -291,9 +292,10 @@ export async function bookDirectly(
       const people = await tx.select({ id: staffProfiles.id, status: staffProfiles.status }).from(staffProfiles).where(inArray(staffProfiles.id, staffIds));
       const qualified = await tx.select({ staffId: staffRoles.staffId, role: staffRoles.role }).from(staffRoles).where(inArray(staffRoles.staffId, staffIds));
       const existing = await tx
-        .select({ shiftId: bookings.shiftId, staffId: bookings.staffId })
+        .select({ id: bookings.id, shiftId: bookings.shiftId, staffId: bookings.staffId, status: bookings.status, offeredRateCents: bookings.offeredRateCents })
         .from(bookings)
-        .where(and(inArray(bookings.shiftId, input.shiftIds), inArray(bookings.staffId, staffIds), inArray(bookings.status, ACTIVE_STATUSES)));
+        .where(and(inArray(bookings.shiftId, input.shiftIds), inArray(bookings.staffId, staffIds), inArray(bookings.status, [...ACTIVE_STATUSES, "completed"])))
+        .for("update");
       const rates = await resolveRates(tx, shiftRows, staffIds);
       const ready = new Map<string, boolean>();
       for (const id of staffIds) ready.set(id, (await bookingBlockers(tx, id)).length === 0);
@@ -302,19 +304,33 @@ export async function bookDirectly(
       const created: { id: string; staffId: string; shiftId: string }[] = [];
       const skipped: { staffId: string; shiftId: string; reason: SkipReason }[] = [];
       for (const s of [...shiftRows].sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime())) {
-        const [{ n }] = (await tx.select({ n: count() }).from(bookings).where(and(eq(bookings.shiftId, s.id), eq(bookings.status, "confirmed")))) as [{ n: number }];
+        // Completed bookings (the shift has ended) still take a spot.
+        const [{ n }] = (await tx.select({ n: count() }).from(bookings).where(and(eq(bookings.shiftId, s.id), inArray(bookings.status, ["confirmed", "completed"])))) as [{ n: number }];
         let filled = n;
         for (const staffId of staffIds) {
           const skip = (r: SkipReason) => skipped.push({ staffId, shiftId: s.id, reason: r });
           const person = people.find((p) => p.id === staffId);
           if (!person || person.status !== "active") { skip("not_active"); continue; }
           if (!qualified.some((q) => q.staffId === staffId && q.role === s.role)) { skip("not_qualified"); continue; }
-          if (existing.some((e) => e.shiftId === s.id && e.staffId === staffId)) { skip("already_on_shift"); continue; }
+          const prior = existing.find((e) => e.shiftId === s.id && e.staffId === staffId);
+          if (prior && (prior.status === "confirmed" || prior.status === "completed")) { skip("already_on_shift"); continue; }
           if (!ready.get(staffId)) { skip("not_ready"); continue; }
           const rate = rates.get(`${s.id}:${staffId}`);
-          if (!rate) { skip("no_rate"); continue; }
+          if (!rate && !prior?.offeredRateCents) { skip("no_rate"); continue; }
           if (filled >= s.headcount) { skip("full"); continue; }
           if ((await findConflicts(tx, staffId, s)).length) { skip("conflict"); continue; }
+          if (prior) {
+            // An open offer they never answered (or we never confirmed): confirm it at the offered rate.
+            await tx
+              .update(bookings)
+              .set({ status: "confirmed", agreedRateCents: prior.offeredRateCents ?? rate!.rateCents, confirmedAt: now, confirmedBy: actorId, waitlistPosition: null })
+              .where(eq(bookings.id, prior.id));
+            await tx.insert(bookingStatusHistory).values({ bookingId: prior.id, fromStatus: prior.status, toStatus: "confirmed", actorId, reason });
+            await enqueue(tx, { type: "booking.confirmed", payload: { bookingId: prior.id }, dedupeKey: `booking.confirmed:${prior.id}` });
+            created.push({ id: prior.id, staffId, shiftId: s.id });
+            filled++;
+            continue;
+          }
           const [row] = await tx
             .insert(bookings)
             .values({
@@ -325,9 +341,9 @@ export async function bookDirectly(
               startsAt: s.startsAt,
               endsAt: s.endsAt,
               status: "confirmed",
-              offeredRateCents: rate.rateCents,
-              agreedRateCents: rate.rateCents,
-              rateSource: rate.source,
+              offeredRateCents: rate!.rateCents,
+              agreedRateCents: rate!.rateCents,
+              rateSource: rate!.source,
               currency: s.currency,
               offeredAt: now,
               offeredBy: actorId,

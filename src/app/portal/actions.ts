@@ -139,6 +139,7 @@ export async function saveMyTaxDetailsAction(_prev: ActionResult, formData: Form
       if (err instanceof TaxDetailsError) throw new UserFacingError(err.message);
       throw err;
     }
+    kickOutbox();
     revalidatePath("/portal/profile/tax");
     return { ok: true, message: "Tax details saved." };
   });

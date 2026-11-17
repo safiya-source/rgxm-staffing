@@ -43,6 +43,7 @@ export function OfferBuilder({
   showRates,
   canBookDirectly = false,
   initialMode = "offer",
+  initialShiftIds,
   onClose,
 }: {
   projectId: string;
@@ -51,13 +52,15 @@ export function OfferBuilder({
   /** People with confirm rights can skip offer → interested → confirm when it was already agreed. */
   canBookDirectly?: boolean;
   initialMode?: "offer" | "book";
+  /** Pre-chosen shifts (e.g. the shift that was clicked); defaults to those with open spots. */
+  initialShiftIds?: string[];
   onClose: () => void;
 }) {
   const router = useRouter();
   const [mode, setMode] = useState<"offer" | "book">(canBookDirectly ? initialMode : "offer");
   const [agreedVia, setAgreedVia] = useState("text");
   const [agreedNote, setAgreedNote] = useState("");
-  const [shiftIds, setShiftIds] = useState(group.shifts.filter((s) => s.confirmed < s.headcount).map((s) => s.id).concat(group.shifts.every((s) => s.confirmed >= s.headcount) ? group.shifts.map((s) => s.id) : []));
+  const [shiftIds, setShiftIds] = useState(initialShiftIds?.length ? initialShiftIds : group.shifts.filter((s) => s.confirmed < s.headcount).map((s) => s.id).concat(group.shifts.every((s) => s.confirmed >= s.headcount) ? group.shifts.map((s) => s.id) : []));
   const [q, setQ] = useState("");
   const [hideConflicts, setHideConflicts] = useState(true);
   const [hideUnavailable, setHideUnavailable] = useState(true);
@@ -91,12 +94,14 @@ export function OfferBuilder({
   const rows = useMemo(() => {
     return (candidates ?? []).filter((c) => {
       const per = chosenShifts.map((s) => c.perShift[s.id]).filter(Boolean);
-      if (hideConflicts && per.length && per.every((x) => x!.conflict || x!.existingStatus)) return false;
+      // In book mode an open offer isn't a blocker: booking directly confirms it.
+      const taken = (x: (typeof per)[number]) => x!.conflict || (mode === "book" ? x!.existingStatus === "confirmed" || x!.existingStatus === "completed" : Boolean(x!.existingStatus));
+      if (hideConflicts && per.length && per.every(taken)) return false;
       if (hideUnavailable && per.length && per.every((x) => x!.availability === "unavailable")) return false;
       if (onlyDeclared && !per.some((x) => x!.availability === "available")) return false;
       return true;
     });
-  }, [candidates, chosenShifts, hideConflicts, hideUnavailable, onlyDeclared]);
+  }, [candidates, chosenShifts, hideConflicts, hideUnavailable, onlyDeclared, mode]);
 
   // Offers that will actually be created: skip shifts where they're busy, already offered or have no rate.
   const offerable = (c: Candidate) => chosenShifts.filter((s) => {
@@ -169,7 +174,7 @@ export function OfferBuilder({
         ) : null}
 
         <fieldset>
-          <legend className="mb-2 text-sm font-medium">Shifts to offer</legend>
+          <legend className="mb-2 text-sm font-medium">{mode === "book" ? "Shifts to book" : "Shifts to offer"}</legend>
           <div className="flex flex-wrap gap-2">
             {group.shifts.map((s) => {
               const on = shiftIds.includes(s.id);
@@ -192,7 +197,7 @@ export function OfferBuilder({
             <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filter by name" aria-label="Filter candidates by name" className="h-9 pl-9" />
           </div>
           <label className="flex items-center gap-2">
-            <Checkbox checked={hideConflicts} onCheckedChange={(c) => setHideConflicts(Boolean(c))} /> Hide people already booked or offered
+            <Checkbox checked={hideConflicts} onCheckedChange={(c) => setHideConflicts(Boolean(c))} /> {mode === "book" ? "Hide people already booked" : "Hide people already booked or offered"}
           </label>
           <label className="flex items-center gap-2">
             <Checkbox checked={hideUnavailable} onCheckedChange={(c) => setHideUnavailable(Boolean(c))} /> Hide marked unavailable
@@ -255,7 +260,11 @@ export function OfferBuilder({
                         const x = c.perShift[s.id];
                         if (!x) return <td key={s.id} />;
                         const [Icon, label, cls] = x.existingStatus
-                          ? [CheckIcon, EXISTING_LABEL[x.existingStatus] ?? x.existingStatus, "text-muted-foreground"]
+                          ? [
+                              CheckIcon,
+                              `${EXISTING_LABEL[x.existingStatus] ?? x.existingStatus}${mode === "book" && !["confirmed", "completed"].includes(x.existingStatus) ? " · will be confirmed" : ""}`,
+                              "text-muted-foreground",
+                            ]
                           : x.conflict
                             ? [TriangleAlertIcon, "Booked elsewhere", "text-warning"]
                             : x.availability === "available"

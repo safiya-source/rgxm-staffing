@@ -61,7 +61,8 @@ test("offer → interest → question → confirmation → brief acknowledgement
   await expect(rgxm.getByText("Confirmed 4.")).toBeVisible();
   await expect(rgxm.getByRole("button", { name: /Jordan Lee, .*: Confirmed/ })).toHaveCount(4);
   const agreed = await pool.query("select distinct agreed_rate_cents from bookings where staff_id = $1 and project_id = $2 and status = 'confirmed'", [staff, projectId]);
-  expect(agreed.rows).toEqual([{ agreed_rate_cents: 2500 }]);
+  // Jordan has a personal BA rate ($27), which applies over the shift's $25.
+  expect(agreed.rows).toEqual([{ agreed_rate_cents: 2700 }]);
 
   // 4. PM uploads a brief that requires acknowledgement.
   const pm = await (await browser.newContext()).newPage();
@@ -88,7 +89,7 @@ test("offer → interest → question → confirmation → brief acknowledgement
   await ba.goto("/portal/schedule");
   await ba.getByRole("link", { name: /Cadbury Sampling Activation · Brand Ambassador/ }).first().click();
   await expect(ba.getByText("Agreed rate")).toBeVisible();
-  await expect(ba.getByText("$25.00/hour")).toBeVisible();
+  await expect(ba.getByText("$27.00/hour")).toBeVisible();
   await expect(ba.getByText("Reviewed")).toBeVisible();
   // Long addresses must wrap rather than make the page scroll sideways on phones.
   const [scrollWidth, clientWidth] = await ba.evaluate(() => [document.documentElement.scrollWidth, document.documentElement.clientWidth]);

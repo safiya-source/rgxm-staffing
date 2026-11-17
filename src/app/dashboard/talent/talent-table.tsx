@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { NativeSelect } from "@/components/ui/native-select";
+import { TaxChip } from "./[id]/tax-indicator";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatMoney } from "@/lib/format";
 import { addToListAction, approveContractorsAction, inviteStaffAction } from "./actions";
@@ -29,6 +30,8 @@ export type TalentTableRow = {
   lastShiftAt: string | null;
   hasAccount: boolean;
   isDemo: boolean;
+  /** Only for Finance and admins. */
+  gst?: { status: "yes" | "no" | "unsure" | "unknown"; verification: "unverified" | "verified" | "rejected"; number: string | null } | null;
 };
 
 export function TalentTable({
@@ -202,7 +205,10 @@ export function TalentTable({
                   {r.lastShiftAt ? <TimeAgo date={r.lastShiftAt} /> : "—"}
                 </TableCell>
                 <TableCell>
-                  <StatusBadge kind="staff" status={r.status} />
+                  <div className="flex flex-wrap items-center gap-1">
+                    <StatusBadge kind="staff" status={r.status} />
+                    {r.gst ? <TaxChip gst={r.gst} /> : null}
+                  </div>
                 </TableCell>
               </TableRow>
             ))}

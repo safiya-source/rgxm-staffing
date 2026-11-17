@@ -10,6 +10,7 @@ import { PROVINCE_CODES } from "@/lib/provinces";
 import { recordAudit } from "@/server/audit";
 import { db } from "@/server/db";
 import { staffProfiles, staffSensitive } from "@/server/db/schema";
+import { enqueue } from "@/server/notify/outbox";
 import { invoicePendingLines } from "./invoices";
 
 export class TaxDetailsError extends Error {}
@@ -88,6 +89,10 @@ export async function saveTaxDetails(actorId: string, staffId: string, raw: TaxD
       },
       tx,
     );
+    // Tell Finance when the GST/HST answer is new or changed, so they can confirm it.
+    if (regChanged && opts.bySelf) {
+      await enqueue(tx, { type: "tax.registration_submitted", payload: { staffId, status: values.gstRegistrationStatus }, dedupeKey: `tax.registration_submitted:${staffId}:${Date.now()}` });
+    }
   });
   // Self-billed invoices need the contractor's name and address; issue any that were waiting for them.
   await invoicePendingLines(staffId, actorId);
