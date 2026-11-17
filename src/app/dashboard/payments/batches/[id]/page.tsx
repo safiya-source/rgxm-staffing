@@ -13,6 +13,9 @@ import { CATEGORY_LABEL } from "@/server/domain/tax-engine";
 import { tallyByProject } from "@/server/domain/project-tally";
 import { getBatchDetail } from "@/server/queries/payments";
 import { requireInternal } from "@/server/session";
+import { ActionForm } from "@/components/app/action-form";
+import { Input } from "@/components/ui/input";
+import { adjustBatchLineAction } from "../../actions";
 import { AttemptBadge, BatchActions, LineReconcile, SupersedeExport } from "./batch-actions";
 
 export const metadata: Metadata = { title: "Payment batch" };
@@ -129,7 +132,28 @@ export default async function BatchPage({ params }: PageProps<"/dashboard/paymen
                     {i.evidence ? <span className="block text-muted-foreground">Evidence: {i.evidence}</span> : null}
                     {i.failureReason && i.state !== "settled" ? <span className="block text-muted-foreground">{i.failureReason}</span> : null}
                   </TableCell>
-                  <TableCell>{b.status === "exported" || (b.status === "paid" && i.state === "settled") ? <LineReconcile batchId={b.id} payableId={i.payableId} state={i.state} /> : null}</TableCell>
+                  <TableCell>
+                    {b.status === "exported" || (b.status === "paid" && i.state === "settled") ? <LineReconcile batchId={b.id} payableId={i.payableId} state={i.state} /> : null}
+                    {(b.status === "draft" || b.status === "approved") && i.active && i.category !== "adjustment" ? (
+                      <details className="text-xs">
+                        <summary className="cursor-pointer text-muted-foreground hover:text-foreground">Adjust</summary>
+                        <ActionForm action={adjustBatchLineAction} hidden={{ batchId: b.id, payableId: i.payableId }} submitLabel="Add to batch" className="mt-2 w-64">
+                          {i.category === "fee" ? (
+                            <label className="grid w-full gap-1 text-muted-foreground">
+                              Correct hourly rate (now {formatMoney(i.rateCents, i.currency)})
+                              <Input name="rate" inputMode="decimal" placeholder="32.50" aria-label={`Corrected rate for ${i.staffName}, ${i.serviceDate}`} className="h-8" required />
+                            </label>
+                          ) : (
+                            <label className="grid w-full gap-1 text-muted-foreground">
+                              Amount (use - for a credit)
+                              <Input name="amount" inputMode="decimal" placeholder="25.00" aria-label={`Adjustment for ${i.staffName}, ${i.serviceDate}`} className="h-8" required />
+                            </label>
+                          )}
+                          <Input name="reason" placeholder="Why, e.g. personal PA rate" aria-label={`Reason for ${i.staffName}, ${i.serviceDate}`} className="h-8 w-full" required />
+                        </ActionForm>
+                      </details>
+                    ) : null}
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
