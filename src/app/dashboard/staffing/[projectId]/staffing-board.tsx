@@ -80,10 +80,13 @@ export function StaffingBoard({
   group,
   rows,
   openOffer = false,
+  focusShiftId = null,
 }: {
   projectId: string;
   can: Can;
   openOffer?: boolean;
+  /** A shift opened from the project's Shifts tab: highlighted, and pre-chosen when adding people. */
+  focusShiftId?: string | null;
   group: { role: string; locationName: string; timezone: string; shifts: GroupShift[] };
   rows: BoardRow[];
 }) {
@@ -96,6 +99,7 @@ export function StaffingBoard({
   const [cancelling, setCancelling] = useState<BoardRow | null>(null);
   const [now] = useState(() => Date.now());
 
+  const focus = focusShiftId ? group.shifts.find((s) => s.id === focusShiftId) : undefined;
   const cells = useMemo(() => latestBy(rows), [rows]);
   const people = useMemo(() => {
     const m = new Map<string, { staffId: string; name: string; city: string | null; isDemo: boolean }>();
@@ -187,6 +191,33 @@ export function StaffingBoard({
         </div>
       </div>
 
+      {focus ? (
+        <div role="region" aria-label="Selected shift" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-brand/30 bg-brand/5 px-4 py-3 text-sm">
+          <p>
+            <span className="font-medium">
+              {formatInZone(focus.startsAt, group.timezone, "EEEE, MMMM d · h:mm a")} – {formatInZone(focus.endsAt, group.timezone, "h:mm a")}
+            </span>
+            <span className="text-muted-foreground">
+              {" "}
+              · {focus.confirmed}/{focus.headcount} confirmed{focus.pending ? ` · ${focus.pending} offer${focus.pending === 1 ? "" : "s"} waiting` : ""}
+              {new Date(focus.endsAt).getTime() < now ? " · this shift has ended" : ""}
+            </span>
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {can.confirm ? (
+              <Button size="sm" variant={new Date(focus.endsAt).getTime() < now ? "default" : "outline"} onClick={() => setOffering("book")}>
+                <UserCheckIcon /> Book people onto this shift
+              </Button>
+            ) : null}
+            {can.offer && new Date(focus.endsAt).getTime() >= now ? (
+              <Button size="sm" onClick={() => setOffering("offer")}>
+                <SendIcon /> Send offers for this shift
+              </Button>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+
       <dl className="grid grid-cols-4 gap-2 sm:grid-cols-8">
         {summary.map(([label, n]) => (
           <div key={label} className="rounded-lg border bg-card px-3 py-2">
@@ -250,7 +281,7 @@ export function StaffingBoard({
                 </th>
                 <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">Person</th>
                 {group.shifts.map((s) => (
-                  <th key={s.id} className="px-2 py-2 text-left text-xs font-medium text-muted-foreground">
+                  <th key={s.id} className={cn("px-2 py-2 text-left text-xs font-medium text-muted-foreground", s.id === focusShiftId && "bg-brand/10")}>
                     <span className="block text-foreground">{formatInZone(s.startsAt, group.timezone, "EEE MMM d")}</span>
                     {formatInZone(s.startsAt, group.timezone, "h:mma").toLowerCase()} ·{" "}
                     <span className={cn("tabular-nums", s.confirmed >= s.headcount ? "text-success" : undefined)}>
@@ -344,7 +375,7 @@ export function StaffingBoard({
       )}
 
       {offering ? (
-        <OfferBuilder projectId={projectId} group={group} showRates={can.rates} canBookDirectly={can.confirm} initialMode={offering} onClose={() => setOffering(false)} />
+        <OfferBuilder projectId={projectId} group={group} showRates={can.rates} canBookDirectly={can.confirm} initialMode={offering} initialShiftIds={focusShiftId ? [focusShiftId] : undefined} onClose={() => setOffering(false)} />
       ) : null}
 
       <ConflictDialog state={conflict} pending={pending} onClose={() => setConflict(null)} onOverride={(reason) => conflict && confirm(conflict.bookingId, conflict.name, reason)} />

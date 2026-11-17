@@ -76,6 +76,20 @@ describe("GST/HST registration (contractor-facing)", () => {
     expect(await getTaxDetails(staffId)).toMatchObject({ gstRegistrationStatus: "unsure", gstHstNumber: null, taxRegistered: false });
   });
 
+  it("tells Finance when a contractor adds or changes their GST/HST answer (not when Finance edits it)", async () => {
+    const { userId, staffId } = await contractor();
+    const events = async () => (await pool.query("select payload->>'status' s from outbox_events where type = 'tax.registration_submitted' and payload->>'staffId' = $1 order by created_at", [staffId])).rows.map((r) => r.s);
+    await saveTaxDetails(userId, staffId, registered, { bySelf: true });
+    expect(await events()).toEqual(["yes"]);
+    // Same answer re-saved: no new alert.
+    await saveTaxDetails(userId, staffId, { ...registered, mailingCity: "Toronto" }, { bySelf: true });
+    expect(await events()).toEqual(["yes"]);
+    await saveTaxDetails(finance.id, staffId, notRegistered);
+    expect(await events()).toEqual(["yes"]);
+    await saveTaxDetails(userId, staffId, registered, { bySelf: true });
+    expect(await events()).toEqual(["yes", "yes"]);
+  });
+
   it("resets Finance's verification when the answer or number changes, and keeps numbers out of the audit log", async () => {
     const { userId, staffId } = await contractor();
     await saveTaxDetails(userId, staffId, registered, { bySelf: true });

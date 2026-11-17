@@ -12,9 +12,10 @@ import { FIELD_ROLE_NAMES, FIELD_ROLES, type FieldRole } from "@/lib/roles";
 
 type Override = { id: string; role: FieldRole; staffId: string | null; staffName: string | null; rateCents: number; approvedBy: string | null };
 
-export function RateOverrides({ projectId, overrides, canEdit }: { projectId: string; overrides: Override[]; canEdit: boolean }) {
+export function RateOverrides({ projectId, overrides, people = [], canEdit }: { projectId: string; overrides: Override[]; people?: { id: string; name: string; rates: string | null }[]; canEdit: boolean }) {
   const router = useRouter();
   const [role, setRole] = useState<FieldRole>("BA");
+  const [staffId, setStaffId] = useState("");
   const [rate, setRate] = useState("");
   const [pending, start] = useTransition();
   const done = (res: { ok: boolean; message?: string; error?: string }) => {
@@ -25,7 +26,8 @@ export function RateOverrides({ projectId, overrides, canEdit }: { projectId: st
   return (
     <div className="grid gap-3">
       <p className="text-sm text-muted-foreground">
-        Overrides the offer rate on this project. Precedence: a rate for a specific person, then the shift&apos;s rate, then a role rate here, then each person&apos;s default. Confirmed bookings keep their agreed rate.
+        Which rate an offer uses on this project: a rate set here for a specific person, then the person&apos;s own rate (from their talent profile), then the shift&apos;s
+        rate, then a role rate set here. Set a person&apos;s rate here when their usual rate doesn&apos;t apply to this project. Confirmed bookings keep their agreed rate.
       </p>
       {overrides.length === 0 ? <p className="text-sm text-muted-foreground">No overrides.</p> : null}
       {overrides.map((o) => (
@@ -50,6 +52,15 @@ export function RateOverrides({ projectId, overrides, canEdit }: { projectId: st
               </option>
             ))}
           </NativeSelect>
+          <NativeSelect value={staffId} onChange={(e) => setStaffId(e.target.value)} className="h-9 w-64" aria-label="Who it's for">
+            <option value="">Everyone in the role</option>
+            {people.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+                {p.rates ? ` (own rate: ${p.rates})` : ""}
+              </option>
+            ))}
+          </NativeSelect>
           <Input value={rate} onChange={(e) => setRate(e.target.value)} placeholder="27.50" inputMode="decimal" className="h-9 w-24" aria-label="Hourly rate" />
           <Button
             size="sm"
@@ -57,12 +68,12 @@ export function RateOverrides({ projectId, overrides, canEdit }: { projectId: st
             disabled={pending || !rate.trim()}
             onClick={() =>
               start(async () => {
-                done(await setProjectRateAction(projectId, { role, staffId: null, rate }));
+                done(await setProjectRateAction(projectId, { role, staffId: staffId || null, rate }));
                 setRate("");
               })
             }
           >
-            Set role rate
+            {staffId ? "Set rate for this person" : "Set role rate"}
           </Button>
         </div>
       ) : null}
