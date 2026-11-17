@@ -347,7 +347,48 @@ export async function createAdjustment(actorId: string, input: { payableId: stri
   return db.transaction((tx) => adjustInTx(tx, actorId, input));
 }
 
-async function adjustInTx(tx: Tx, actorId: string, input: { payableId: string; amountCents: number; reason: string }) {
+/**
+ * Adjusts a line in a batch that hasn't been exported, and adds the adjustment to the same batch
+ * (cancelling an approval, if any). For an hourly line, give the corrected hourly rate and the
+ * difference is worked out from the approved hours; otherwise give an amount.
+ */
+export async function adjustBatchLine(actorId: string, input: { batchId: string; payableId: string; reason: string; newRateCents?: number; amountCents?: number }) {
+  assertUuids([input.batchId, input.payableId]);
+  const reason = input.reason.trim();
+  if (reason.length < 5) throw new PaymentError("Explain the adjustment.");
+  return db.transaction(async (tx) => {
+    const b = await lockBatch(tx, input.batchId);
+    if (b.status !== "draft" && b.status !== "approved") throw new PaymentError("Lines can only be adjusted in a batch that hasn't been exported. Add the adjustment to a later batch instead.");
+    const [item] = await tx.select().from(paymentBatchItems).where(and(eq(paymentBatchItems.batchId, b.id), eq(paymentBatchItems.payableItemId, input.payableId), eq(paymentBatchItems.active, true)));
+    if (!item) throw new PaymentError("That line isn't in this batch.");
+    const [p] = await tx.select().from(payableItems).where(eq(payableItems.id, input.payableId));
+    if (!p) throw new PaymentError("Line not found.");
+    if (p.category === "adjustment") throw new PaymentError("Adjust the original line, not an adjustment.");
+    let amountCents: number;
+    let what: string;
+    if (input.newRateCents != null) {
+      if (p.category !== "fee") throw new PaymentError("A rate correction only applies to hourly lines. Enter an amount instead.");
+      if (!Number.isInteger(input.newRateCents) || input.newRateCents <= 0) throw new PaymentError("Enter the corrected hourly rate.");
+      if (input.newRateCents === p.rateCents) throw new PaymentError("That's the rate already paid on this line.");
+      amountCents = basePayCents(p.payableMinutes, input.newRateCents) - p.baseCents;
+      const money = (c: number) => `$${(c / 100).toFixed(2)}`;
+      what = `Rate correction ${money(p.rateCents)} to ${money(input.newRateCents)}/h for ${(p.payableMinutes / 60).toFixed(2)} h`;
+    } else {
+      amountCents = input.amountCents ?? 0;
+      what = amountCents < 0 ? "Credit" : "Adjustment";
+    }
+    if (amountCents === 0) throw new PaymentError("That works out to $0.00, so there's nothing to adjust.");
+    const line = await adjustInTx(tx, actorId, { payableId: p.id, amountCents, reason: `${what}: ${reason}`, inBatch: true });
+    if (b.status === "approved") await invalidateApproval(tx, b, actorId, `Adjustment added after approval: ${reason}`);
+    await tx.insert(paymentBatchItems).values({ batchId: b.id, payableItemId: line.id, amountCents: line.totalCents });
+    await movePayables(tx, [line.id], ["pending"], "batched");
+    await tx.update(paymentBatches).set({ totalCents: b.totalCents + line.totalCents }).where(eq(paymentBatches.id, b.id));
+    await recordAudit({ actorId, action: "batch.add_adjustment", entityType: "payment_batch", entityId: b.id, after: { payableId: line.id, adjusts: p.id, amountCents: line.totalCents }, reason }, tx);
+    return line;
+  });
+}
+
+async function adjustInTx(tx: Tx, actorId: string, input: { payableId: string; amountCents: number; reason: string; inBatch?: boolean }) {
   if (!Number.isInteger(input.amountCents) || input.amountCents === 0) throw new PaymentError("Enter a non-zero amount in cents.");
   if (input.reason.trim().length < 5) throw new PaymentError("Explain the adjustment.");
   {
@@ -355,7 +396,12 @@ async function adjustInTx(tx: Tx, actorId: string, input: { payableId: string; a
     if (!orig) throw new PaymentError("Line not found.");
     const p = orig.p;
     if (p.status === "void") throw new PaymentError("A void line can't be adjusted.");
-    if (!p.billId && !["exported", "paid", "disputed"].includes(p.status)) throw new PaymentError("This line isn't finalized yet; correct the hours or tax instead of adjusting.");
+    // Lines in a batch that isn't exported can be adjusted too (adjustBatchLine, e.g. a rate correction:
+    // the booking's agreed rate is a fixed snapshot, so a difference in rate is paid as a linked adjustment).
+    // Lines not yet batched are corrected directly (hours or tax) instead.
+    if (!p.billId && !["exported", "paid", "disputed"].includes(p.status) && !(input.inBatch && p.status === "batched")) {
+      throw new PaymentError("This line isn't finalized yet; correct the hours or tax instead of adjusting.");
+    }
     if (p.taxStatus === "review_required") throw new PaymentError("Resolve the tax review on the original line first.");
     const taxLines = await tx.select().from(payableTaxLines).where(eq(payableTaxLines.payableItemId, p.id));
     const label = `${orig.billNumber ?? "line"} ${CATEGORY_LABEL[p.category] ?? p.category} ${p.serviceDate}`;

@@ -215,6 +215,24 @@ export async function createAdjustmentAction(formData: FormData): Promise<Action
   });
 }
 
+/** Adds an adjustment (rate correction or amount) to a line in a batch that hasn't been exported. */
+export async function adjustBatchLineAction(formData: FormData): Promise<ActionResult> {
+  return runAction(async () => {
+    const viewer = await authorizeInternal("payments.manage");
+    await requireFreshAuth(viewer);
+    const batchId = uuid.parse(str(formData, "batchId"));
+    const payableId = uuid.parse(str(formData, "payableId"));
+    const rate = str(formData, "rate");
+    const amount = str(formData, "amount");
+    if (!rate && !amount) throw new UserFacingError(formData.has("rate") ? "Enter the corrected hourly rate." : "Enter an amount.");
+    const line = await guard(() =>
+      pay.adjustBatchLine(viewer.userId, { batchId, payableId, reason: str(formData, "reason"), ...(rate ? { newRateCents: signedCents(rate) } : { amountCents: signedCents(amount) }) }),
+    );
+    refresh(batchId);
+    return { ok: true, message: `Adjustment of ${line.totalCents < 0 ? "-" : ""}$${(Math.abs(line.totalCents) / 100).toFixed(2)} added to this batch.` };
+  });
+}
+
 export async function createAccountingExportAction(billIds: string[]): Promise<ActionResult<{ exportId: string }>> {
   return runAction(async () => {
     const viewer = await authorizeInternal("accounting.manage");
