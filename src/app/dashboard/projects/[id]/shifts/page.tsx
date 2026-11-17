@@ -28,6 +28,7 @@ export default async function ProjectShiftsPage({ params, searchParams }: PagePr
     <ShiftBoard
       projectId={id}
       canManage={canOnProject(actor, "shift.manage", scope)}
+      canStaff={canAny(actor, "booking.offer")}
       showRates={showRates}
       defaultRates={defaultRates}
       includeCancelled={includeCancelled}

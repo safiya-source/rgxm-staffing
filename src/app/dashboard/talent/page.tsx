@@ -28,7 +28,7 @@ export default async function TalentPage({ searchParams }: PageProps<"/dashboard
 
   const [lookups, result, projectOptions] = await Promise.all([
     getTalentLookups(),
-    searchTalent(filters, { canSeeRates, timeZone: settings.defaultTimezone }),
+    searchTalent(filters, { canSeeRates, canSeeTax: canAny(actor, "rates.edit"), timeZone: settings.defaultTimezone }),
     db.select({ id: projects.id, name: projects.name }).from(projects).where(ne(projects.status, "draft")).orderBy(desc(projects.startDate)).limit(100),
   ]);
   const canEdit = canAny(actor, "talent.edit");
@@ -97,6 +97,7 @@ export default async function TalentPage({ searchParams }: PageProps<"/dashboard
             lastShiftAt: r.lastShiftAt ? new Date(r.lastShiftAt).toISOString() : null,
             hasAccount: r.hasAccount,
             isDemo: r.isDemo,
+            gst: r.gst,
           }))}
           showRates={canSeeRates}
           lists={lookups.lists.map((l) => ({ value: l.id, label: l.name }))}

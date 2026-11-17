@@ -81,7 +81,8 @@ export async function getShiftGroups(projectId: string, now = new Date(), opts: 
       headcount: shifts.headcount,
       rateCents: shifts.rateCents,
       status: shifts.status,
-      confirmed: sql<number>`(select count(*)::int from ${bookings} b where b.shift_id = ${shifts.id} and b.status = 'confirmed')`,
+      // Completed bookings (the shift has ended) still count as filled spots.
+      confirmed: sql<number>`(select count(*)::int from ${bookings} b where b.shift_id = ${shifts.id} and b.status in ('confirmed', 'completed'))`,
       pending: sql<number>`(select count(*)::int from ${bookings} b where b.shift_id = ${shifts.id} and b.status in ('offered', 'interested', 'awaiting_confirmation'))`,
     })
     .from(shifts)

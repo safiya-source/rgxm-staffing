@@ -37,13 +37,16 @@ export default async function ProjectStaffingPage({ params, searchParams }: Page
   const canAddShifts = canOnProject(actor, "shift.manage", scope);
 
   // Shifts from the last day always show (on-the-spot hires); ?past=1 shows the last 14 days.
-  const showPast = sp.past === "1";
+  // ?shift=<id> (clicking a shift on the project's Shifts tab) opens that shift's board, even if it ended.
+  const focusShift = typeof sp.shift === "string" && /^[0-9a-f-]{36}$/i.test(sp.shift) ? sp.shift : null;
+  const showPast = sp.past === "1" || Boolean(focusShift);
   const groups = await getShiftGroups(projectId, new Date(), { pastDays: showPast ? 14 : 1 });
   // "Send offers" from the Staffing Requests list lands here with ?offer=1: open the offer form on the
   // first role/location that still has open spots.
   const openOffer = sp.offer === "1" && can.offer;
   const firstOpen = groups.find((g) => g.shifts.some((s) => s.confirmed < s.headcount)) ?? groups[0];
-  const groupKey = typeof sp.group === "string" && groups.some((g) => g.key === sp.group) ? sp.group : openOffer ? firstOpen?.key : groups[0]?.key;
+  const focusGroup = focusShift ? groups.find((g) => g.shifts.some((s) => s.id === focusShift)) : undefined;
+  const groupKey = focusGroup?.key ?? (typeof sp.group === "string" && groups.some((g) => g.key === sp.group) ? sp.group : openOffer ? firstOpen?.key : groups[0]?.key);
   const group = groups.find((g) => g.key === groupKey);
   // Staff messages are only for the project's own team (people who can reply).
   const [board, threads] = await Promise.all([group ? getBoard(group.shifts.map((s) => s.id)) : [], can.reply ? listProjectThreads(projectId) : Promise.resolve([])]);
@@ -127,6 +130,7 @@ export default async function ProjectStaffingPage({ params, searchParams }: Page
                 projectId={projectId}
                 can={can}
                 openOffer={openOffer}
+                focusShiftId={focusGroup ? focusShift : null}
                 group={{
                   role: group.role,
                   locationName: group.locationName,

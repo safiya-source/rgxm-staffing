@@ -108,7 +108,7 @@ export async function OnboardingCard({ staffId, canApprove, gst, canVerifyGst }:
         </section>
 
         {gst ? (
-          <section className="grid gap-2">
+          <section id="gst" className="grid scroll-mt-24 gap-2">
             <h3 className="text-xs font-medium text-muted-foreground">GST/HST registration</h3>
             <p>
               {GST_ANSWER[gst.status]}

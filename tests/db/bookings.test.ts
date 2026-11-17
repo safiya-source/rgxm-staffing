@@ -329,6 +329,25 @@ describe("late additions and booking directly", () => {
     expect(again).toMatchObject({ created: 0, skipped: [{ staffId: ok.staffId, shiftId: overlapping, reason: "conflict" }] });
   });
 
+  it("confirms an offer nobody answered when RGXM books the person directly after the shift", async () => {
+    // Started 30 hours ago and still running when the offer went out.
+    const s = await shiftAt(ago(30), 40, 1);
+    const p = await approved();
+    await b.sendOffers(rgxm.id, { shiftIds: [s], staffIds: [p.staffId], responseDeadline: null });
+    const offer = await bookingOf(s, p.staffId);
+    // The shift ends with the offer still unanswered; they worked it anyway.
+    await pool.query("update shifts set ends_at = now() - interval '20 hours' where id = $1", [s]);
+    const res = await b.bookDirectly(rgxm.id, { shiftIds: [s], staffIds: [p.staffId], agreedVia: "in_person" });
+    expect(res).toMatchObject({ created: 1, skipped: [] });
+    const row = await bookingOf(s, p.staffId);
+    expect(row.id).toBe(offer.id);
+    expect(row).toMatchObject({ status: "confirmed", agreed_rate_cents: 2500 });
+    const h = await one<{ from_status: string }>("select from_status from booking_status_history where booking_id = $1 and to_status = 'confirmed'", [row.id]);
+    expect(h.from_status).toBe("offered");
+    // Booking them again does nothing.
+    expect((await b.bookDirectly(rgxm.id, { shiftIds: [s], staffIds: [p.staffId], agreedVia: "in_person" })).skipped).toEqual([{ staffId: p.staffId, shiftId: s, reason: "already_on_shift" }]);
+  });
+
   it("won't book onto shifts that ended more than 14 days ago", async () => {
     const old = await shiftAt(ago(24 * 20));
     const p = await approved();

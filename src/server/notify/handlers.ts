@@ -352,6 +352,28 @@ export const handlers: Record<string, Handler> = {
   },
 
   // In-app only (no email): pay details stay inside Crew.
+  // A contractor answered or changed the GST/HST question: Finance confirms it on their profile.
+  "tax.registration_submitted": async (payload, eventId) => {
+    const person = await staffRecipient(payload.staffId as string);
+    const [s] = await db.select({ lastName: staffProfiles.lastName }).from(staffProfiles).where(eq(staffProfiles.id, payload.staffId as string));
+    const status = payload.status as string;
+    const finance = await db.selectDistinct({ userId: userRoles.userId }).from(userRoles).where(inArray(userRoles.role, ["finance", "admin"]));
+    for (const { userId } of finance) {
+      await notify({
+        dedupeKey: `n:${eventId}:${userId}`,
+        userId,
+        type: "tax.registration_submitted",
+        title:
+          status === "yes"
+            ? `${person.name} ${s?.lastName ?? ""} added a GST/HST number: confirm it`
+            : status === "no"
+              ? `${person.name} ${s?.lastName ?? ""} says they're not registered for GST/HST: confirm it`
+              : `${person.name} ${s?.lastName ?? ""} is unsure about GST/HST: follow up`,
+        href: `/dashboard/talent/${payload.staffId as string}#gst`,
+      });
+    }
+  },
+
   "pay_review.requested": async (payload, eventId) => {
     const finance = await db.selectDistinct({ userId: userRoles.userId }).from(userRoles).where(inArray(userRoles.role, ["finance", "admin"]));
     for (const { userId } of finance) {
