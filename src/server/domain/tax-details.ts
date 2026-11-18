@@ -73,10 +73,17 @@ export async function saveTaxDetails(actorId: string, staffId: string, raw: TaxD
       .where(eq(staffSensitive.staffId, staffId));
     // A changed answer, number or start date needs Finance to verify it again.
     const regChanged = !before || before.status !== values.gstRegistrationStatus || before.number !== values.gstHstNumber || before.effective !== values.gstRegistrationEffectiveDate;
-    const verificationReset = regChanged ? { gstVerificationStatus: "unverified", gstVerifiedAt: null, gstVerifiedBy: null, gstVerificationReference: null } : {};
+    // RGXM decision (2026-11-18): "not registered" needs no Finance check; it's accepted as declared and
+    // the line is paid without GST/HST. Only a "Yes" (a registration number) is confirmed by Finance.
+    const declaredNo = values.gstRegistrationStatus === "no";
+    const verificationReset = regChanged
+      ? declaredNo
+        ? { gstVerificationStatus: "verified", gstVerifiedAt: new Date(), gstVerifiedBy: null, gstVerificationReference: NOT_REGISTERED_REFERENCE }
+        : { gstVerificationStatus: "unverified", gstVerifiedAt: null, gstVerifiedBy: null, gstVerificationReference: null }
+      : {};
     // RGXM engages field staff as independent contractors only.
     await tx.update(staffProfiles).set({ classification: "contractor" }).where(eq(staffProfiles.id, staffId));
-    await tx.insert(staffSensitive).values({ staffId, ...values }).onConflictDoUpdate({ target: staffSensitive.staffId, set: { ...values, ...verificationReset } });
+    await tx.insert(staffSensitive).values({ staffId, ...values, ...verificationReset }).onConflictDoUpdate({ target: staffSensitive.staffId, set: { ...values, ...verificationReset } });
     // Tax numbers and addresses are never copied into the audit log, only what changed in kind.
     await recordAudit(
       {
@@ -89,14 +96,17 @@ export async function saveTaxDetails(actorId: string, staffId: string, raw: TaxD
       },
       tx,
     );
-    // Tell Finance when the GST/HST answer is new or changed, so they can confirm it.
-    if (regChanged && opts.bySelf) {
+    // Tell Finance when a contractor adds or changes a registration (or is unsure), so they can confirm it.
+    if (regChanged && opts.bySelf && !declaredNo) {
       await enqueue(tx, { type: "tax.registration_submitted", payload: { staffId, status: values.gstRegistrationStatus }, dedupeKey: `tax.registration_submitted:${staffId}:${Date.now()}` });
     }
   });
   // Self-billed invoices need the contractor's name and address; issue any that were waiting for them.
   await invoicePendingLines(staffId, actorId);
 }
+
+/** Recorded as the "verification" of a "not registered" answer, which RGXM accepts as declared. */
+export const NOT_REGISTERED_REFERENCE = "Contractor declared not registered for GST/HST (accepted as declared; no Finance check needed)";
 
 /** What the tax-details forms show. */
 export async function getTaxDetails(staffId: string) {
