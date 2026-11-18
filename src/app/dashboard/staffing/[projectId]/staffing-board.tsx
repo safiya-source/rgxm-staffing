@@ -16,7 +16,7 @@ import type { ActionResult } from "@/lib/action-result";
 import { formatInZone, formatMoney } from "@/lib/format";
 import { FIELD_ROLE_NAMES, type FieldRole } from "@/lib/roles";
 import { cn } from "@/lib/utils";
-import { bookingOpAction, bulkConfirmAction, cancelBookingAction, confirmBookingAction } from "../actions";
+import { bookingOpAction, bulkConfirmAction, cancelBookingAction, confirmBookingAction, confirmUnansweredAction } from "../actions";
 import { OfferBuilder } from "./offer-builder";
 
 export type GroupShift = { id: string; startsAt: string; endsAt: string; headcount: number; rateCents: number | null; status: string; confirmed: number; pending: number };
@@ -164,6 +164,8 @@ export function StaffingBoard({
     start(async () => report(await bookingOpAction(row.id, action, reason)));
   }
 
+  // Offers nobody answered (e.g. they worked the shift anyway): RGXM can confirm them directly.
+  const selectedUnanswered = latest.filter((r) => selected.includes(r.staffId) && r.status === "offered");
   const selectedDecidable = latest.filter((r) => selected.includes(r.staffId) && (r.status === "interested" || r.status === "awaiting_confirmation" || r.status === "waitlisted"));
 
   return (
@@ -256,6 +258,21 @@ export function StaffingBoard({
           >
             Confirm {selectedDecidable.length} response{selectedDecidable.length === 1 ? "" : "s"}
           </Button>
+          {selectedUnanswered.length ? (
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={pending}
+              onClick={() =>
+                start(async () => {
+                  report(await confirmUnansweredAction(projectId, selectedUnanswered.map((r) => r.id)));
+                  setSelected([]);
+                })
+              }
+            >
+              Confirm {selectedUnanswered.length} without a reply
+            </Button>
+          ) : null}
           <Button size="sm" variant="ghost" onClick={() => setSelected([])}>
             Clear
           </Button>
@@ -352,6 +369,11 @@ export function StaffingBoard({
                             {can.offer && ["interested", "awaiting_confirmation"].includes(r.status) ? <DropdownMenuItem onSelect={() => op(r, "waitlist")}>Add to waitlist</DropdownMenuItem> : null}
                             {can.offer && ["interested", "awaiting_confirmation", "waitlisted"].includes(r.status) ? (
                               <DropdownMenuItem onSelect={() => op(r, "release", "Not selected")}>Release (not selected)</DropdownMenuItem>
+                            ) : null}
+                            {can.confirm && r.status === "offered" ? (
+                              <DropdownMenuItem disabled={pending} onSelect={() => start(async () => report(await confirmUnansweredAction(projectId, [r.id])))}>
+                                Confirm without a reply
+                              </DropdownMenuItem>
                             ) : null}
                             {can.offer && r.status === "offered" ? <DropdownMenuItem onSelect={() => op(r, "withdraw")}>Withdraw offer</DropdownMenuItem> : null}
                             {can.confirm && r.status === "confirmed" ? (

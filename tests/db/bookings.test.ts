@@ -339,11 +339,13 @@ describe("late additions and booking directly", () => {
     const offer = await bookingOf(s, p.staffId);
     // The shift ends with the offer still unanswered; they worked it anyway.
     await pool.query("update shifts set ends_at = now() - interval '20 hours' where id = $1", [s]);
+    // A rate for them was set after the offer went out: confirming uses the rate that applies now.
+    await b.setProjectRate(rgxm.id, project.projectId, { role: "BA", staffId: p.staffId, rateCents: 3250 });
     const res = await b.bookDirectly(rgxm.id, { shiftIds: [s], staffIds: [p.staffId], agreedVia: "in_person" });
     expect(res).toMatchObject({ created: 1, skipped: [] });
     const row = await bookingOf(s, p.staffId);
     expect(row.id).toBe(offer.id);
-    expect(row).toMatchObject({ status: "confirmed", agreed_rate_cents: 2600 });
+    expect(row).toMatchObject({ status: "confirmed", offered_rate_cents: 2600, agreed_rate_cents: 3250, rate_source: "project_staff" });
     const h = await one<{ from_status: string }>("select from_status from booking_status_history where booking_id = $1 and to_status = 'confirmed'", [row.id]);
     expect(h.from_status).toBe("offered");
     // Booking them again does nothing.

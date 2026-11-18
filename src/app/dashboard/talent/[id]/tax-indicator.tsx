@@ -9,8 +9,8 @@ export function taxState(g: Gst) {
   if (g.status === "yes" && g.verification === "verified") return { tone: "ok", short: "HST registered", text: `Registered for GST/HST${g.number ? ` · ${g.number}` : ""} · confirmed by Finance` } as const;
   if (g.status === "yes" && g.verification === "rejected") return { tone: "bad", short: "HST: couldn't confirm", text: `Says they're registered${g.number ? ` (${g.number})` : ""}, but Finance couldn't confirm it` } as const;
   if (g.status === "yes") return { tone: "todo", short: "HST: confirm", text: `Added a GST/HST number${g.number ? ` (${g.number})` : ""}. Not confirmed by Finance yet` } as const;
-  if (g.status === "no" && g.verification === "verified") return { tone: "plain", short: "No HST", text: "Not registered for GST/HST · confirmed by Finance" } as const;
-  if (g.status === "no") return { tone: "todo", short: "No HST: confirm", text: "Says they're not registered for GST/HST. Not confirmed by Finance yet" } as const;
+  // A "not registered" answer is accepted as declared: nothing to confirm.
+  if (g.status === "no") return { tone: "plain", short: "No HST", text: "Not registered for GST/HST · paid without tax" } as const;
   if (g.status === "unsure") return { tone: "todo", short: "HST: unsure", text: "Unsure whether they're registered for GST/HST. Follow up with them" } as const;
   return { tone: "missing", short: "HST: no answer", text: "Hasn't answered the GST/HST question yet" } as const;
 }

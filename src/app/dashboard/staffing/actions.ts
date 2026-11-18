@@ -122,6 +122,36 @@ export async function bookDirectlyAction(
   });
 }
 
+/**
+ * Confirms offers nobody answered (e.g. they worked the shift anyway). Only the offers given are
+ * confirmed, at their offered rate, with the same checks and record as Book directly.
+ */
+export async function confirmUnansweredAction(projectId: string, bookingIds: string[]): Promise<ActionResult> {
+  return runAction(async () => {
+    const viewer = await authorizeProject("booking.confirm", uuid.parse(projectId));
+    const ids = z.array(uuid).min(1).max(200).parse(bookingIds);
+    const rows = await db
+      .select({ id: bookings.id, shiftId: bookings.shiftId, staffId: bookings.staffId, status: bookings.status, projectId: bookings.projectId })
+      .from(bookings)
+      .where(inArray(bookings.id, ids));
+    const open = rows.filter((r) => r.projectId === projectId && ["offered", "interested", "awaiting_confirmation", "waitlisted"].includes(r.status));
+    if (!open.length) throw new UserFacingError("Those offers aren't open any more.");
+    const byShift = new Map<string, string[]>();
+    for (const r of open) byShift.set(r.shiftId, [...(byShift.get(r.shiftId) ?? []), r.staffId]);
+    let created = 0;
+    const reasons = new Set<string>();
+    for (const [shiftId, staffIds] of byShift) {
+      const res = await guard(() => b.bookDirectly(viewer.userId, { shiftIds: [shiftId], staffIds, agreedVia: "other", note: "Confirmed without a reply to the offer", projectId }));
+      created += res.created;
+      for (const s of res.skipped) reasons.add(b.SKIP_REASON_LABEL[s.reason]);
+    }
+    kickOutbox();
+    refresh(projectId);
+    if (!created) throw new UserFacingError(`Nobody was confirmed: someone ${[...reasons].join("; someone ")}.`);
+    return { ok: true, message: `Confirmed ${created} booking${created === 1 ? "" : "s"}.${reasons.size ? ` Some were skipped: someone ${[...reasons].join("; someone ")}.` : ""}` };
+  });
+}
+
 type Op = "shortlist" | "unshortlist" | "waitlist" | "release" | "withdraw";
 
 export async function bookingOpAction(bookingId: string, op: Op, reason?: string): Promise<ActionResult> {

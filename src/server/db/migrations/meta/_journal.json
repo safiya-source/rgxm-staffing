@@ -141,6 +141,13 @@
       "when": 1794864292338,
       "tag": "0019_self_approve_batches",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1795015717850,
+      "tag": "0020_accept_declared_not_registered",
+      "breakpoints": true
     }
   ]
 }
