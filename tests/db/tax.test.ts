@@ -88,6 +88,13 @@ describe("GST/HST registration (contractor-facing)", () => {
     expect(await events()).toEqual(["yes"]);
     await saveTaxDetails(userId, staffId, registered, { bySelf: true });
     expect(await events()).toEqual(["yes", "yes"]);
+    // "Not registered" is accepted as declared: no alert, nothing for Finance to confirm.
+    await saveTaxDetails(userId, staffId, notRegistered, { bySelf: true });
+    expect(await events()).toEqual(["yes", "yes"]);
+    expect(await getTaxDetails(staffId)).toMatchObject({ gstRegistrationStatus: "no", gstVerificationStatus: "verified" });
+    const fresh = await contractor();
+    await saveTaxDetails(fresh.userId, fresh.staffId, notRegistered, { bySelf: true });
+    expect(await getTaxDetails(fresh.staffId)).toMatchObject({ gstVerificationStatus: "verified" });
   });
 
   it("resets Finance's verification when the answer or number changes, and keeps numbers out of the audit log", async () => {
@@ -220,7 +227,7 @@ describe("tax on bill lines", () => {
     // The line no longer matches the person's answer: it can't be batched until refreshed.
     await expect(pay.createBatch(finance.id, { type: "contractor", payPeriodId: null, payableIds: [l.id] })).rejects.toThrow(/Refresh pay details/);
     expect(await pay.refreshClassifications(finance.id)).toBeGreaterThanOrEqual(1);
-    // Now "no" but unverified again → Finance review.
-    expect(await line(`timesheet_id = (select timesheet_id from payable_items where id = '${l.id}')`)).toMatchObject({ tax_status: "review_required", tax_cents: 0 });
+    // Now "no": accepted as declared (no Finance check), so it's paid without tax.
+    expect(await line(`timesheet_id = (select timesheet_id from payable_items where id = '${l.id}')`)).toMatchObject({ tax_status: "no_tax", tax_cents: 0 });
   });
 });

@@ -320,10 +320,11 @@ export async function bookDirectly(
           if (filled >= s.headcount) { skip("full"); continue; }
           if ((await findConflicts(tx, staffId, s)).length) { skip("conflict"); continue; }
           if (prior) {
-            // An open offer they never answered (or we never confirmed): confirm it at the offered rate.
+            // An open offer they never answered (or we never confirmed): confirm it at the rate that
+            // applies now (e.g. a personal rate set since the offer went out), else the offered rate.
             await tx
               .update(bookings)
-              .set({ status: "confirmed", agreedRateCents: prior.offeredRateCents ?? rate!.rateCents, confirmedAt: now, confirmedBy: actorId, waitlistPosition: null })
+              .set({ status: "confirmed", agreedRateCents: rate?.rateCents ?? prior.offeredRateCents, ...(rate ? { rateSource: rate.source } : {}), confirmedAt: now, confirmedBy: actorId, waitlistPosition: null })
               .where(eq(bookings.id, prior.id));
             await tx.insert(bookingStatusHistory).values({ bookingId: prior.id, fromStatus: prior.status, toStatus: "confirmed", actorId, reason });
             await enqueue(tx, { type: "booking.confirmed", payload: { bookingId: prior.id }, dedupeKey: `booking.confirmed:${prior.id}` });
