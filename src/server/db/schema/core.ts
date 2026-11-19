@@ -419,6 +419,8 @@ export const projects = pgTable(
     internalNotes: text(),
     clientNotes: text(),
     isDemo: boolean().notNull().default(false),
+    // Open shifts appear on the contractor job board (qualified, onboarded staff can apply).
+    showOnJobBoard: boolean().notNull().default(true),
     createdBy: userRef(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),

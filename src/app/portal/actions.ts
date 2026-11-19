@@ -18,6 +18,7 @@ import { SeparationOfDutiesError } from "@/server/authz/permissions";
 import { isIsoDate, isLocalTime, shiftInstants, zonedToUtc } from "@/lib/time";
 import * as availability from "@/server/domain/availability";
 import * as bookingsDomain from "@/server/domain/bookings";
+import * as jobBoard from "@/server/domain/job-board";
 import * as comms from "@/server/domain/comms";
 import * as onboarding from "@/server/domain/onboarding";
 import { saveWorkDetails, type WorkDetailsInput } from "@/server/domain/work-details";
@@ -249,6 +250,24 @@ export async function respondToOfferAction(bookingId: string, response: "interes
       more_info: "Your question was sent to the RGXM team.",
     };
     return { ok: true, message: done[r] };
+  });
+}
+
+/** Applies for an open shift from the job board (records interest; RGXM confirms who's booked). */
+export async function applyForShiftAction(shiftId: string, note?: string): Promise<ActionResult> {
+  return runAction(async () => {
+    const me = await requireStaffViewer();
+    await rateLimit("offer.respond", me.userId);
+    try {
+      await jobBoard.applyForShift(me, z.string().uuid().parse(shiftId), z.string().max(1000).optional().parse(note) ?? null);
+    } catch (err) {
+      const f = friendly(err);
+      if (f) return f;
+      throw err;
+    }
+    kickOutbox();
+    revalidatePath("/portal", "layout");
+    return { ok: true, message: "Thanks! RGXM will let you know if you're booked. You're not booked yet." };
   });
 }
 
