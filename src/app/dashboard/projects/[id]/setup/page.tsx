@@ -8,6 +8,7 @@ import { updateProjectAction } from "../../actions";
 import { ProjectForm } from "../../project-form";
 import { getCompensationSettings } from "@/server/domain/compensation";
 import { CompensationSettingsCard } from "./compensation-settings";
+import { JobBoardToggle } from "./job-board-toggle";
 import { RateOverrides } from "./rate-overrides";
 import { LocationsSection, RequirementsSection, TeamSection } from "./sections";
 
@@ -70,6 +71,14 @@ export default async function ProjectSetupPage({ params }: PageProps<"/dashboard
         </Card>
       </div>
       <div className="grid content-start gap-6 lg:col-span-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>Job board</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <JobBoardToggle projectId={id} show={p.showOnJobBoard} canEdit={canOnProject(actor, "shift.manage", scope)} />
+          </CardContent>
+        </Card>
         <Card>
           <CardHeader>
             <CardTitle>Locations</CardTitle>

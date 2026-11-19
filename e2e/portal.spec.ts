@@ -157,3 +157,26 @@ test("a contractor claims an expense with a receipt, and RGXM approves it with n
   const item = (await pool.query("select c.status, p.tax_cents::int tax, p.total_cents::int total from compensation_items c join payable_items p on p.id = c.payable_item_id where c.vendor = $1", [vendor])).rows[0];
   expect(item).toEqual({ status: "approved", tax: 0, total: 1875 });
 });
+
+test("a contractor applies for an open shift from the job board, and it reaches the staffing board", async ({ page }) => {
+  // A fresh open Brand Ambassador shift on a demo project, so this doesn't depend on other tests.
+  await pool.query(
+    `insert into shifts (project_id, location_id, role, starts_at, ends_at, timezone, headcount, rate_cents, status)
+     select p.id, l.id, 'BA', date_trunc('hour', now()) + interval '9 days', date_trunc('hour', now()) + interval '9 days 6 hours', 'America/Toronto', 3, 2500, 'open'
+     from projects p join project_locations l on l.project_id = p.id
+     where p.is_demo and p.show_on_job_board and p.status in ('staffing', 'confirmed', 'live') limit 1`,
+  );
+  await signInWithMagicLink(page, "ba.demo@rgxm-demo.test");
+  await page.goto("/portal/opportunities");
+  await expect(page.getByRole("heading", { name: "Open shifts" })).toBeVisible();
+  const board = page.locator("section", { has: page.getByRole("heading", { name: "Open shifts" }) });
+  const before = await pool.query("select count(*)::int n from bookings b join staff_profiles s on s.id = b.staff_id where s.email = 'ba.demo@rgxm-demo.test' and b.status = 'interested' and b.offered_at is null");
+  await board.getByRole("button", { name: "I'm interested" }).first().click();
+  await page.getByLabel("Note to RGXM").fill("Happy to do any of these");
+  await page.getByRole("button", { name: "Send to RGXM" }).click();
+  await expect(page.getByText(/RGXM will let you know if you're booked/)).toBeVisible();
+  const after = await pool.query("select count(*)::int n from bookings b join staff_profiles s on s.id = b.staff_id where s.email = 'ba.demo@rgxm-demo.test' and b.status = 'interested' and b.offered_at is null");
+  expect(after.rows[0].n).toBe(before.rows[0].n + 1);
+  // It now shows under their offers as waiting for RGXM.
+  await expect(page.getByText("Interested · waiting for RGXM").first()).toBeVisible();
+});

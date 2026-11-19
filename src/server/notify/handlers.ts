@@ -466,7 +466,7 @@ export const handlers: Record<string, Handler> = {
     if (!b) return;
     const person = await staffRecipient(b.staffId);
     const response = payload.response as string;
-    const verb = response === "interested" ? "is interested in" : response === "more_info" ? "has a question about" : "is unavailable for";
+    const verb = payload.source === "job_board" ? "applied from the job board for" : response === "interested" ? "is interested in" : response === "more_info" ? "has a question about" : "is unavailable for";
     for (const userId of await projectTeam(b.projectId)) {
       await notify({
         dedupeKey: `n:${eventId}:${userId}`,

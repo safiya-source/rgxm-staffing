@@ -7,7 +7,7 @@ import { outboxEvents } from "@/server/db/schema";
 
 export type OutboxEvent =
   | { type: "offer.sent"; payload: { staffId: string; bookingIds: string[] } }
-  | { type: "offer.response"; payload: { bookingId: string; response: "interested" | "unavailable" | "more_info" } }
+  | { type: "offer.response"; payload: { bookingId: string; response: "interested" | "unavailable" | "more_info"; source?: "job_board" } }
   | { type: "booking.confirmed"; payload: { bookingId: string } }
   | { type: "booking.cancelled"; payload: { bookingId: string; byStaff: boolean } }
   | { type: "booking.waitlisted"; payload: { bookingId: string } }

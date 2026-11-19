@@ -6,7 +6,8 @@ import { z } from "zod";
 import type { ActionResult } from "@/lib/action-result";
 import { runAction, UserFacingError } from "@/server/actions";
 import { db } from "@/server/db";
-import { documents, shifts } from "@/server/db/schema";
+import { documents, projects as projectsTable, shifts } from "@/server/db/schema";
+import { recordAudit } from "@/server/audit";
 import * as comms from "@/server/domain/comms";
 import { kickOutbox } from "@/server/notify/run";
 import * as projects from "@/server/domain/projects";
@@ -63,6 +64,19 @@ export async function updateProjectAction(projectId: string, _prev: ActionResult
     await guard(() => projects.updateProject(viewer.userId, projectId, projectFromForm(fd)));
     revalidatePath(`/dashboard/projects/${projectId}`, "layout");
     return { ok: true, message: "Project saved." };
+  });
+}
+
+/** Shows or hides this project's open shifts on the contractor job board. */
+export async function setJobBoardAction(projectId: string, show: boolean): Promise<ActionResult> {
+  return runAction(async () => {
+    const viewer = await authorizeProject("shift.manage", uuid.parse(projectId));
+    await db.transaction(async (tx) => {
+      await tx.update(projectsTable).set({ showOnJobBoard: show }).where(eq(projectsTable.id, projectId));
+      await recordAudit({ actorId: viewer.userId, action: "project.job_board", entityType: "project", entityId: projectId, projectId, after: { showOnJobBoard: show } }, tx);
+    });
+    revalidatePath(`/dashboard/projects/${projectId}`, "layout");
+    return { ok: true, message: show ? "Open shifts are on the job board." : "Hidden from the job board. Staff only see shifts you offer them." };
   });
 }
 

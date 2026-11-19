@@ -1,0 +1,1 @@
+ALTER TABLE "projects" ADD COLUMN "show_on_job_board" boolean DEFAULT true NOT NULL;
