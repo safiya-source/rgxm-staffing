@@ -32,7 +32,7 @@ export default async function BatchPage({ params }: PageProps<"/dashboard/paymen
   const removed = b.items.filter((i) => ["removed", "voided"].includes(i.state));
   const liveExport = b.exports.find((e) => !e.e.supersededAt && e.e.purpose === "bank");
   const tax = shown.reduce((n, i) => n + i.taxCents, 0);
-  const tally = tallyByProject(shown.map((i) => ({ projectCode: i.projectCode, projectName: i.projectName, staffName: i.staffName, subtotalCents: i.baseCents, taxCents: i.taxCents, totalCents: i.amountCents })));
+  const tally = tallyByProject(shown.map((i) => ({ projectCode: i.projectCode, projectName: i.projectName, staffName: i.staffName, email: i.staffEmail, subtotalCents: i.baseCents, taxCents: i.taxCents, totalCents: i.amountCents })));
 
   return (
     <div className="grid gap-6">
@@ -239,8 +239,11 @@ function ProjectTotals({ batchId, currency, tally }: { batchId: string; currency
                 </TableCell>
               </TableRow>
               {p.people.map((w) => (
-                <TableRow key={w.staffName}>
-                  <TableCell className="pl-6">{w.staffName}</TableCell>
+                <TableRow key={w.email ?? w.staffName}>
+                  <TableCell className="pl-6">
+                    {w.staffName}
+                    {w.email ? <span className="block text-xs text-muted-foreground">{w.email}</span> : null}
+                  </TableCell>
                   <TableCell className="text-right tabular-nums">{w.lines}</TableCell>
                   <TableCell className="text-right tabular-nums">{money(w.subtotalCents)}</TableCell>
                   <TableCell className="text-right tabular-nums">{money(w.taxCents)}</TableCell>
