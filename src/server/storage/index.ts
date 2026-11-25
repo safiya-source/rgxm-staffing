@@ -9,6 +9,11 @@ export interface StorageAdapter {
   get(key: string): Promise<Buffer>;
   /** Deletes a file. Missing files are not an error. */
   remove(key: string): Promise<void>;
+  /**
+   * A one-time URL the browser can upload one file to directly (so large files don't pass through
+   * the app server, whose request size is limited on Vercel), or null when not supported (local disk).
+   */
+  createUploadUrl(key: string): Promise<string | null>;
 }
 
 function assertSafeKey(key: string) {
@@ -32,13 +37,16 @@ class LocalStorage implements StorageAdapter {
   async remove(key: string) {
     await rm(this.resolve(key), { force: true });
   }
+  async createUploadUrl() {
+    return null;
+  }
 }
 
 /**
  * Supabase Storage (private bucket) via its REST API with the service-role key, server-side only.
  * NOTE: implemented against Supabase's documented API but not yet exercised against a live project.
  */
-class SupabaseStorage implements StorageAdapter {
+export class SupabaseStorage implements StorageAdapter {
   constructor(
     private url: string,
     private key: string,
@@ -68,7 +76,18 @@ class SupabaseStorage implements StorageAdapter {
     const res = await fetch(this.endpoint(key), { method: "DELETE", headers: this.authHeaders() });
     if (!res.ok && res.status !== 404) throw new Error(`Storage delete failed (${res.status})`);
   }
+  /** Signed upload URL (valid for 2 hours, one file at this key, no overwrite). */
+  async createUploadUrl(key: string) {
+    assertSafeKey(key);
+    const base = `${this.url.replace(/\/+$/, "")}/storage/v1`;
+    const res = await fetch(`${base}/object/upload/sign/${this.bucket}/${key}`, { method: "POST", headers: { ...this.authHeaders(), "x-upsert": "false" } });
+    if (!res.ok) throw new Error(`Storage upload URL failed (${res.status}): ${await res.text()}`);
+    const { url } = (await res.json()) as { url?: string };
+    if (!url) throw new Error("Storage upload URL missing from response");
+    return `${base}${url}`;
+  }
 }
+
 
 /**
  * Supabase accepts two kinds of server key: the newer secret keys ("sb_secret_…"), which go in the
@@ -106,6 +125,26 @@ const TYPES: Record<string, { mime: string; magic?: (b: Buffer) => boolean }> = 
 };
 
 export const ALLOWED_EXTENSIONS = Object.keys(TYPES);
+
+/** Checks the name and declared size before a direct upload; the contents are checked once it arrives. */
+export function checkUploadName(fileName: string, size: number) {
+  if (!Number.isFinite(size) || size <= 0) throw new UploadError("That file is empty.");
+  if (size > MAX_UPLOAD_BYTES) throw new UploadError("Files must be 20 MB or smaller.");
+  const ext = fileName.split(".").pop()?.toLowerCase() ?? "";
+  if (!TYPES[ext]) throw new UploadError(`Upload a ${ALLOWED_EXTENSIONS.map((e) => e.toUpperCase()).join(", ")} file.`);
+  return validateUploadNameOnly(fileName);
+}
+
+function validateUploadNameOnly(fileName: string) {
+  const ext = fileName.split(".").pop()?.toLowerCase() ?? "";
+  const base = fileName
+    .replace(/\.[^.]+$/, "")
+    .normalize("NFKD")
+    .replace(/[^a-zA-Z0-9_-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
+  return `${base || "file"}.${ext}`;
+}
 
 /** Checks size, extension and file signature. Returns a safe file name and the content type to store. */
 export function validateUpload(fileName: string, data: Buffer) {

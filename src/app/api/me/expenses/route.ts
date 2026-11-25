@@ -10,14 +10,16 @@ import { submitExpense } from "@/server/domain/expenses";
 import { RateLimitError, rateLimit } from "@/server/rate-limit";
 import { UploadError } from "@/server/storage";
 import { ForbiddenError, getViewer } from "@/server/session";
-import { json, readUpload } from "../../upload-helpers";
+import { discardStaged, json, readUpload } from "../../upload-helpers";
 
 export async function POST(request: Request) {
+  let staged: string | null = null;
   try {
     const viewer = await getViewer();
     if (!viewer || viewer.kind !== "staff" || !viewer.staff?.onboarded) return json(403, { error: "Please sign in." });
     await rateLimit("upload", viewer.userId);
-    const { form, file } = await readUpload(request);
+    const { form, file, stagedKey } = await readUpload(request, { scope: `staff:${viewer.staff.id}` });
+    staged = stagedKey;
     const id = await submitExpense(
       { userId: viewer.userId, staffId: viewer.staff.id },
       {
@@ -40,5 +42,7 @@ export async function POST(request: Request) {
     if (err instanceof UploadError || err instanceof CompensationError) return json(400, { error: err.message });
     console.error("[expense]", err);
     return json(500, { error: "Couldn't submit the expense. Please try again." });
+  } finally {
+    await discardStaged(staged);
   }
 }

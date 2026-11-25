@@ -6,6 +6,16 @@
 import { getSessionCookie } from "better-auth/cookies";
 import { NextResponse, type NextRequest } from "next/server";
 
+/** Large files upload straight to Supabase Storage from the browser (see src/lib/upload.ts). */
+function directUploadOrigin() {
+  if (process.env.STORAGE_DRIVER !== "supabase" || !process.env.SUPABASE_URL) return "";
+  try {
+    return ` ${new URL(process.env.SUPABASE_URL).origin}`;
+  } catch {
+    return "";
+  }
+}
+
 function contentSecurityPolicy(nonce: string) {
   const dev = process.env.NODE_ENV === "development";
   return [
@@ -15,7 +25,7 @@ function contentSecurityPolicy(nonce: string) {
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob:",
     "font-src 'self' data:",
-    "connect-src 'self'",
+    `connect-src 'self'${directUploadOrigin()}`,
     "frame-ancestors 'none'",
     "base-uri 'self'",
     "form-action 'self'",
