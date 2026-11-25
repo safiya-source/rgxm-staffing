@@ -1,7 +1,11 @@
 // Pay summary by project for one batch (Excel), to share with the finance team. Finance/admin only;
 // every download is audited. It's a summary, not a bank file: it never marks anything exported or paid.
+import { eq } from "drizzle-orm";
 import { recordAudit } from "@/server/audit";
+import { db } from "@/server/db";
+import { payPeriods } from "@/server/db/schema";
 import { buildProjectSummary } from "@/server/domain/payment-exports";
+import { batchFileDates } from "@/server/domain/payments";
 import { getBatchDetail } from "@/server/queries/payments";
 import { authorizeInternalRoute } from "@/server/session";
 
@@ -17,7 +21,9 @@ export async function GET(_request: Request, ctx: RouteContext<"/api/payments/ba
   const lines = b.items
     .filter((i) => !["removed", "voided"].includes(i.state))
     .map((i) => ({ projectCode: i.projectCode, projectName: i.projectName, staffName: i.staffName, email: i.staffEmail, subtotalCents: i.baseCents, taxCents: i.taxCents, totalCents: i.amountCents }));
-  const file = await buildProjectSummary({ reference: b.reference, type: b.type, periodLabel: b.period, isDemo: b.isDemo }, lines);
+  const [period] = b.payPeriodId ? await db.select({ startsOn: payPeriods.startsOn, endsOn: payPeriods.endsOn }).from(payPeriods).where(eq(payPeriods.id, b.payPeriodId)) : [];
+  const dates = await batchFileDates(db, b.id, period ?? null);
+  const file = await buildProjectSummary({ reference: b.reference, type: b.type, periodLabel: b.period, isDemo: b.isDemo, ...dates }, lines);
   await recordAudit({ actorId: viewer.userId, action: "batch.summary_download", entityType: "payment_batch", entityId: b.id, after: { lines: lines.length } });
   return new Response(new Uint8Array(file.data), {
     headers: {

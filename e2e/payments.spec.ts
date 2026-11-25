@@ -82,7 +82,7 @@ test("finance batches and approves it, export once, mark paid, staff see it", as
   await expect(totals.getByRole("cell", { name: "Jordan Lee" }).first()).toBeVisible();
   const summaryDownload = fin.waitForEvent("download");
   await totals.getByRole("link", { name: "Download summary (Excel)" }).click();
-  expect((await summaryDownload).suggestedFilename()).toMatch(/-by-project\.xlsx$/);
+  expect((await summaryDownload).suggestedFilename()).toMatch(/_work-\d{4}-\d{2}-\d{2}(-to-\d{4}-\d{2}-\d{2})?_due-\d{4}-\d{2}-\d{2}_summary\.xlsx$/);
   await expect.poll(async () => (await pool.query("select status from timesheets where id = $1", [timesheetId])).rows[0].status).toBe("locked");
 
   // 2. The same person approves it (RGXM allows creators to approve their own batches).
@@ -95,7 +95,7 @@ test("finance batches and approves it, export once, mark paid, staff see it", as
   const downloadPromise = fin.waitForEvent("download");
   await fin.getByRole("button", { name: "Generate bank file" }).click();
   const download = await downloadPromise;
-  expect(download.suggestedFilename()).toMatch(/^DEMO-CON-.*\.csv$/);
+  expect(download.suggestedFilename()).toMatch(/^DEMO-CON-[^_]+_work-[0-9-]+(-to-[0-9-]+)?_due-\d{4}-\d{2}-\d{2}\.csv$/);
   const text = await (await download.createReadStream()).toArray().then((chunks) => Buffer.concat(chunks).toString("utf8"));
   expect(text).toContain(payableId);
   expect(text).toContain("DEMO - DO NOT PAY");

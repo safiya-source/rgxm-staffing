@@ -39,7 +39,24 @@ export type ExportRow = {
   currency: string;
 };
 
-export type ExportBatch = { reference: string; type: BatchType; periodLabel: string | null; isDemo: boolean };
+export type ExportBatch = {
+  reference: string;
+  type: BatchType;
+  periodLabel: string | null;
+  isDemo: boolean;
+  /** Work dates covered (the pay period, or the first and last service dates) and the payment due date, for file names. */
+  periodStart?: string | null;
+  periodEnd?: string | null;
+  dueDate?: string | null;
+};
+
+/** File name stem: reference, the work period and the payment due date, e.g. CON-20261101-1_work-2026-11-01-to-2026-11-15_due-2026-11-30. */
+export function exportFileBase(batch: ExportBatch) {
+  const parts = [`${batch.isDemo ? "DEMO-" : ""}${batch.reference}`];
+  if (batch.periodStart && batch.periodEnd) parts.push(batch.periodStart === batch.periodEnd ? `work-${batch.periodStart}` : `work-${batch.periodStart}-to-${batch.periodEnd}`);
+  if (batch.dueDate) parts.push(`due-${batch.dueDate}`);
+  return parts.join("_").replace(/[^A-Za-z0-9_.-]/g, "-");
+}
 
 const DEMO_NOTE = "DEMO - DO NOT PAY";
 
@@ -73,7 +90,7 @@ function genericRows(batch: ExportBatch, rows: ExportRow[]) {
 const NUMERIC_COLUMNS = new Set([11, 12, 13, 14, 15]);
 
 export async function buildExport(format: ExportFormat, batch: ExportBatch, rows: ExportRow[], fileDate: string) {
-  const base = `${batch.isDemo ? "DEMO-" : ""}${batch.reference}`;
+  const base = exportFileBase(batch);
   const { headers, data } = genericRows(batch, rows);
   if (format === "csv_generic") {
     return { data: Buffer.from(`﻿${toCsv(headers, data)}`, "utf8"), fileName: `${base}.csv`, contentType: "text/csv; charset=utf-8", rowCount: data.length };
@@ -136,5 +153,5 @@ export async function buildProjectSummary(batch: ExportBatch, lines: Parameters<
   addPaySummarySheet(wb, lines, batch.isDemo);
   addProjectSheet(wb, lines, batch.isDemo);
   const data = Buffer.from(await wb.xlsx.writeBuffer());
-  return { data, fileName: `${batch.isDemo ? "DEMO-" : ""}${batch.reference}-by-project.xlsx` };
+  return { data, fileName: `${exportFileBase(batch)}_summary.xlsx` };
 }

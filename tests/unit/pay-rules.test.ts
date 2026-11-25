@@ -97,6 +97,9 @@ describe("export files", () => {
     const f = await buildExport("csv_generic", { reference: "CON-20261101-1", type: "contractor", periodLabel: "Nov 1–15, 2026", isDemo: true }, [row], "2026-11-20");
     const text = f.data.toString("utf8");
     expect(f.fileName).toBe("DEMO-CON-20261101-1.csv");
+    // With the work period and due date, both go in the file name.
+    const named = await buildExport("csv_generic", { reference: "CON-20261101-1", type: "contractor", periodLabel: "Nov 1–15, 2026", isDemo: false, periodStart: "2026-11-01", periodEnd: "2026-11-15", dueDate: "2026-11-30" }, [row], "2026-11-20");
+    expect(named.fileName).toBe("CON-20261101-1_work-2026-11-01-to-2026-11-15_due-2026-11-30.csv");
     expect(text).toContain("'=HYPERLINK");
     expect(text).toContain("DEMO - DO NOT PAY");
     expect(text).toContain("8.00,25.00,200.00,0.00,200.00,,CAD");

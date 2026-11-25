@@ -36,7 +36,7 @@ import { utcToZoned } from "@/lib/time";
 import { enqueue } from "@/server/notify/outbox";
 import { getOrgSettings } from "@/server/settings";
 import { storage } from "@/server/storage";
-import { autoInvoice, createBill, torontoToday } from "./invoices";
+import { approvedPaymentTerms, autoInvoice, createBill, torontoToday } from "./invoices";
 import { dollarsToCents, taxOnCents } from "./money";
 import { currentRegSnapshot, staleLine } from "./payable-sql";
 import { buildExport, type ExportFormat, type ExportRow } from "./payment-exports";
@@ -45,6 +45,8 @@ import {
   batchTypeFor,
   canMoveBatch,
   canMovePayable,
+  dueDateFor,
+  type DueRule,
   payPeriodFor,
   type BatchStatus,
   type BatchType,
@@ -681,6 +683,31 @@ async function exportRows(tx: Tx | typeof db, batchId: string): Promise<ExportRo
 }
 
 /**
+ * The work dates a batch covers (its pay period, else its first and last service dates) and when
+ * payment is due: the earliest due date on its bills, or, before bills exist, the date RGXM's
+ * approved payment terms give (the bill date when no terms are approved), as bills would get.
+ */
+export async function batchFileDates(tx: Tx | typeof db, batchId: string, period: { startsOn: string; endsOn: string } | null) {
+  const [r] = (
+    await tx.execute<{ first: string | null; last: string | null; due: string | null }>(sql`
+      select min(p.service_date)::text as first, max(p.service_date)::text as last, min(bl.due_date)::text as due
+      from payment_batch_items bi
+      join payable_items p on p.id = bi.payable_item_id
+      left join bills bl on bl.id = p.bill_id
+      where bi.batch_id = ${batchId} and bi.active`)
+  ).rows as [{ first: string | null; last: string | null; due: string | null }];
+  const periodStart = period?.startsOn ?? r?.first ?? null;
+  const periodEnd = period?.endsOn ?? r?.last ?? null;
+  let dueDate = r?.due ?? null;
+  if (!dueDate && periodStart) {
+    const terms = await approvedPaymentTerms(tx);
+    const today = torontoToday();
+    dueDate = terms ? dueDateFor((terms.dueRule ?? "days_after_bill") as DueRule, { billDate: today, earliestServiceDate: r?.first ?? periodStart, days: terms.dueDaysAfterBillDate }) : today;
+  }
+  return { periodStart, periodEnd, dueDate };
+}
+
+/**
  * Generates the bank payment file once. The approval must still match the batch (people, amounts,
  * payment details, lines); otherwise the approval is cancelled and the batch must be approved
  * again. The first export finalizes the bills. While a live export exists another is refused.
@@ -706,7 +733,8 @@ export async function exportBatch(actorId: string, batchId: string, format: Expo
     const rows = await exportRows(tx, batchId);
     if (!rows.length) throw new PaymentError("This batch is empty.");
     const [period] = b.payPeriodId ? await tx.select().from(payPeriods).where(eq(payPeriods.id, b.payPeriodId)) : [];
-    const file = await buildExport(format, { reference: b.reference, type: b.type, periodLabel: period?.label ?? null, isDemo: b.isDemo }, rows, torontoToday());
+    const dates = await batchFileDates(tx, batchId, period ?? null);
+    const file = await buildExport(format, { reference: b.reference, type: b.type, periodLabel: period?.label ?? null, isDemo: b.isDemo, ...dates }, rows, torontoToday());
     const sha256 = createHash("sha256").update(file.data).digest("hex");
     const key = `exports/${b.id}/${Date.now()}-${file.fileName}`;
     await storage().put(key, file.data, file.contentType);
