@@ -16,7 +16,7 @@ export async function GET(_request: Request, ctx: RouteContext<"/api/payments/ba
   if (!b) return new Response("Not found", { status: 404 });
   const lines = b.items
     .filter((i) => !["removed", "voided"].includes(i.state))
-    .map((i) => ({ projectCode: i.projectCode, projectName: i.projectName, staffName: i.staffName, subtotalCents: i.baseCents, taxCents: i.taxCents, totalCents: i.amountCents }));
+    .map((i) => ({ projectCode: i.projectCode, projectName: i.projectName, staffName: i.staffName, email: i.staffEmail, subtotalCents: i.baseCents, taxCents: i.taxCents, totalCents: i.amountCents }));
   const file = await buildProjectSummary({ reference: b.reference, type: b.type, periodLabel: b.period, isDemo: b.isDemo }, lines);
   await recordAudit({ actorId: viewer.userId, action: "batch.summary_download", entityType: "payment_batch", entityId: b.id, after: { lines: lines.length } });
   return new Response(new Uint8Array(file.data), {

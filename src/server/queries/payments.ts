@@ -119,6 +119,7 @@ export async function getBatchDetail(batchId: string) {
       .select({
         payableId: payableItems.id,
         staffName,
+        staffEmail: staffProfiles.email,
         projectCode: projects.code,
         projectName: projects.name,
         serviceDate: payableItems.serviceDate,
