@@ -1,4 +1,5 @@
 "use client";
+import { uploadWithFile } from "@/lib/upload";
 import { useRouter } from "next/navigation";
 import { useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
@@ -29,9 +30,11 @@ export function ExpenseForm({ shifts, today }: { shifts: Shift[]; today: string 
         setError(undefined);
         const fd = new FormData(e.currentTarget);
         start(async () => {
-          const res = await fetch("/api/me/expenses", { method: "POST", body: fd });
-          const body = (await res.json().catch(() => ({}))) as { error?: string };
-          if (!res.ok) return setError(body.error ?? "Couldn't submit the expense.");
+          try {
+            await uploadWithFile("/api/me/expenses", { for: "receipt" }, fd, "Couldn't submit the expense.");
+          } catch (err) {
+            return setError(err instanceof Error ? err.message : "Couldn't submit the expense.");
+          }
           toast.success("Expense submitted. RGXM will review it.");
           formRef.current?.reset();
           router.refresh();

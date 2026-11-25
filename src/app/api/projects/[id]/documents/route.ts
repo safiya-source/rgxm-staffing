@@ -8,14 +8,16 @@ import { logError } from "@/server/observability";
 import { RateLimitError, rateLimit } from "@/server/rate-limit";
 import { UploadError } from "@/server/storage";
 import { authorizeProject, ForbiddenError } from "@/server/session";
-import { json, readUpload } from "../../../upload-helpers";
+import { discardStaged, json, readUpload } from "../../../upload-helpers";
 
 export async function POST(request: Request, ctx: RouteContext<"/api/projects/[id]/documents">) {
   const { id } = await ctx.params;
+  let staged: string | null = null;
   try {
     const viewer = await authorizeProject("comms.manage", id);
     await rateLimit("upload", viewer.userId);
-    const { form, file } = await readUpload(request);
+    const { form, file, stagedKey } = await readUpload(request, { scope: `project:${id}` });
+    staged = stagedKey;
     const meta = documentMetaSchema.safeParse({
       title: form.get("title"),
       category: form.get("category"),
@@ -33,5 +35,7 @@ export async function POST(request: Request, ctx: RouteContext<"/api/projects/[i
     if (err instanceof UploadError || err instanceof CommsError) return json(400, { error: err.message });
     console.error("[upload]", err);
     return json(500, { error: "Upload failed. Please try again." });
+  } finally {
+    await discardStaged(staged);
   }
 }
