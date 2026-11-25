@@ -12,16 +12,12 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
+import { uploadWithFile } from "@/lib/upload";
 import { useFormAction } from "@/lib/use-form-action";
 import { archiveDocumentAction, postAnnouncementAction } from "../../actions";
 
 const ACCEPT = ".pdf,.png,.jpg,.jpeg,.webp,.docx,.pptx,.xlsx,.txt";
 
-async function upload(url: string, form: FormData) {
-  const res = await fetch(url, { method: "POST", body: form });
-  const body = (await res.json().catch(() => ({}))) as { error?: string };
-  if (!res.ok) throw new Error(body.error ?? "Upload failed.");
-}
 
 export function UploadForm({ projectId, categories }: { projectId: string; categories: { value: string; label: string }[] }) {
   const router = useRouter();
@@ -38,7 +34,7 @@ export function UploadForm({ projectId, categories }: { projectId: string; categ
         setError(undefined);
         start(async () => {
           try {
-            await upload(`/api/projects/${projectId}/documents`, fd);
+            await uploadWithFile(`/api/projects/${projectId}/documents`, { for: "project", id: projectId }, fd);
             toast.success("Document uploaded. Confirmed staff have been notified.");
             formRef.current?.reset();
             router.refresh();
@@ -114,7 +110,7 @@ export function DocumentList({ docs, canManage }: { docs: Doc[]; canManage: bool
           fd.set("file", file);
           start(async () => {
             try {
-              await upload(`/api/documents/${id}/versions`, fd);
+              await uploadWithFile(`/api/documents/${id}/versions`, { for: "document", id }, fd);
               toast.success("New version uploaded. Staff will be asked to review it again.");
               router.refresh();
             } catch (err) {
